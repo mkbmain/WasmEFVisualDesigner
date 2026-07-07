@@ -41,7 +41,8 @@ Monetization below.
   in-browser, download.
 - No archive formats beyond `.zip`. `.tar`, `.tar.gz`, `.7z` are nice-to-have
   stretch goals, not required for v1.
-- No support for `OnModelCreating` fluent API in v1 (see Sequencing).
+- No support for `IEntityTypeConfiguration<T>` config classes in v1 (see
+  Sequencing).
 
 ## Architecture
 
@@ -65,8 +66,8 @@ Monetization below.
 
 1. (Outside this tool) User optionally runs `dotnet ef dbcontext scaffold`
    against their database to get initial C# entity classes.
-2. User uploads a `.zip` containing their entity classes and
-   `IEntityTypeConfiguration<T>` files.
+2. User uploads a `.zip` containing their entity classes and `DbContext`
+   (with its `OnModelCreating` fluent configuration).
 3. Tool parses the files into an in-memory model (entities, properties,
    relationships, keys, indexes) and renders an editable ER diagram.
 4. User edits the diagram: add/remove entities and properties; set CLR type,
@@ -77,19 +78,28 @@ Monetization below.
 
 ## Parsing/codegen scope, sequenced
 
-- **First working slice:** `IEntityTypeConfiguration<T>` style — one config
-  class per entity. Chosen first because (a) it's what
-  `dotnet ef dbcontext scaffold` generates by default, and (b) each entity's
-  configuration is isolated in its own file, which is much simpler to parse
-  and regenerate without disturbing unrelated code.
+- **First working slice:** `OnModelCreating` fluent API support — all
+  configuration read from and regenerated inside the one `DbContext` method.
+  Chosen first because `dotnet ef dbcontext scaffold` (EF's own built-in
+  reverse-engineering command) generates configuration this way by default,
+  with no built-in flag to produce separate config classes instead
+  ([Microsoft Learn](https://learn.microsoft.com/en-us/ef/core/managing-schemas/scaffolding/),
+  [dotnet/efcore#27777](https://github.com/dotnet/efcore/issues/27777)). This
+  keeps the "scaffold your DB, then feed the result straight into this tool"
+  workflow working from day one, without requiring a manual refactor first.
+  Regenerating just the affected entity's configuration inside a shared
+  method — without disturbing unrelated code or other entities' config in
+  that same method — is the harder parsing/codegen problem, so this slice is
+  where the core engine gets proven.
   - Entities and properties (add/remove/rename)
   - CLR types, nullable, string length, precision
   - Relationships: 1:1, 1:many, many:many
   - Keys (including composite) and indexes (including unique)
-- **Fast-follow:** `OnModelCreating` fluent API support — all configuration
-  in one `DbContext` method. Deferred because editing and regenerating a
-  single shared method without clobbering unrelated configuration in that
-  method is materially harder than the isolated-file case above.
+- **Fast-follow:** `IEntityTypeConfiguration<T>` style — one isolated config
+  class per entity. This is EF's own recommended pattern for larger models
+  and is structurally easier to parse/regenerate safely (each entity's
+  config lives in its own file), so it follows once the harder
+  `OnModelCreating` case is solid.
 
 ## Monetization
 
@@ -118,3 +128,9 @@ v1 has real usage:
 - No canvas/diagramming library is chosen yet for Blazor — the ecosystem is
   less mature than React's. This is an implementation-planning decision, not
   a design blocker, but budget extra time for it.
+- Safely rewriting one entity's slice of a shared `OnModelCreating` method —
+  without disturbing other entities' config or unrelated code in that same
+  method — is the riskiest parsing/codegen piece in v1. Worth a small
+  throwaway spike early to validate the approach (e.g. round-trip a
+  representative `OnModelCreating` unchanged) before committing to the full
+  diagram-editing UI on top of it.
