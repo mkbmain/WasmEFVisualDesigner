@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EfSchemaVisualizer.Core/EfSchemaVisualizer.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EfSchemaVisualizer.Core.Tests/EfSchemaVisualizer.Core.Tests.csproj" />
+  </Folder>
+</Solution>
