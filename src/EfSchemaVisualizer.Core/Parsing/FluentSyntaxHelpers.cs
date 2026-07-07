@@ -53,10 +53,11 @@ internal static class FluentSyntaxHelpers
             : null;
     }
 
-    private static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)
+    internal static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)
     {
         return invocation.Expression is MemberAccessExpressionSyntax
         {
+            Expression: IdentifierNameSyntax { Identifier.Text: "modelBuilder" },
             Name: GenericNameSyntax { Identifier.Text: "Entity" } generic
         }
             ? generic.TypeArgumentList.Arguments.FirstOrDefault()?.ToString()

@@ -17,12 +17,7 @@ public sealed class FluentConfigParser
         // Distinct entity names configured anywhere in the file.
         var entityNames = root.DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
-            .Select(inv => inv.Expression)
-            .OfType<MemberAccessExpressionSyntax>()
-            .Select(m => m.Name)
-            .OfType<GenericNameSyntax>()
-            .Where(g => g.Identifier.Text == "Entity")
-            .Select(g => g.TypeArgumentList.Arguments.FirstOrDefault()?.ToString())
+            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
             .Where(name => name is not null)
             .Distinct()!;
 
