@@ -17,14 +17,36 @@ internal static class FluentSyntaxHelpers
     }
 
     /// Finds every invocation named `methodName` within the given scope, e.g. all `HasMaxLength(...)` calls.
+    /// A nested `modelBuilder.Entity&lt;...&gt;(...)` invocation is treated as an opaque boundary: its
+    /// subtree is not descended into, so calls belonging to a nested entity's configuration are never
+    /// misattributed to the outer scope's entity.
     public static IEnumerable<InvocationExpressionSyntax> FindCallsNamed(SyntaxNode scope, string methodName)
     {
-        return scope.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Where(invocation => invocation.Expression is MemberAccessExpressionSyntax
+        var results = new List<InvocationExpressionSyntax>();
+        Walk(scope);
+        return results;
+
+        void Walk(SyntaxNode node)
+        {
+            foreach (var child in node.ChildNodes())
             {
-                Name.Identifier.Text: var name
-            } && name == methodName);
+                if (child is InvocationExpressionSyntax nestedEntityInvocation
+                    && GetConfiguredEntityName(nestedEntityInvocation) is not null)
+                {
+                    // Opaque boundary: don't descend into a nested Entity<> configuration's subtree.
+                    continue;
+                }
+
+                if (child is InvocationExpressionSyntax invocation
+                    && invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var name }
+                    && name == methodName)
+                {
+                    results.Add(invocation);
+                }
+
+                Walk(child);
+            }
+        }
     }
 
     /// Given a fluent call like `entity.Property(e => e.Name).HasMaxLength(100)`, returns "Name".
