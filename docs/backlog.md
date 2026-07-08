@@ -80,7 +80,14 @@ these matter before any new surface is added.
       on insertion paths (whole-file `NormalizeWhitespace()` is used
       instead, a deliberate trade-off documented in the spec); only the
       pure-mutation path remains byte-identical.
-- [ ] **`[found]/[plan]` Add a property** to an entity (POCO class + optional config).
+- [x] **`[found]/[plan]` Add a property** to an entity (POCO class + optional config).
+      **Update:** `EntityClassRewriter.AddProperty` appends a new auto-property
+      to a class/record/struct's member list — see
+      `2026-07-08-add-property-design.md`. Fluent config (e.g. max length)
+      for the new property is a separate, composed call to
+      `OnModelCreatingRewriter.RewriteMaxLength`, not orchestrated by this
+      method. Record positional parameters are not supported — only body
+      properties are synthesized.
 - [ ] **`[found]/[plan]` Drop a property** (remove from class and remove any of its config statements).
 - [ ] **`[plan]` Rename** an entity or property (class member + every referencing fluent call + lambda body).
 - [ ] **`[plan]` Add / remove an entity** — mint a whole new `modelBuilder.Entity<T>(...)` block, or remove one, without disturbing siblings.
