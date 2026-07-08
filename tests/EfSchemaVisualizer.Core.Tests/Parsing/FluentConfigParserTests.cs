@@ -85,4 +85,48 @@ public class FluentConfigParserTests
         Assert.Empty(result.Diagnostics);
         Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
     }
+
+    private const string SourceWithStringPropertyOverload = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property("Name").HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMaxLengths_PropertyStringOverload_IsRead()
+    {
+        var result = new FluentConfigParser().ParseMaxLengths(SourceWithStringPropertyOverload);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+    }
+
+    private const string SourceWithBlockBodiedLambda = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => { return e.Name; }).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMaxLengths_BlockBodiedLambdaWithSingleReturn_IsRead()
+    {
+        var result = new FluentConfigParser().ParseMaxLengths(SourceWithBlockBodiedLambda);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+    }
 }

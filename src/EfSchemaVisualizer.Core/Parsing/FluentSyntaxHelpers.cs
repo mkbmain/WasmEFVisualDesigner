@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace EfSchemaVisualizer.Core.Parsing;
@@ -50,6 +51,8 @@ internal static class FluentSyntaxHelpers
     }
 
     /// Given a fluent call like `entity.Property(e => e.Name).HasMaxLength(100)`, returns "Name".
+    /// Also resolves the string overload `entity.Property("Name")` and a block-bodied lambda with
+    /// a single `return e.Name;` statement.
     public static string? GetPropertyNameFor(InvocationExpressionSyntax fluentCall)
     {
         if (fluentCall.Expression is not MemberAccessExpressionSyntax
@@ -65,14 +68,17 @@ internal static class FluentSyntaxHelpers
             return null;
         }
 
-        var lambdaArg = propertyInvocation.ArgumentList.Arguments
+        var argumentExpression = propertyInvocation.ArgumentList.Arguments
             .Select(a => a.Expression)
-            .OfType<SimpleLambdaExpressionSyntax>()
             .FirstOrDefault();
 
-        return lambdaArg?.ExpressionBody is MemberAccessExpressionSyntax { Name.Identifier.Text: var propertyName }
-            ? propertyName
-            : null;
+        return argumentExpression switch
+        {
+            SimpleLambdaExpressionSyntax { ExpressionBody: MemberAccessExpressionSyntax { Name.Identifier.Text: var name } } => name,
+            SimpleLambdaExpressionSyntax { Block: { Statements: [ReturnStatementSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: var name } }] } } => name,
+            LiteralExpressionSyntax { Token.ValueText: var text } literal when literal.IsKind(SyntaxKind.StringLiteralExpression) => text,
+            _ => null,
+        };
     }
 
     internal static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)
