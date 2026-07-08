@@ -281,4 +281,94 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
         Assert.Contains("entity.Property(e => e.Email).HasMaxLength(255)", result);
     }
+
+    private const string SourceWithEntityConfigOnly = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RenameEntityReferences_EntityConfigOnly_RenamesGenericTypeArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenameEntityReferences(SourceWithEntityConfigOnly, oldEntityName: "Person", newEntityName: "Customer");
+
+        Assert.Contains("modelBuilder.Entity<Customer>(entity =>", result);
+        Assert.DoesNotContain("Entity<Person>", result);
+    }
+
+    private const string SourceWithDbSetOnly = """
+        public class AppDbContext : DbContext
+        {
+            public DbSet<Person> People { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RenameEntityReferences_DbSetOnly_RenamesGenericTypeArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenameEntityReferences(SourceWithDbSetOnly, oldEntityName: "Person", newEntityName: "Customer");
+
+        Assert.Contains("public DbSet<Customer> People { get; set; }", result);
+    }
+
+    private const string SourceWithDbSetAndEntityConfig = """
+        public class AppDbContext : DbContext
+        {
+            public DbSet<Person> People { get; set; }
+            public DbSet<Address> Addresses { get; set; }
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.Property(e => e.Line1).HasMaxLength(200);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RenameEntityReferences_BothEntityConfigAndDbSetPresent_RenamesBothInOnePass()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenameEntityReferences(SourceWithDbSetAndEntityConfig, oldEntityName: "Person", newEntityName: "Customer");
+
+        Assert.Contains("public DbSet<Customer> People { get; set; }", result);
+        Assert.Contains("modelBuilder.Entity<Customer>(entity =>", result);
+    }
+
+    [Fact]
+    public void RenameEntityReferences_NoMatchingReferences_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenameEntityReferences(SourceWithDbSetAndEntityConfig, oldEntityName: "Vehicle", newEntityName: "Car");
+
+        Assert.Equal(SourceWithDbSetAndEntityConfig, result);
+    }
+
+    [Fact]
+    public void RenameEntityReferences_MultiEntitySource_SiblingEntityReferencesUntouched()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenameEntityReferences(SourceWithDbSetAndEntityConfig, oldEntityName: "Person", newEntityName: "Customer");
+
+        Assert.Contains("public DbSet<Address> Addresses { get; set; }", result);
+        Assert.Contains("modelBuilder.Entity<Address>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(200)", result);
+    }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.Parsing;
 using Microsoft.CodeAnalysis;
@@ -171,6 +172,43 @@ public sealed class OnModelCreatingRewriter
         var propertyCallExpression = ((MemberAccessExpressionSyntax)existingMaxLengthCall.Expression).Expression;
 
         var newRoot = root.ReplaceNode(existingMaxLengthCall, propertyCallExpression);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string RenameEntityReferences(string sourceCode, string oldEntityName, string newEntityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targets = new List<IdentifierNameSyntax>();
+
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (FluentSyntaxHelpers.GetConfiguredEntityName(invocation) == oldEntityName
+                && invocation.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax entityGeneric }
+                && entityGeneric.TypeArgumentList.Arguments.FirstOrDefault() is IdentifierNameSyntax entityTypeArgument)
+            {
+                targets.Add(entityTypeArgument);
+            }
+        }
+
+        foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+        {
+            if (property.Type is GenericNameSyntax { Identifier.Text: "DbSet" } dbSetGeneric
+                && dbSetGeneric.TypeArgumentList.Arguments.Count == 1
+                && dbSetGeneric.TypeArgumentList.Arguments[0] is IdentifierNameSyntax dbSetTypeArgument
+                && dbSetTypeArgument.Identifier.Text == oldEntityName)
+            {
+                targets.Add(dbSetTypeArgument);
+            }
+        }
+
+        if (targets.Count == 0)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.ReplaceNodes(targets, (_, _) => SyntaxFactory.IdentifierName(newEntityName));
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 }
