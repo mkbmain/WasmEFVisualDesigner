@@ -89,6 +89,22 @@ internal static class FluentSyntaxHelpers
         };
     }
 
+    /// Returns the lambda parameter name used by an existing `entity.Property(&lt;param&gt; => ...)` call
+    /// within the given `Entity&lt;T&gt;(...)` invocation's scope, so a newly synthesized `Property()`
+    /// call can match the block's existing style. Falls back to "e" if the block has no such call yet.
+    public static string GetPropertyLambdaParameterName(InvocationExpressionSyntax entityInvocation)
+    {
+        foreach (var propertyCall in FindCallsNamed(entityInvocation, "Property"))
+        {
+            if (propertyCall.ArgumentList.Arguments.Select(a => a.Expression).FirstOrDefault() is SimpleLambdaExpressionSyntax lambda)
+            {
+                return lambda.Parameter.Identifier.Text;
+            }
+        }
+
+        return "e";
+    }
+
     internal static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)
     {
         return invocation.Expression is MemberAccessExpressionSyntax

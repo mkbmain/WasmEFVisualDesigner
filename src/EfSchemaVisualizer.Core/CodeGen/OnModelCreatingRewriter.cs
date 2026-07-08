@@ -34,6 +34,13 @@ public sealed class OnModelCreatingRewriter
             return AppendMaxLengthToPropertyCall(root, existingPropertyCall, newMaxLength);
         }
 
+        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+
+        if (existingEntityInvocation is not null)
+        {
+            return InsertPropertyStatement(root, existingEntityInvocation, propertyName, newMaxLength);
+        }
+
         throw new InvalidOperationException(
             $"No HasMaxLength call found for {entityName}.{propertyName}");
     }
@@ -59,6 +66,40 @@ public sealed class OnModelCreatingRewriter
 
         var newRoot = root.ReplaceNode(propertyCall, maxLengthCall);
         return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertPropertyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, int newMaxLength)
+    {
+        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
+        var block = lambda.Block!;
+        var blockReceiverName = lambda.Parameter.Identifier.Text;
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+
+        var newStatement = BuildPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, newMaxLength);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildPropertyStatement(string blockReceiverName, string propertyLambdaParam, string propertyName, int maxLength)
+    {
+        var propertyCall = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("Property")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.SimpleLambdaExpression(
+                            SyntaxFactory.Parameter(SyntaxFactory.Identifier(propertyLambdaParam)),
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName(propertyLambdaParam),
+                                SyntaxFactory.IdentifierName(propertyName)))))));
+
+        return SyntaxFactory.ExpressionStatement(BuildMaxLengthCall(propertyCall, maxLength));
     }
 
     private static InvocationExpressionSyntax BuildMaxLengthCall(ExpressionSyntax propertyCallExpression, int maxLength)

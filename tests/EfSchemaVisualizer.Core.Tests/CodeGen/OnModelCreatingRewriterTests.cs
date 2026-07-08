@@ -105,14 +105,90 @@ public class OnModelCreatingRewriterTests
         """;
 
     [Fact]
-    public void RewriteMaxLength_NestedEntityConfig_DoesNotLeakIntoOuterEntitysScope()
+    public void RewriteMaxLength_PropertyOnlyPresentInNestedConfig_InsertsNewStatementIntoOuterScope()
     {
         var rewriter = new OnModelCreatingRewriter();
 
         // Person has no Line1 property in this shape - Line1 belongs to the nested Address config.
-        // The rewriter must throw rather than silently mutating the nested Address.Line1 call.
-        Assert.Throws<InvalidOperationException>(() =>
-            rewriter.RewriteMaxLength(
-                SourceWithNestedEntityConfig, entityName: "Person", propertyName: "Line1", newMaxLength: 999));
+        // RewriteMaxLength is purely syntactic (it doesn't cross-check property names against a
+        // parsed EntityModel), so it inserts a new statement into Person's own scope rather than
+        // reaching into the nested Address block.
+        var result = rewriter.RewriteMaxLength(
+            SourceWithNestedEntityConfig, entityName: "Person", propertyName: "Line1", newMaxLength: 999);
+
+        Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(999)", result);
+
+        var configs = new FluentConfigParser().ParseMaxLengths(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Line1", MaxLength: 999 });
+        Assert.Contains(configs, c => c is { EntityName: "Address", PropertyName: "Line1", MaxLength: 200 });
+    }
+
+    private const string SourceWithMissingPropertyMention = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_PropertyNeverMentioned_InsertsNewStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithMissingPropertyMention, entityName: "Person", propertyName: "Email", newMaxLength: 75);
+
+        Assert.Contains("entity.Property(e => e.Email).HasMaxLength(75)", result);
+
+        var configs = new FluentConfigParser().ParseMaxLengths(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Email", MaxLength: 75 });
+    }
+
+    private const string SourceWithNonDefaultLambdaParam = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(x => x.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_PropertyNeverMentioned_MatchesSiblingLambdaParameterName()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithNonDefaultLambdaParam, entityName: "Person", propertyName: "Email", newMaxLength: 75);
+
+        Assert.Contains("entity.Property(x => x.Email).HasMaxLength(75)", result);
+    }
+
+    private const string SourceWithEmptyEntityBlock = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_EmptyEntityBlock_FallsBackToDefaultLambdaParameterName()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithEmptyEntityBlock, entityName: "Person", propertyName: "Name", newMaxLength: 40);
+
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(40)", result);
     }
 }
