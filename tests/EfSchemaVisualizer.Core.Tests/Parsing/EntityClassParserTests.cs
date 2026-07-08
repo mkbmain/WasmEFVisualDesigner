@@ -38,4 +38,22 @@ public class EntityClassParserTests
         Assert.Equal("string", email.ClrType);
         Assert.False(email.IsNullable);
     }
+
+    [Fact]
+    public void Parse_ClassLessFile_ReturnsEmptyListAndDiagnostic_NoException()
+    {
+        const string source = """
+            public enum Status
+            {
+                Active,
+                Inactive
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("NoEntityDeclarations", diagnostic.Code);
+    }
 }

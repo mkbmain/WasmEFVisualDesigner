@@ -13,20 +13,37 @@ public sealed class EntityClassParser
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var classDeclaration = root.DescendantNodes()
+        var classDeclarations = root.DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
-            .First();
+            .ToList();
 
+        if (classDeclarations.Count == 0)
+        {
+            var diagnostic = new Diagnostic(
+                "NoEntityDeclarations",
+                "No class, record, or struct declarations found in file; nothing to parse.",
+                EntityName: null,
+                PropertyName: null,
+                root.Span);
+
+            return new ParseResult<IReadOnlyList<EntityModel>>(
+                new List<EntityModel>(),
+                new List<Diagnostic> { diagnostic });
+        }
+
+        var entities = classDeclarations.Select(ParseEntity).ToList();
+
+        return new ParseResult<IReadOnlyList<EntityModel>>(entities, new List<Diagnostic>());
+    }
+
+    private static EntityModel ParseEntity(ClassDeclarationSyntax classDeclaration)
+    {
         var properties = classDeclaration.Members
             .OfType<PropertyDeclarationSyntax>()
             .Select(ParseProperty)
             .ToList();
 
-        var entity = new EntityModel(classDeclaration.Identifier.Text, properties);
-
-        return new ParseResult<IReadOnlyList<EntityModel>>(
-            new List<EntityModel> { entity },
-            new List<Diagnostic>());
+        return new EntityModel(classDeclaration.Identifier.Text, properties);
     }
 
     private static PropertyModel ParseProperty(PropertyDeclarationSyntax property)
