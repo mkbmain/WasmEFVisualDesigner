@@ -146,4 +146,86 @@ public class EntityClassRewriterTests
         Assert.Throws<InvalidOperationException>(() =>
             rewriter.AddProperty(SourceWithNestedTypeSameName, className: "Address", property: new PropertyModel("Line2", "string", IsNullable: false, MaxLength: null)));
     }
+
+    private const string SourceWithThreeProperties = """
+        public class Person
+        {
+            // unrelated comment that must survive
+            public int Id { get; set; }
+            public string Name { get; set; }
+            public string Email { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RemoveProperty_ExistingProperty_RemovesItAndLeavesSiblingsUntouched()
+    {
+        var result = new EntityClassRewriter().RemoveProperty(
+            SourceWithThreeProperties, className: "Person", propertyName: "Email");
+
+        Assert.DoesNotContain("Email", result);
+        Assert.Contains("public int Id { get; set; }", result);
+        Assert.Contains("public string Name { get; set; }", result);
+        Assert.Contains("// unrelated comment that must survive", result);
+    }
+
+    private const string RecordWithTwoProperties = """
+        public record Person
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RemoveProperty_RecordBodyProperty_RemovesFromMemberList()
+    {
+        var result = new EntityClassRewriter().RemoveProperty(
+            RecordWithTwoProperties, className: "Person", propertyName: "Name");
+
+        Assert.DoesNotContain("Name", result);
+        Assert.Contains("public int Id { get; set; }", result);
+    }
+
+    [Fact]
+    public void RemoveProperty_PropertyNotFoundOnExistingClass_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.RemoveProperty(SourceWithThreeProperties, className: "Person", propertyName: "DoesNotExist"));
+    }
+
+    [Fact]
+    public void RemoveProperty_ClassNotFound_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.RemoveProperty(SourceWithThreeProperties, className: "Vehicle", propertyName: "Name"));
+    }
+
+    private const string SourceWithMultipleTopLevelTypesForRemoval = """
+        public class Person
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+        }
+
+        public class Address
+        {
+            public string Line1 { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RemoveProperty_MultipleTopLevelTypes_OnlyModifiesTargetType()
+    {
+        var result = new EntityClassRewriter().RemoveProperty(
+            SourceWithMultipleTopLevelTypesForRemoval, className: "Person", propertyName: "Name");
+
+        Assert.DoesNotContain("Name", result);
+        Assert.Contains("public int Id { get; set; }", result);
+        Assert.Contains("public string Line1 { get; set; }", result);
+    }
 }
