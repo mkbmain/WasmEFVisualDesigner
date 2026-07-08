@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.Model;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -45,6 +46,7 @@ public sealed class EntityClassParser
 
         var bodyProperties = typeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>()
+            .Where(IsMappedInstanceProperty)
             .Select(ParseProperty);
 
         var properties = positionalProperties.Concat(bodyProperties).ToList();
@@ -71,5 +73,35 @@ public sealed class EntityClassParser
             : property.Type.ToString();
 
         return new PropertyModel(property.Identifier.Text, clrType, isNullable, MaxLength: null);
+    }
+
+    private static bool IsMappedInstanceProperty(PropertyDeclarationSyntax property)
+    {
+        if (property.Modifiers.Any(SyntaxKind.StaticKeyword))
+        {
+            return false;
+        }
+
+        if (HasNotMappedAttribute(property.AttributeLists))
+        {
+            return false;
+        }
+
+        if (property.ExpressionBody is not null)
+        {
+            return false;
+        }
+
+        var hasSetter = property.AccessorList?.Accessors
+            .Any(a => a.Kind() is SyntaxKind.SetAccessorDeclaration or SyntaxKind.InitAccessorDeclaration) ?? false;
+
+        return hasSetter;
+    }
+
+    private static bool HasNotMappedAttribute(SyntaxList<AttributeListSyntax> attributeLists)
+    {
+        return attributeLists
+            .SelectMany(list => list.Attributes)
+            .Any(attribute => attribute.Name.ToString() is "NotMapped" or "NotMappedAttribute");
     }
 }

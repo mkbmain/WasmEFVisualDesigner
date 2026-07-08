@@ -119,7 +119,7 @@ public class EntityClassParserTests
         const string source = """
             public class Person(int id, string name)
             {
-                public int Id => id;
+                public int Id { get; set; } = id;
             }
             """;
 
@@ -172,5 +172,99 @@ public class EntityClassParserTests
         Assert.Empty(result.Diagnostics);
         var entity = Assert.Single(result.Value);
         Assert.Equal("Person", entity.Name);
+    }
+
+    [Fact]
+    public void Parse_NotMappedProperty_IsExcluded()
+    {
+        const string source = """
+            using System.ComponentModel.DataAnnotations.Schema;
+
+            public class Person
+            {
+                public int Id { get; set; }
+
+                [NotMapped]
+                public string ScratchNote { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Single(entity.Properties);
+        Assert.Equal("Id", entity.Properties[0].Name);
+    }
+
+    [Fact]
+    public void Parse_StaticProperty_IsExcluded()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public static int InstanceCount { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Single(entity.Properties);
+        Assert.Equal("Id", entity.Properties[0].Name);
+    }
+
+    [Fact]
+    public void Parse_GetOnlyProperty_IsExcluded()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string ReadOnlyLabel { get; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Single(entity.Properties);
+        Assert.Equal("Id", entity.Properties[0].Name);
+    }
+
+    [Fact]
+    public void Parse_ExpressionBodiedProperty_IsExcluded()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string First { get; set; }
+                public string Last { get; set; }
+                public string FullName => First + " " + Last;
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal(new[] { "Id", "First", "Last" }, entity.Properties.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void Parse_InitOnlyProperty_IsIncluded()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; init; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Single(entity.Properties);
+        Assert.Equal("Id", entity.Properties[0].Name);
     }
 }
