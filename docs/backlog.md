@@ -29,13 +29,17 @@ these matter before any new surface is added.
       `UnsupportedConfig` / diagnostics list on the parse result so the UI can
       warn "N fluent calls could not be read" rather than silently hiding them.
       This is the single most important trust fix.
-- [ ] **`[found]` `EntityClassParser.Parse` throws on a class-less file.**
+      **Update:** `Diagnostic`/`ParseResult<T>` now exist and `EntityClassParser`
+      populates them (see `2026-07-08-diagnostics-channel-entity-parser-design.md`).
+      `FluentConfigParser` still needs to be wired in — tracked by the
+      remaining unchecked P0 items below.
+- [x] **`[found]` `EntityClassParser.Parse` throws on a class-less file.**
       `EntityClassParser.cs:15-17` does `.OfType<ClassDeclarationSyntax>().First()`.
       A file containing only an `enum`, `interface`, or `record` throws
       `InvalidOperationException`. Handle gracefully (skip / return empty) and
       support **multiple** class declarations per file (currently only the first
       is read).
-- [ ] **`[found]` Record and struct entities are invisible.**
+- [x] **`[found]` Record and struct entities are invisible.**
       Only `ClassDeclarationSyntax` is matched. EF entities are frequently
       `record` now. Extend to `RecordDeclarationSyntax` (and consider `struct`).
 - [ ] **`[found]` Hardcoded `modelBuilder` receiver name.**
@@ -54,7 +58,7 @@ these matter before any new surface is added.
       `HasMaxLength(MaxNameLength)`, `HasMaxLength(50 * 2)`, etc. are skipped.
       Inherent to syntax-only parsing, but must at minimum surface via the
       diagnostics channel above rather than disappearing.
-- [ ] **`[found]` No property filtering.**
+- [x] **`[found]` No property filtering.**
       `[NotMapped]`, `static`, and get-only/computed properties all become schema
       columns. Filter to mapped instance properties.
 
