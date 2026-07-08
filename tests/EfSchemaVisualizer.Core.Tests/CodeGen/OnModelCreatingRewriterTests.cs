@@ -1,4 +1,5 @@
 using EfSchemaVisualizer.Core.CodeGen;
+using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 
 namespace EfSchemaVisualizer.Core.Tests.CodeGen;
@@ -48,6 +49,41 @@ public class OnModelCreatingRewriterTests
 
         Assert.Throws<InvalidOperationException>(() =>
             rewriter.RewriteMaxLength(Source, entityName: "Vehicle", propertyName: "Name", newMaxLength: 10));
+    }
+
+    private const string SourceWithUnconfiguredProperty = """
+        public class AppDbContext : DbContext
+        {
+            // unrelated comment that must survive untouched
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                    entity.Property(e => e.Email);
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.Property(e => e.Line1).HasMaxLength(200);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_PropertyExistsWithoutHasMaxLength_AppendsHasMaxLengthCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithUnconfiguredProperty, entityName: "Person", propertyName: "Email", newMaxLength: 50);
+
+        Assert.Contains("entity.Property(e => e.Email).HasMaxLength(50)", result);
+        Assert.Contains("// unrelated comment that must survive untouched", result);
+
+        var configs = new FluentConfigParser().ParseMaxLengths(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Email", MaxLength: 50 });
+        Assert.Contains(configs, c => c is { EntityName: "Address", PropertyName: "Line1", MaxLength: 200 });
     }
 
     private const string SourceWithNestedEntityConfig = """

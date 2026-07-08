@@ -14,16 +14,32 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var targetCall = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName)
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingMaxLengthCall = entityInvocations
             .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasMaxLength"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
-        if (targetCall is null)
+        if (existingMaxLengthCall is not null)
         {
-            throw new InvalidOperationException(
-                $"No HasMaxLength call found for {entityName}.{propertyName}");
+            return MutateExistingMaxLength(root, existingMaxLengthCall, newMaxLength);
         }
 
+        var existingPropertyCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            return AppendMaxLengthToPropertyCall(root, existingPropertyCall, newMaxLength);
+        }
+
+        throw new InvalidOperationException(
+            $"No HasMaxLength call found for {entityName}.{propertyName}");
+    }
+
+    private static string MutateExistingMaxLength(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, int newMaxLength)
+    {
         var newArgument = SyntaxFactory.Argument(
             SyntaxFactory.LiteralExpression(
                 SyntaxKind.NumericLiteralExpression,
@@ -35,5 +51,28 @@ public sealed class OnModelCreatingRewriter
 
         var newRoot = root.ReplaceNode(targetCall, newCall);
         return newRoot.ToFullString();
+    }
+
+    private static string AppendMaxLengthToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, int newMaxLength)
+    {
+        var maxLengthCall = BuildMaxLengthCall(propertyCall, newMaxLength);
+
+        var newRoot = root.ReplaceNode(propertyCall, maxLengthCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static InvocationExpressionSyntax BuildMaxLengthCall(ExpressionSyntax propertyCallExpression, int maxLength)
+    {
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                propertyCallExpression,
+                SyntaxFactory.IdentifierName("HasMaxLength")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.NumericLiteralExpression,
+                            SyntaxFactory.Literal(maxLength))))));
     }
 }

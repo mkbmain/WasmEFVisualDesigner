@@ -63,6 +63,14 @@ internal static class FluentSyntaxHelpers
             return null;
         }
 
+        return GetPropertyNameForPropertyCall(propertyInvocation);
+    }
+
+    /// Given a bare `entity.Property(e => e.Name)` invocation itself (string overload and
+    /// block-bodied lambda also resolved), returns "Name" without requiring a `.HasMaxLength(...)`
+    /// (or any other) call chained onto it.
+    public static string? GetPropertyNameForPropertyCall(InvocationExpressionSyntax propertyInvocation)
+    {
         if (propertyInvocation.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "Property" })
         {
             return null;
