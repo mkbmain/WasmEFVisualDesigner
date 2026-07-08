@@ -91,6 +91,20 @@ these matter before any new surface is added.
 - [ ] **`[spec]` Indexes** — `HasIndex`, including unique.
 - [ ] **`[spec]` Relationships** — 1:1, 1:many, many:many (`HasOne`/`WithMany`/`HasForeignKey` etc.). Largest single item; likely its own plan.
 - [ ] **`[spec]` Column/table mapping** — `ToTable`, `HasColumnName`, `HasColumnType`, default values.
+- [ ] **`[found]` Diagnostic codes are bare string literals.** `NoEntityDeclarations`,
+      `UnresolvablePropertyName`, and `UnreadableMaxLengthArgument` are currently
+      scattered as bare string literals across `EntityClassParser.cs` and
+      `FluentConfigParser.cs`, each duplicated in test assertions. A shared
+      `DiagnosticCodes` constants class or enum would prevent drift as more
+      diagnostic codes are added, but with only three codes and no UI consumer
+      yet, this can wait until more codes accumulate or until the Blazor shell
+      needs to interpret them.
+- [ ] **`[found]` `GetPropertyNameFor` doesn't resolve parenthesized lambdas.** Calls like
+      `entity.Property((Person e) => e.Name)` use `ParenthesizedLambdaExpressionSyntax`,
+      which are not handled in the `switch` expression — the method falls through
+      and emits `UnresolvablePropertyName` rather than resolving "Name". This is
+      a plausible shape users could write, but is currently untested. Correct
+      behavior is diagnostic (not silent data loss), but resolving it is a future pass.
 
 ## Priority 3 — Second config style
 
