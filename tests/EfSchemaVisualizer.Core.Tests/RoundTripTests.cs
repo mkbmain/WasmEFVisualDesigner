@@ -38,7 +38,7 @@ public class RoundTripTests
     public void Parse_Merge_NoEdit_RegeneratesConfigIdenticalToOriginal()
     {
         var baseEntity = new EntityClassParser().Parse(EntitySource).Value.Single();
-        var configs = new FluentConfigParser().ParseMaxLengths(ContextSource);
+        var configs = new FluentConfigParser().ParseMaxLengths(ContextSource).Value;
         var merged = ModelMerger.ApplyMaxLengths(baseEntity, configs);
 
         Assert.Equal(100, merged.Properties.Single(p => p.Name == "Name").MaxLength);
@@ -55,7 +55,7 @@ public class RoundTripTests
     [Fact]
     public void Parse_Edit_Regenerate_ChangesOnlyTheEditedProperty()
     {
-        var configs = new FluentConfigParser().ParseMaxLengths(ContextSource);
+        var configs = new FluentConfigParser().ParseMaxLengths(ContextSource).Value;
         var addressLine1 = configs.Single(c => c is { EntityName: "Address", PropertyName: "Line1" });
 
         var regenerated = new OnModelCreatingRewriter()
@@ -66,7 +66,7 @@ public class RoundTripTests
 
         // ...but the untouched entity's config, parsed fresh from the
         // regenerated source, still reports its original value.
-        var configsAfter = new FluentConfigParser().ParseMaxLengths(regenerated);
+        var configsAfter = new FluentConfigParser().ParseMaxLengths(regenerated).Value;
         var addressLine1After = configsAfter.Single(c => c is { EntityName: "Address", PropertyName: "Line1" });
         Assert.Equal(addressLine1.MaxLength, addressLine1After.MaxLength);
     }

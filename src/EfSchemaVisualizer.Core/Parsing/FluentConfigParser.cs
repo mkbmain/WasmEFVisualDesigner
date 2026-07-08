@@ -7,12 +7,13 @@ namespace EfSchemaVisualizer.Core.Parsing;
 
 public sealed class FluentConfigParser
 {
-    public IReadOnlyList<MaxLengthConfig> ParseMaxLengths(string sourceCode)
+    public ParseResult<IReadOnlyList<MaxLengthConfig>> ParseMaxLengths(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
         var results = new List<MaxLengthConfig>();
+        var diagnostics = new List<Diagnostic>();
 
         // Distinct entity names configured anywhere in the file.
         var entityNames = root.DescendantNodes()
@@ -30,8 +31,19 @@ public sealed class FluentConfigParser
                     var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(maxLengthCall);
                     var arg = maxLengthCall.ArgumentList.Arguments.FirstOrDefault();
 
-                    if (propertyName is null || arg is null)
+                    if (arg is null)
                     {
+                        continue;
+                    }
+
+                    if (propertyName is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnresolvablePropertyName",
+                            "Could not determine which property this HasMaxLength call configures.",
+                            entityName,
+                            PropertyName: null,
+                            maxLengthCall.Span));
                         continue;
                     }
 
@@ -39,10 +51,19 @@ public sealed class FluentConfigParser
                     {
                         results.Add(new MaxLengthConfig(entityName!, propertyName, maxLength));
                     }
+                    else
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnreadableMaxLengthArgument",
+                            "HasMaxLength argument is not an integer literal and could not be read.",
+                            entityName,
+                            propertyName,
+                            arg.Span));
+                    }
                 }
             }
         }
 
-        return results;
+        return new ParseResult<IReadOnlyList<MaxLengthConfig>>(results, diagnostics);
     }
 }
