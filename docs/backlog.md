@@ -68,12 +68,18 @@ these matter before any new surface is added.
 > literal in place** — it cannot insert or delete anything. This is the hard
 > codegen work and is where the real round-trip risk lives.
 
-- [ ] **`[found]` Insert new fluent config where none exists.**
+- [x] **`[found]` Insert new fluent config where none exists.**
       `OnModelCreatingRewriter` can only replace an existing `HasMaxLength` arg.
       It cannot add a `HasMaxLength` (or any call) to a property that has none.
       Requires generating a new statement into a lambda body while preserving
       surrounding trivia/indentation. This is the trivia problem the spike's
       byte-identical test did *not* exercise (it only swaps one token).
+      **Update:** `RewriteMaxLength` now handles all four cases (mutate,
+      append, insert statement, synthesize whole block) — see
+      `2026-07-08-insert-fluent-config-design.md`. Trivia is *not* preserved
+      on insertion paths (whole-file `NormalizeWhitespace()` is used
+      instead, a deliberate trade-off documented in the spec); only the
+      pure-mutation path remains byte-identical.
 - [ ] **`[found]/[plan]` Add a property** to an entity (POCO class + optional config).
 - [ ] **`[found]/[plan]` Drop a property** (remove from class and remove any of its config statements).
 - [ ] **`[plan]` Rename** an entity or property (class member + every referencing fluent call + lambda body).
