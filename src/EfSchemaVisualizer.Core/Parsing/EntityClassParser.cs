@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.Model;
 using Microsoft.CodeAnalysis.CSharp;
@@ -7,7 +8,7 @@ namespace EfSchemaVisualizer.Core.Parsing;
 
 public sealed class EntityClassParser
 {
-    public EntityModel Parse(string sourceCode)
+    public ParseResult<IReadOnlyList<EntityModel>> Parse(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
@@ -21,7 +22,11 @@ public sealed class EntityClassParser
             .Select(ParseProperty)
             .ToList();
 
-        return new EntityModel(classDeclaration.Identifier.Text, properties);
+        var entity = new EntityModel(classDeclaration.Identifier.Text, properties);
+
+        return new ParseResult<IReadOnlyList<EntityModel>>(
+            new List<EntityModel> { entity },
+            new List<Diagnostic>());
     }
 
     private static PropertyModel ParseProperty(PropertyDeclarationSyntax property)

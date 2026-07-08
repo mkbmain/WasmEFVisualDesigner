@@ -18,8 +18,11 @@ public class EntityClassParserTests
             }
             """;
 
-        var entity = new EntityClassParser().Parse(source);
+        var result = new EntityClassParser().Parse(source);
 
+        Assert.Empty(result.Diagnostics);
+
+        var entity = result.Value.Single();
         Assert.Equal("Person", entity.Name);
         Assert.Equal(3, entity.Properties.Count);
 

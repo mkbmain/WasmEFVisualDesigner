@@ -37,7 +37,7 @@ public class RoundTripTests
     [Fact]
     public void Parse_Merge_NoEdit_RegeneratesConfigIdenticalToOriginal()
     {
-        var baseEntity = new EntityClassParser().Parse(EntitySource);
+        var baseEntity = new EntityClassParser().Parse(EntitySource).Value.Single();
         var configs = new FluentConfigParser().ParseMaxLengths(ContextSource);
         var merged = ModelMerger.ApplyMaxLengths(baseEntity, configs);
 
