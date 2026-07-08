@@ -88,7 +88,14 @@ these matter before any new surface is added.
       `OnModelCreatingRewriter.RewriteMaxLength`, not orchestrated by this
       method. Record positional parameters are not supported — only body
       properties are synthesized.
-- [ ] **`[found]/[plan]` Drop a property** (remove from class and remove any of its config statements).
+- [x] **`[found]/[plan]` Drop a property** (remove from class and remove any of its config statements).
+      **Update:** `EntityClassRewriter.RemoveProperty` deletes the class
+      member; `OnModelCreatingRewriter.RemoveMaxLength` strips a matching
+      `.HasMaxLength(...)` call, leaving the bare `Property()` call in
+      place (see `2026-07-08-drop-property-design.md`). The two are
+      separate composed calls, not one orchestrated operation, matching
+      the `AddProperty`/config-insertion split. No config kind other than
+      `HasMaxLength` exists yet to remove.
 - [ ] **`[plan]` Rename** an entity or property (class member + every referencing fluent call + lambda body).
 - [ ] **`[plan]` Add / remove an entity** — mint a whole new `modelBuilder.Entity<T>(...)` block, or remove one, without disturbing siblings.
 - [ ] **`[found]` Remove a fluent config** (e.g. clearing a max length) — the delete counterpart of the insert above.
