@@ -39,8 +39,9 @@ public sealed class EntityClassParser
 
     private static EntityModel ParseEntity(TypeDeclarationSyntax typeDeclaration)
     {
-        var positionalProperties = typeDeclaration.ParameterList?.Parameters
-            .Select(ParseParameterProperty) ?? Enumerable.Empty<PropertyModel>();
+        var positionalProperties = typeDeclaration is RecordDeclarationSyntax
+            ? typeDeclaration.ParameterList?.Parameters.Select(ParseParameterProperty) ?? Enumerable.Empty<PropertyModel>()
+            : Enumerable.Empty<PropertyModel>();
 
         var bodyProperties = typeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>()

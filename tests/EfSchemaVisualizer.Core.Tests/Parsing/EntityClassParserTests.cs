@@ -114,6 +114,27 @@ public class EntityClassParserTests
     }
 
     [Fact]
+    public void Parse_ClassWithPrimaryConstructor_DoesNotTreatParametersAsProperties()
+    {
+        const string source = """
+            public class Person(int id, string name)
+            {
+                public int Id => id;
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal("Person", entity.Name);
+        // "name"/"Name" must NOT appear as a phantom property synthesized from the
+        // primary constructor parameter, and "Id" must not be double-counted (once
+        // from the parameter, once from the body property).
+        Assert.DoesNotContain(entity.Properties, p => p.Name == "name" || p.Name == "Name");
+        Assert.Single(entity.Properties, p => p.Name == "Id");
+    }
+
+    [Fact]
     public void Parse_StructEntity_IsRead()
     {
         const string source = """
