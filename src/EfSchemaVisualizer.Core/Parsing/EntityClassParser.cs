@@ -17,6 +17,7 @@ public sealed class EntityClassParser
         var typeDeclarations = root.DescendantNodes()
             .OfType<TypeDeclarationSyntax>()
             .Where(t => t is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax)
+            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
             .ToList();
 
         if (typeDeclarations.Count == 0)

@@ -267,4 +267,44 @@ public class EntityClassParserTests
         Assert.Single(entity.Properties);
         Assert.Equal("Id", entity.Properties[0].Name);
     }
+
+    [Fact]
+    public void Parse_NestedTypeDeclaration_IsNotTreatedAsATopLevelEntity()
+    {
+        const string source = """
+            public class Order
+            {
+                public int Id { get; set; }
+
+                private class LineItemComparer
+                {
+                    public int Threshold { get; set; }
+                }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = Assert.Single(result.Value);
+        Assert.Equal("Order", entity.Name);
+        Assert.Single(entity.Properties, p => p.Name == "Id");
+    }
+
+    [Fact]
+    public void Parse_ClassInsideNamespace_IsStillReadAsAnEntity()
+    {
+        const string source = """
+            namespace MyApp.Models;
+
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = Assert.Single(result.Value);
+        Assert.Equal("Person", entity.Name);
+    }
 }
