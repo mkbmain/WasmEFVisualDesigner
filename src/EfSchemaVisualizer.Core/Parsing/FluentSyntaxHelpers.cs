@@ -79,7 +79,7 @@ internal static class FluentSyntaxHelpers
     {
         return invocation.Expression is MemberAccessExpressionSyntax
         {
-            Expression: IdentifierNameSyntax { Identifier.Text: "modelBuilder" },
+            Expression: IdentifierNameSyntax,
             Name: GenericNameSyntax { Identifier.Text: "Entity" } generic
         }
             ? generic.TypeArgumentList.Arguments.FirstOrDefault()?.ToString()
