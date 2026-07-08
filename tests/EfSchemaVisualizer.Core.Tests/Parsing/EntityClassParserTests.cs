@@ -56,4 +56,28 @@ public class EntityClassParserTests
         var diagnostic = Assert.Single(result.Diagnostics);
         Assert.Equal("NoEntityDeclarations", diagnostic.Code);
     }
+
+    [Fact]
+    public void Parse_MultipleClassesInOneFile_ReturnsOneEntityPerClass()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+
+            public class Address
+            {
+                public int Id { get; set; }
+                public string Line1 { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, e => e.Name == "Person" && e.Properties.Count == 1);
+        Assert.Contains(result.Value, e => e.Name == "Address" && e.Properties.Count == 2);
+    }
 }
