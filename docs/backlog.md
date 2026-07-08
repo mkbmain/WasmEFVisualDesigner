@@ -98,7 +98,10 @@ these matter before any new surface is added.
       `HasMaxLength` exists yet to remove.
 - [ ] **`[plan]` Rename** an entity or property (class member + every referencing fluent call + lambda body).
 - [ ] **`[plan]` Add / remove an entity** — mint a whole new `modelBuilder.Entity<T>(...)` block, or remove one, without disturbing siblings.
-- [ ] **`[found]` Remove a fluent config** (e.g. clearing a max length) — the delete counterpart of the insert above.
+- [x] **`[found]` Remove a fluent config** (e.g. clearing a max length) — the delete counterpart of the insert above.
+      **Update:** Implemented as `OnModelCreatingRewriter.RemoveMaxLength`
+      alongside "Drop a property" above — see
+      `2026-07-08-drop-property-design.md`.
 
 ## Priority 2 — Broaden fluent-config coverage (same pattern as `HasMaxLength`)
 
