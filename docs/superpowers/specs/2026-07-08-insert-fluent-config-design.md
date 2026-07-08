@@ -103,6 +103,31 @@ no insertion) is unaffected by this and remains byte-identical, since
     by an insertion elsewhere in the file (values survive round-trip
     through `FluentConfigParser` even though its formatting changed).
 
+## Interaction with existing tests
+
+Two existing `OnModelCreatingRewriterTests` currently assert a throw when
+nothing is found; both scenarios are exactly what this feature now handles
+by inserting instead:
+
+- `RewriteMaxLength_UnknownEntity_Throws` (entity never mentioned anywhere)
+  is case 4 — must be updated to assert a new `Entity<Vehicle>` block is
+  inserted instead of throwing.
+- `RewriteMaxLength_NestedEntityConfig_DoesNotLeakIntoOuterEntitysScope`
+  (asks for `Person.Line1`, a property that only exists on a *nested*
+  `Entity<Address>` config, not really a `Person` property) is case 3 from
+  `Person`'s point of view — `Person`'s block exists, has no `Line1`
+  property call within its own (non-nested) scope. This is accepted as
+  correct new behavior: `RewriteMaxLength` is purely syntactic (like the
+  rest of this codebase — it doesn't cross-check property names against a
+  parsed `EntityModel`), so it inserts
+  `entity.Property(e => e.Line1).HasMaxLength(999);` into `Person`'s block.
+  Validating that a property name actually belongs to the target entity is
+  out of scope here (would require threading a parsed `EntityModel` through
+  `RewriteMaxLength`, a larger change) and is not required by the backlog
+  item this feature implements.
+
+Both tests must be updated to assert insertion, not exceptions.
+
 ## Non-goals
 
 - Adding/dropping/renaming whole properties or entities (separate P1
