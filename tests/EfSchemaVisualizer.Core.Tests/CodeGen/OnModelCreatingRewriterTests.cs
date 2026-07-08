@@ -43,12 +43,56 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
-    public void RewriteMaxLength_UnknownEntity_Throws()
+    public void RewriteMaxLength_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(Source, entityName: "Vehicle", propertyName: "Name", newMaxLength: 10);
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(10)", result);
+
+        var configs = new FluentConfigParser().ParseMaxLengths(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Vehicle", PropertyName: "Name", MaxLength: 10 });
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+        Assert.Contains(configs, c => c is { EntityName: "Address", PropertyName: "Line1", MaxLength: 200 });
+    }
+
+    private const string SourceWithRenamedBuilderAndNoConfig = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder builder)
+            {
+                builder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_UnknownEntity_RenamedModelBuilderParameter_UsesSameReceiverName()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithRenamedBuilderAndNoConfig, entityName: "Vehicle", propertyName: "Name", newMaxLength: 10);
+
+        Assert.Contains("builder.Entity<Vehicle>(entity =>", result);
+        Assert.DoesNotContain("modelBuilder.Entity<Vehicle>", result);
+    }
+
+    private const string SourceWithoutOnModelCreating = """
+        public class AppDbContext : DbContext
+        {
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_OnModelCreatingMissing_Throws()
     {
         var rewriter = new OnModelCreatingRewriter();
 
         Assert.Throws<InvalidOperationException>(() =>
-            rewriter.RewriteMaxLength(Source, entityName: "Vehicle", propertyName: "Name", newMaxLength: 10));
+            rewriter.RewriteMaxLength(SourceWithoutOnModelCreating, entityName: "Vehicle", propertyName: "Name", newMaxLength: 10));
     }
 
     private const string SourceWithUnconfiguredProperty = """

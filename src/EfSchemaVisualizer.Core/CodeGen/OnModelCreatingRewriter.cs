@@ -41,8 +41,7 @@ public sealed class OnModelCreatingRewriter
             return InsertPropertyStatement(root, existingEntityInvocation, propertyName, newMaxLength);
         }
 
-        throw new InvalidOperationException(
-            $"No HasMaxLength call found for {entityName}.{propertyName}");
+        return InsertEntityBlock(root, entityName, propertyName, newMaxLength);
     }
 
     private static string MutateExistingMaxLength(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, int newMaxLength)
@@ -79,6 +78,42 @@ public sealed class OnModelCreatingRewriter
         var newBlock = block.AddStatements(newStatement);
 
         var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, int newMaxLength)
+    {
+        var method = root.DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .FirstOrDefault(m => m.Identifier.Text == "OnModelCreating")
+            ?? throw new InvalidOperationException("No OnModelCreating method found in source.");
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var propertyStatement = BuildPropertyStatement("entity", "e", propertyName, newMaxLength);
+
+        var entityBlockStatement = SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(modelBuilderParamName),
+                    SyntaxFactory.GenericName(SyntaxFactory.Identifier("Entity"))
+                        .WithTypeArgumentList(
+                            SyntaxFactory.TypeArgumentList(
+                                SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
+                                    SyntaxFactory.IdentifierName(entityName))))),
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.SimpleLambdaExpression(
+                                SyntaxFactory.Parameter(SyntaxFactory.Identifier("entity")),
+                                SyntaxFactory.Block(propertyStatement)))))));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
