@@ -23,16 +23,15 @@ These are latent bugs / data-loss risks in code already written and "done".
 For a tool whose pitch is "upload your real project and trust the output",
 these matter before any new surface is added.
 
-- [ ] **`[found]` Parser silently drops config it doesn't understand — add a diagnostics / "unsupported" channel.**
+- [x] **`[found]` Parser silently drops config it doesn't understand — add a diagnostics / "unsupported" channel.**
       Today anything the parser can't model is discarded with no signal. A user
       would see an incomplete model and not know it. Introduce an
       `UnsupportedConfig` / diagnostics list on the parse result so the UI can
       warn "N fluent calls could not be read" rather than silently hiding them.
       This is the single most important trust fix.
-      **Update:** `Diagnostic`/`ParseResult<T>` now exist and `EntityClassParser`
-      populates them (see `2026-07-08-diagnostics-channel-entity-parser-design.md`).
-      `FluentConfigParser` still needs to be wired in — tracked by the
-      remaining unchecked P0 items below.
+      **Update:** `Diagnostic`/`ParseResult<T>` now populated by both
+      `EntityClassParser` and `FluentConfigParser` (see
+      `2026-07-08-fluent-config-parser-hardening-design.md`).
 - [x] **`[found]` `EntityClassParser.Parse` throws on a class-less file.**
       `EntityClassParser.cs:15-17` does `.OfType<ClassDeclarationSyntax>().First()`.
       A file containing only an `enum`, `interface`, or `record` throws
@@ -42,18 +41,18 @@ these matter before any new surface is added.
 - [x] **`[found]` Record and struct entities are invisible.**
       Only `ClassDeclarationSyntax` is matched. EF entities are frequently
       `record` now. Extend to `RecordDeclarationSyntax` (and consider `struct`).
-- [ ] **`[found]` Hardcoded `modelBuilder` receiver name.**
+- [x] **`[found]` Hardcoded `modelBuilder` receiver name.**
       `FluentSyntaxHelpers.GetConfiguredEntityName` (`FluentSyntaxHelpers.cs:82`)
       requires the identifier be literally `modelBuilder`. A renamed lambda
       param (`builder`, `b`) or config split into a helper method makes the
       whole entity vanish. Match by the `Entity<>` shape / type rather than the
       receiver's name.
-- [ ] **`[found]` `Property` string-overload and block-bodied lambdas not read.**
+- [x] **`[found]` `Property` string-overload and block-bodied lambdas not read.**
       `GetPropertyNameFor` (`FluentSyntaxHelpers.cs:53`) only handles
       `entity.Property(e => e.Name)` expression-bodied simple lambdas. The string
       overload `entity.Property("Name")` (which scaffold emits) and block-bodied
       lambdas are dropped.
-- [ ] **`[found]` Non-literal `HasMaxLength` arguments dropped silently.**
+- [x] **`[found]` Non-literal `HasMaxLength` arguments dropped silently.**
       `FluentConfigParser.cs:38` uses `int.TryParse(arg.ToString())`, so
       `HasMaxLength(MaxNameLength)`, `HasMaxLength(50 * 2)`, etc. are skipped.
       Inherent to syntax-only parsing, but must at minimum surface via the
