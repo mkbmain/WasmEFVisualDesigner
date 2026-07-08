@@ -151,4 +151,26 @@ public sealed class OnModelCreatingRewriter
                             SyntaxKind.NumericLiteralExpression,
                             SyntaxFactory.Literal(maxLength))))));
     }
+
+    public string RemoveMaxLength(string sourceCode, string entityName, string propertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingMaxLengthCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasMaxLength"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingMaxLengthCall is null)
+        {
+            return sourceCode;
+        }
+
+        var propertyCallExpression = ((MemberAccessExpressionSyntax)existingMaxLengthCall.Expression).Expression;
+
+        var newRoot = root.ReplaceNode(existingMaxLengthCall, propertyCallExpression);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
 }

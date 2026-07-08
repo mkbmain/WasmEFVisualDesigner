@@ -235,4 +235,50 @@ public class OnModelCreatingRewriterTests
 
         Assert.Contains("entity.Property(e => e.Name).HasMaxLength(40)", result);
     }
+
+    [Fact]
+    public void RemoveMaxLength_ExistingCall_StripsHasMaxLengthLeavesBarePropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveMaxLength(Source, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("entity.Property(e => e.Name);", result);
+        Assert.DoesNotContain("HasMaxLength(100)", result);
+
+        // Untouched: Person.Email, Address.Line1.
+        Assert.Contains("entity.Property(e => e.Email).HasMaxLength(255)", result);
+        Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(200)", result);
+    }
+
+    [Fact]
+    public void RemoveMaxLength_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveMaxLength(Source, entityName: "Person", propertyName: "DoesNotExist");
+
+        Assert.Equal(Source, result);
+    }
+
+    [Fact]
+    public void RemoveMaxLength_EntityHasNoConfigAtAll_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveMaxLength(Source, entityName: "Vehicle", propertyName: "Name");
+
+        Assert.Equal(Source, result);
+    }
+
+    [Fact]
+    public void RemoveMaxLength_MultiEntitySource_OnlyStripsTargetEntitysCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveMaxLength(Source, entityName: "Address", propertyName: "Line1");
+
+        Assert.Contains("entity.Property(e => e.Line1);", result);
+        Assert.DoesNotContain("HasMaxLength(200)", result);
+
+        // Person's calls are untouched.
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+        Assert.Contains("entity.Property(e => e.Email).HasMaxLength(255)", result);
+    }
 }
