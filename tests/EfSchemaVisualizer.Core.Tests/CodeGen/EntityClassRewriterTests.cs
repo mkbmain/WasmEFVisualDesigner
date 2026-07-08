@@ -228,4 +228,80 @@ public class EntityClassRewriterTests
         Assert.Contains("public int Id { get; set; }", result);
         Assert.Contains("public string Line1 { get; set; }", result);
     }
+
+    private const string ClassWithConstructor = """
+        public class Person
+        {
+            public Person()
+            {
+            }
+
+            public int Id { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RenameClass_ClassWithExplicitConstructor_RenamesConstructorToo()
+    {
+        var result = new EntityClassRewriter().RenameClass(
+            ClassWithConstructor, oldClassName: "Person", newClassName: "Customer");
+
+        Assert.Contains("class Customer", result);
+        Assert.Contains("public Customer()", result);
+        Assert.DoesNotContain("Person", result);
+    }
+
+    private const string RecordForRename = """
+        public record Person
+        {
+            public int Id { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RenameClass_Record_RenamesIdentifier()
+    {
+        var result = new EntityClassRewriter().RenameClass(
+            RecordForRename, oldClassName: "Person", newClassName: "Customer");
+
+        Assert.Contains("record Customer", result);
+        Assert.DoesNotContain("Person", result);
+    }
+
+    private const string StructForRename = """
+        public struct Point
+        {
+            public int X { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RenameClass_Struct_RenamesIdentifier()
+    {
+        var result = new EntityClassRewriter().RenameClass(
+            StructForRename, oldClassName: "Point", newClassName: "Coordinate");
+
+        Assert.Contains("struct Coordinate", result);
+        Assert.DoesNotContain("Point", result);
+    }
+
+    [Fact]
+    public void RenameClass_ClassNotFound_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.RenameClass(SourceWithoutMatchingClass, oldClassName: "Person", newClassName: "Customer"));
+    }
+
+    [Fact]
+    public void RenameClass_MultipleTopLevelTypes_OnlyModifiesTargetType()
+    {
+        var result = new EntityClassRewriter().RenameClass(
+            SourceWithMultipleTopLevelTypes, oldClassName: "Person", newClassName: "Customer");
+
+        Assert.Contains("class Customer", result);
+        Assert.Contains("class Address", result);
+        Assert.DoesNotContain("class Person", result);
+    }
 }
