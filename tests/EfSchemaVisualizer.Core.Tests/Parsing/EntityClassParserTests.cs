@@ -80,4 +80,76 @@ public class EntityClassParserTests
         Assert.Contains(result.Value, e => e.Name == "Person" && e.Properties.Count == 1);
         Assert.Contains(result.Value, e => e.Name == "Address" && e.Properties.Count == 2);
     }
+
+    [Fact]
+    public void Parse_PositionalRecord_ReadsParametersAsProperties()
+    {
+        const string source = """
+            public record Product(int Id, string Name);
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal("Product", entity.Name);
+        Assert.Equal(2, entity.Properties.Count);
+        Assert.Equal("int", entity.Properties.Single(p => p.Name == "Id").ClrType);
+        Assert.Equal("string", entity.Properties.Single(p => p.Name == "Name").ClrType);
+    }
+
+    [Fact]
+    public void Parse_RecordWithPositionalAndBodyProperties_MergesBothInOrder()
+    {
+        const string source = """
+            public record Product(int Id, string Name)
+            {
+                public decimal Price { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal(new[] { "Id", "Name", "Price" }, entity.Properties.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void Parse_StructEntity_IsRead()
+    {
+        const string source = """
+            public struct Point
+            {
+                public int X { get; set; }
+                public int Y { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal("Point", entity.Name);
+        Assert.Equal(2, entity.Properties.Count);
+    }
+
+    [Fact]
+    public void Parse_InterfaceAlongsideClass_OnlyClassBecomesEntity_NoDiagnostic()
+    {
+        const string source = """
+            public interface IAudited
+            {
+                DateTime CreatedAt { get; }
+            }
+
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        Assert.Empty(result.Diagnostics);
+        var entity = Assert.Single(result.Value);
+        Assert.Equal("Person", entity.Name);
+    }
 }

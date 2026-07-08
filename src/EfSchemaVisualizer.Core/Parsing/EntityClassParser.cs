@@ -13,11 +13,12 @@ public sealed class EntityClassParser
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var classDeclarations = root.DescendantNodes()
-            .OfType<ClassDeclarationSyntax>()
+        var typeDeclarations = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(t => t is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax)
             .ToList();
 
-        if (classDeclarations.Count == 0)
+        if (typeDeclarations.Count == 0)
         {
             var diagnostic = new Diagnostic(
                 "NoEntityDeclarations",
@@ -31,19 +32,34 @@ public sealed class EntityClassParser
                 new List<Diagnostic> { diagnostic });
         }
 
-        var entities = classDeclarations.Select(ParseEntity).ToList();
+        var entities = typeDeclarations.Select(ParseEntity).ToList();
 
         return new ParseResult<IReadOnlyList<EntityModel>>(entities, new List<Diagnostic>());
     }
 
-    private static EntityModel ParseEntity(ClassDeclarationSyntax classDeclaration)
+    private static EntityModel ParseEntity(TypeDeclarationSyntax typeDeclaration)
     {
-        var properties = classDeclaration.Members
-            .OfType<PropertyDeclarationSyntax>()
-            .Select(ParseProperty)
-            .ToList();
+        var positionalProperties = typeDeclaration.ParameterList?.Parameters
+            .Select(ParseParameterProperty) ?? Enumerable.Empty<PropertyModel>();
 
-        return new EntityModel(classDeclaration.Identifier.Text, properties);
+        var bodyProperties = typeDeclaration.Members
+            .OfType<PropertyDeclarationSyntax>()
+            .Select(ParseProperty);
+
+        var properties = positionalProperties.Concat(bodyProperties).ToList();
+
+        return new EntityModel(typeDeclaration.Identifier.Text, properties);
+    }
+
+    private static PropertyModel ParseParameterProperty(ParameterSyntax parameter)
+    {
+        var type = parameter.Type!;
+        var isNullable = type is NullableTypeSyntax nullableType;
+        var clrType = type is NullableTypeSyntax nullable
+            ? nullable.ElementType.ToString()
+            : type.ToString();
+
+        return new PropertyModel(parameter.Identifier.Text, clrType, isNullable, MaxLength: null);
     }
 
     private static PropertyModel ParseProperty(PropertyDeclarationSyntax property)
