@@ -70,6 +70,28 @@ public sealed class EntityClassRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string RenameProperty(string sourceCode, string className, string oldPropertyName, string newPropertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targetType = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
+            .FirstOrDefault(t => t.Identifier.Text == className)
+            ?? throw new InvalidOperationException($"No top-level class, record, or struct named '{className}' found in source.");
+
+        var targetProperty = targetType.Members
+            .OfType<PropertyDeclarationSyntax>()
+            .FirstOrDefault(p => p.Identifier.Text == oldPropertyName)
+            ?? throw new InvalidOperationException($"No property named '{oldPropertyName}' found on type '{className}'.");
+
+        var newProperty = targetProperty.WithIdentifier(SyntaxFactory.Identifier(newPropertyName));
+
+        var newRoot = root.ReplaceNode(targetProperty, newProperty);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     private static PropertyDeclarationSyntax BuildPropertyDeclaration(PropertyModel property)
     {
         TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(property.ClrType);

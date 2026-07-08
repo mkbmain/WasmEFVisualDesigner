@@ -304,4 +304,56 @@ public class EntityClassRewriterTests
         Assert.Contains("class Address", result);
         Assert.DoesNotContain("class Person", result);
     }
+
+    [Fact]
+    public void RenameProperty_ExistingProperty_RenamesItAndLeavesSiblingsUntouched()
+    {
+        var result = new EntityClassRewriter().RenameProperty(
+            SourceWithThreeProperties, className: "Person", oldPropertyName: "Email", newPropertyName: "EmailAddress");
+
+        Assert.Contains("public string EmailAddress { get; set; }", result);
+        Assert.DoesNotContain("public string Email {", result);
+        Assert.Contains("public int Id { get; set; }", result);
+        Assert.Contains("public string Name { get; set; }", result);
+        Assert.Contains("// unrelated comment that must survive", result);
+    }
+
+    [Fact]
+    public void RenameProperty_RecordBodyProperty_RenamesInMemberList()
+    {
+        var result = new EntityClassRewriter().RenameProperty(
+            RecordWithTwoProperties, className: "Person", oldPropertyName: "Name", newPropertyName: "FullName");
+
+        Assert.Contains("public string FullName { get; set; }", result);
+        Assert.Contains("public int Id { get; set; }", result);
+    }
+
+    [Fact]
+    public void RenameProperty_PropertyNotFoundOnExistingClass_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.RenameProperty(SourceWithThreeProperties, className: "Person", oldPropertyName: "DoesNotExist", newPropertyName: "Whatever"));
+    }
+
+    [Fact]
+    public void RenameProperty_ClassNotFound_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.RenameProperty(SourceWithThreeProperties, className: "Vehicle", oldPropertyName: "Name", newPropertyName: "Whatever"));
+    }
+
+    [Fact]
+    public void RenameProperty_MultipleTopLevelTypes_OnlyModifiesTargetType()
+    {
+        var result = new EntityClassRewriter().RenameProperty(
+            SourceWithMultipleTopLevelTypesForRemoval, className: "Person", oldPropertyName: "Name", newPropertyName: "FullName");
+
+        Assert.Contains("public string FullName { get; set; }", result);
+        Assert.Contains("public string Line1 { get; set; }", result);
+        Assert.DoesNotContain("public string Name {", result);
+    }
 }
