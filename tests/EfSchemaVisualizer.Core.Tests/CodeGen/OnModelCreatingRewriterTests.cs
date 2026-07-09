@@ -371,4 +371,81 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("modelBuilder.Entity<Address>(entity =>", result);
         Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(200)", result);
     }
+
+    [Fact]
+    public void RenamePropertyReferences_ExpressionBodiedLambda_RenamesMemberAccess()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyReferences(Source, entityName: "Person", oldPropertyName: "Name", newPropertyName: "FullName");
+
+        Assert.Contains("entity.Property(e => e.FullName).HasMaxLength(100)", result);
+        Assert.Contains("entity.Property(e => e.Email).HasMaxLength(255)", result);
+    }
+
+    private const string SourceWithBlockBodiedPropertyLambda = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e =>
+                    {
+                        return e.Name;
+                    }).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RenamePropertyReferences_BlockBodiedLambda_RenamesReturnedMemberAccess()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyReferences(SourceWithBlockBodiedPropertyLambda, entityName: "Person", oldPropertyName: "Name", newPropertyName: "FullName");
+
+        Assert.Contains("return e.FullName;", result);
+        Assert.DoesNotContain("return e.Name;", result);
+    }
+
+    private const string SourceWithStringOverload = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property("Name").HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RenamePropertyReferences_StringOverload_RenamesLiteral()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyReferences(SourceWithStringOverload, entityName: "Person", oldPropertyName: "Name", newPropertyName: "FullName");
+
+        Assert.Contains("entity.Property(\"FullName\").HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void RenamePropertyReferences_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyReferences(Source, entityName: "Person", oldPropertyName: "DoesNotExist", newPropertyName: "Whatever");
+
+        Assert.Equal(Source, result);
+    }
+
+    [Fact]
+    public void RenamePropertyReferences_MultiEntitySource_OnlyRenamesTargetEntitysProperty()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyReferences(Source, entityName: "Person", oldPropertyName: "Name", newPropertyName: "FullName");
+
+        Assert.Contains("entity.Property(e => e.FullName).HasMaxLength(100)", result);
+        Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(200)", result);
+    }
 }

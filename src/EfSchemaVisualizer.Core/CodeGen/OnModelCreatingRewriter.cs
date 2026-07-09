@@ -211,4 +211,56 @@ public sealed class OnModelCreatingRewriter
         var newRoot = root.ReplaceNodes(targets, (_, _) => SyntaxFactory.IdentifierName(newEntityName));
         return newRoot.NormalizeWhitespace().ToFullString();
     }
+
+    public string RenamePropertyReferences(string sourceCode, string entityName, string oldPropertyName, string newPropertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingPropertyCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == oldPropertyName);
+
+        if (existingPropertyCall is null)
+        {
+            return sourceCode;
+        }
+
+        var argumentExpression = existingPropertyCall.ArgumentList.Arguments.Single().Expression;
+
+        ArgumentSyntax newArgument;
+
+        if (argumentExpression is SimpleLambdaExpressionSyntax { ExpressionBody: MemberAccessExpressionSyntax expressionBodyAccess } exprLambda)
+        {
+            var newLambda = exprLambda.WithExpressionBody(expressionBodyAccess.WithName(SyntaxFactory.IdentifierName(newPropertyName)));
+            newArgument = SyntaxFactory.Argument(newLambda);
+        }
+        else if (argumentExpression is SimpleLambdaExpressionSyntax { Block: BlockSyntax block } blockLambda
+            && block.Statements is [ReturnStatementSyntax { Expression: MemberAccessExpressionSyntax blockAccess } returnStatement])
+        {
+            var newReturnStatement = returnStatement.WithExpression(blockAccess.WithName(SyntaxFactory.IdentifierName(newPropertyName)));
+            var newBlock = block.WithStatements(SyntaxFactory.SingletonList<StatementSyntax>(newReturnStatement));
+            var newLambda = blockLambda.WithBlock(newBlock);
+            newArgument = SyntaxFactory.Argument(newLambda);
+        }
+        else if (argumentExpression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+        {
+            var newLiteral = SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(newPropertyName));
+            newArgument = SyntaxFactory.Argument(newLiteral);
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported Property() argument shape for '{oldPropertyName}'.");
+        }
+
+        var newCall = existingPropertyCall.WithArgumentList(
+            existingPropertyCall.ArgumentList.WithArguments(SyntaxFactory.SingletonSeparatedList(newArgument)));
+
+        var newRoot = root.ReplaceNode(existingPropertyCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
 }
