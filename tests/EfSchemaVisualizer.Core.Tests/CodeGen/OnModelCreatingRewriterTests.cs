@@ -486,4 +486,54 @@ public class OnModelCreatingRewriterTests
         Assert.Throws<InvalidOperationException>(() =>
             rewriter.AddEntity(SourceWithDbSetOnly, entityName: "Address", dbSetPropertyName: "Addresses"));
     }
+
+    [Fact]
+    public void RemoveEntity_DbSetOnly_RemovesProperty()
+    {
+        var result = new OnModelCreatingRewriter().RemoveEntity(SourceWithDbSetOnly, entityName: "Person");
+
+        Assert.DoesNotContain("DbSet<Person>", result);
+    }
+
+    [Fact]
+    public void RemoveEntity_EntityConfigOnly_RemovesStatement()
+    {
+        var result = new OnModelCreatingRewriter().RemoveEntity(SourceWithEntityConfigOnly, entityName: "Person");
+
+        Assert.DoesNotContain("Entity<Person>", result);
+    }
+
+    [Fact]
+    public void RemoveEntity_BothDbSetAndEntityConfigPresent_RemovesBothInOnePass()
+    {
+        var result = new OnModelCreatingRewriter().RemoveEntity(SourceWithDbSetAndEntityConfig, entityName: "Person");
+
+        Assert.DoesNotContain("DbSet<Person>", result);
+        Assert.DoesNotContain("Entity<Person>", result);
+
+        // Sibling untouched.
+        Assert.Contains("public DbSet<Address> Addresses { get; set; }", result);
+        Assert.Contains("modelBuilder.Entity<Address>(entity =>", result);
+    }
+
+    [Fact]
+    public void RemoveEntity_NoMatchingReferences_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter().RemoveEntity(SourceWithDbSetAndEntityConfig, entityName: "Vehicle");
+
+        Assert.Equal(SourceWithDbSetAndEntityConfig, result);
+    }
+
+    [Fact]
+    public void RemoveEntity_MultiEntitySource_SiblingEntityDbSetAndConfigUntouched()
+    {
+        var result = new OnModelCreatingRewriter().RemoveEntity(SourceWithDbSetAndEntityConfig, entityName: "Address");
+
+        Assert.DoesNotContain("DbSet<Address>", result);
+        Assert.DoesNotContain("Entity<Address>", result);
+
+        Assert.Contains("public DbSet<Person> People { get; set; }", result);
+        Assert.Contains("modelBuilder.Entity<Person>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
 }

@@ -313,4 +313,40 @@ public sealed class OnModelCreatingRewriter
         var newRoot = root.ReplaceNode(existingPropertyCall, newCall);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
+
+    public string RemoveEntity(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var nodesToRemove = new List<SyntaxNode>();
+
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (FluentSyntaxHelpers.GetConfiguredEntityName(invocation) == entityName
+                && invocation.Parent is ExpressionStatementSyntax statement)
+            {
+                nodesToRemove.Add(statement);
+            }
+        }
+
+        foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
+        {
+            if (property.Type is GenericNameSyntax { Identifier.Text: "DbSet" } dbSetGeneric
+                && dbSetGeneric.TypeArgumentList.Arguments.Count == 1
+                && dbSetGeneric.TypeArgumentList.Arguments[0] is IdentifierNameSyntax dbSetTypeArgument
+                && dbSetTypeArgument.Identifier.Text == entityName)
+            {
+                nodesToRemove.Add(property);
+            }
+        }
+
+        if (nodesToRemove.Count == 0)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNodes(nodesToRemove, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
 }
