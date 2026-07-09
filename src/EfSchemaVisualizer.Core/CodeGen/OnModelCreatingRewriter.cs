@@ -224,6 +224,106 @@ public sealed class OnModelCreatingRewriter
         return SyntaxFactory.ExpressionStatement(BuildIsRequiredCall(propertyCall, isRequired));
     }
 
+    public string SetKey(string sourceCode, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingHasKeyCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasKey"))
+            .FirstOrDefault();
+
+        if (existingHasKeyCall is not null)
+        {
+            return MutateExistingKey(root, existingHasKeyCall, propertyNames);
+        }
+
+        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+
+        if (existingEntityInvocation is not null)
+        {
+            return InsertKeyStatement(root, existingEntityInvocation, propertyNames);
+        }
+
+        return InsertKeyEntityBlock(root, entityName, propertyNames);
+    }
+
+    private static string MutateExistingKey(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, IReadOnlyList<string> propertyNames)
+    {
+        var newCall = targetCall.WithArgumentList(BuildHasKeyArgumentList(propertyNames));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertKeyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, IReadOnlyList<string> propertyNames)
+    {
+        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
+        var block = lambda.Block!;
+        var blockReceiverName = lambda.Parameter.Identifier.Text;
+
+        var newStatement = BuildHasKeyStatement(blockReceiverName, propertyNames);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertKeyEntityBlock(CompilationUnitSyntax root, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var keyStatement = BuildHasKeyStatement("entity", propertyNames);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(keyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildHasKeyStatement(string blockReceiverName, IReadOnlyList<string> propertyNames)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("HasKey")),
+                BuildHasKeyArgumentList(propertyNames)));
+    }
+
+    private static ArgumentListSyntax BuildHasKeyArgumentList(IReadOnlyList<string> propertyNames)
+    {
+        const string lambdaParam = "e";
+
+        ExpressionSyntax body = propertyNames.Count == 1
+            ? SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(lambdaParam),
+                SyntaxFactory.IdentifierName(propertyNames[0]))
+            : SyntaxFactory.AnonymousObjectCreationExpression(
+                SyntaxFactory.SeparatedList(
+                    propertyNames.Select(name => SyntaxFactory.AnonymousObjectMemberDeclarator(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.IdentifierName(lambdaParam),
+                            SyntaxFactory.IdentifierName(name))))));
+
+        return SyntaxFactory.ArgumentList(
+            SyntaxFactory.SingletonSeparatedList(
+                SyntaxFactory.Argument(
+                    SyntaxFactory.SimpleLambdaExpression(
+                        SyntaxFactory.Parameter(SyntaxFactory.Identifier(lambdaParam)),
+                        body))));
+    }
+
     public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

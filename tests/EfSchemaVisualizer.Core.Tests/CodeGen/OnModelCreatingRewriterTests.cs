@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using EfSchemaVisualizer.Core.CodeGen;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
@@ -388,6 +390,81 @@ public class OnModelCreatingRewriterTests
             .RemoveIsRequired(SourceWithIsRequiredCalls, entityName: "Vehicle", propertyName: "Name");
 
         Assert.Equal(SourceWithIsRequiredCalls, result);
+    }
+
+    private const string SourceWithSingleKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetKey_ExistingSingleKey_MutatesToComposite()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithSingleKey, entityName: "Person", propertyNames: new List<string> { "TenantId", "Id" });
+
+        Assert.Contains("entity.HasKey(e => new { e.TenantId, e.Id })", result);
+        Assert.DoesNotContain("entity.HasKey(e => e.Id)", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void SetKey_ExistingSingleKey_MutatesToDifferentSingleProperty()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithSingleKey, entityName: "Person", propertyNames: new List<string> { "Guid" });
+
+        Assert.Contains("entity.HasKey(e => e.Guid)", result);
+        Assert.DoesNotContain("entity.HasKey(e => e.Id)", result);
+    }
+
+    private const string SourceWithEntityConfiguredNoKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetKey_EntityConfiguredWithoutHasKey_InsertsStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithEntityConfiguredNoKey, entityName: "Person", propertyNames: new List<string> { "Id" });
+
+        Assert.Contains("entity.HasKey(e => e.Id)", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+
+        var configs = new FluentConfigParser().ParseKeys(result).Value;
+        Assert.Contains(configs, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Id" }));
+    }
+
+    [Fact]
+    public void SetKey_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithSingleKey, entityName: "Vehicle", propertyNames: new List<string> { "Vin" });
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>", result);
+        Assert.Contains("entity.HasKey(e => e.Vin)", result);
+
+        var configs = new FluentConfigParser().ParseKeys(result).Value;
+        Assert.Contains(configs, c => c.EntityName == "Vehicle" && c.PropertyNames.SequenceEqual(new[] { "Vin" }));
+        Assert.Contains(configs, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Id" }));
     }
 
     [Fact]
