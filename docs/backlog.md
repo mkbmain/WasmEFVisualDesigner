@@ -96,7 +96,15 @@ these matter before any new surface is added.
       separate composed calls, not one orchestrated operation, matching
       the `AddProperty`/config-insertion split. No config kind other than
       `HasMaxLength` exists yet to remove.
-- [ ] **`[plan]` Rename** an entity or property (class member + every referencing fluent call + lambda body).
+- [x] **`[plan]` Rename** an entity or property (class member + every referencing fluent call + lambda body).
+      **Update:** `EntityClassRewriter.RenameClass`/`RenameProperty` rename
+      the POCO side; `OnModelCreatingRewriter.RenameEntityReferences`/
+      `RenamePropertyReferences` fix `Entity<T>`/`DbSet<T>` type arguments
+      and `Property()` lambda/string references (see
+      `2026-07-08-rename-entity-property-design.md`). Four separate
+      composed calls, not one orchestrated operation, matching the
+      add/drop-property split. Record positional parameters and
+      free-text references outside these patterns remain out of scope.
 - [ ] **`[plan]` Add / remove an entity** — mint a whole new `modelBuilder.Entity<T>(...)` block, or remove one, without disturbing siblings.
 - [x] **`[found]` Remove a fluent config** (e.g. clearing a max length) — the delete counterpart of the insert above.
       **Update:** Implemented as `OnModelCreatingRewriter.RemoveMaxLength`
