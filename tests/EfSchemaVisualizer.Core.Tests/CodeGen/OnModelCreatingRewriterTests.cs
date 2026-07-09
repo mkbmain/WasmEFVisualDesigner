@@ -714,7 +714,7 @@ public class OnModelCreatingRewriterTests
         Assert.DoesNotContain("HasMaxLength(100)", result);
 
         // Exactly one HasMaxLength call must remain — not two.
-        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(result, "HasMaxLength").Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(result, "HasMaxLength"));
     }
 
     [Fact]
@@ -726,7 +726,7 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Name).IsRequired(false).HasMaxLength(100)", result);
 
         // Exactly one IsRequired call must remain — not two.
-        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(result, "IsRequired").Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(result, "IsRequired"));
     }
 
     [Fact]
