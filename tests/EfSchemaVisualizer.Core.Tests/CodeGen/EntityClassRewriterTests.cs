@@ -380,4 +380,31 @@ public class EntityClassRewriterTests
 
         Assert.Contains("public class Person", result);
     }
+
+    [Fact]
+    public void RemoveClass_MultipleTopLevelTypes_OnlyRemovesTargetType()
+    {
+        var result = new EntityClassRewriter().RemoveClass(SourceWithMultipleTopLevelTypes, className: "Address");
+
+        Assert.DoesNotContain("class Address", result);
+        Assert.Contains("class Person", result);
+    }
+
+    [Fact]
+    public void RemoveClass_ClassNotFound_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.RemoveClass(SourceWithoutMatchingClass, className: "Person"));
+    }
+
+    [Fact]
+    public void RemoveClass_OnlyClassInFile_LeavesEmptyCompilationUnit()
+    {
+        var result = new EntityClassRewriter().RemoveClass(SourceWithEmptyClassBody, className: "Person");
+
+        Assert.DoesNotContain("class Person", result);
+        Assert.Equal(string.Empty, result.Trim());
+    }
 }

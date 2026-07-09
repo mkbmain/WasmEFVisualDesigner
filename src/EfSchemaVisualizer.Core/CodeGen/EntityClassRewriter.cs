@@ -35,6 +35,17 @@ public sealed class EntityClassRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string RemoveClass(string sourceCode, string className)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targetType = FindTopLevelType(root, className);
+
+        var newRoot = root.RemoveNode(targetType, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string RemoveProperty(string sourceCode, string className, string propertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
