@@ -448,4 +448,42 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.FullName).HasMaxLength(100)", result);
         Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(200)", result);
     }
+
+    private const string SourceWithExistingEntityForAddEntity = """
+        public class AppDbContext : DbContext
+        {
+            public DbSet<Person> People { get; set; }
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void AddEntity_ExistingEntityPresent_AppendsNewDbSetAndEmptyEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddEntity(SourceWithExistingEntityForAddEntity, entityName: "Address", dbSetPropertyName: "Addresses");
+
+        Assert.Contains("public DbSet<Address> Addresses { get; set; }", result);
+        Assert.Contains("modelBuilder.Entity<Address>(entity =>", result);
+
+        // Existing entity untouched.
+        Assert.Contains("public DbSet<Person> People { get; set; }", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void AddEntity_NoOnModelCreatingMethod_Throws()
+    {
+        var rewriter = new OnModelCreatingRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.AddEntity(SourceWithDbSetOnly, entityName: "Address", dbSetPropertyName: "Addresses"));
+    }
 }

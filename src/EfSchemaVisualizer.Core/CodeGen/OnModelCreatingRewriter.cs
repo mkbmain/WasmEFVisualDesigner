@@ -84,10 +84,7 @@ public sealed class OnModelCreatingRewriter
 
     private static string InsertEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, int newMaxLength)
     {
-        var method = root.DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .FirstOrDefault(m => m.Identifier.Text == "OnModelCreating")
-            ?? throw new InvalidOperationException("No OnModelCreating method found in source.");
+        var method = FindOnModelCreatingMethod(root);
 
         var methodBody = method.Body
             ?? throw new InvalidOperationException("OnModelCreating has no method body.");
@@ -95,8 +92,48 @@ public sealed class OnModelCreatingRewriter
         var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
 
         var propertyStatement = BuildPropertyStatement("entity", "e", propertyName, newMaxLength);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(propertyStatement));
 
-        var entityBlockStatement = SyntaxFactory.ExpressionStatement(
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+        var containingClass = method.Ancestors().OfType<TypeDeclarationSyntax>().First();
+
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block());
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var classWithNewMethod = containingClass.ReplaceNode(methodBody, newMethodBody);
+
+        var dbSetProperty = BuildDbSetProperty(entityName, dbSetPropertyName);
+        var classWithBoth = classWithNewMethod.AddMembers(dbSetProperty);
+
+        var newRoot = root.ReplaceNode(containingClass, classWithBoth);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static MethodDeclarationSyntax FindOnModelCreatingMethod(CompilationUnitSyntax root)
+    {
+        return root.DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .FirstOrDefault(m => m.Identifier.Text == "OnModelCreating")
+            ?? throw new InvalidOperationException("No OnModelCreating method found in source.");
+    }
+
+    private static ExpressionStatementSyntax BuildEntityInvocationStatement(string modelBuilderParamName, string entityName, BlockSyntax block)
+    {
+        return SyntaxFactory.ExpressionStatement(
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
@@ -111,11 +148,24 @@ public sealed class OnModelCreatingRewriter
                         SyntaxFactory.Argument(
                             SyntaxFactory.SimpleLambdaExpression(
                                 SyntaxFactory.Parameter(SyntaxFactory.Identifier("entity")),
-                                SyntaxFactory.Block(propertyStatement)))))));
+                                block))))));
+    }
 
-        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
-        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
-        return newRoot.NormalizeWhitespace().ToFullString();
+    private static PropertyDeclarationSyntax BuildDbSetProperty(string entityName, string dbSetPropertyName)
+    {
+        var dbSetType = SyntaxFactory.GenericName(SyntaxFactory.Identifier("DbSet"))
+            .WithTypeArgumentList(
+                SyntaxFactory.TypeArgumentList(
+                    SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
+                        SyntaxFactory.IdentifierName(entityName))));
+
+        return SyntaxFactory.PropertyDeclaration(dbSetType, dbSetPropertyName)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
+            .AddAccessorListAccessors(
+                SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                    .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken)),
+                SyntaxFactory.AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                    .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken)));
     }
 
     private static ExpressionStatementSyntax BuildPropertyStatement(string blockReceiverName, string propertyLambdaParam, string propertyName, int maxLength)
