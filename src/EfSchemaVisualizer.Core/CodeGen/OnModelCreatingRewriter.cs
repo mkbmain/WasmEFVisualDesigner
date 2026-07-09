@@ -324,6 +324,26 @@ public sealed class OnModelCreatingRewriter
                         body))));
     }
 
+    public string RemoveKey(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingHasKeyCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasKey"))
+            .FirstOrDefault();
+
+        if (existingHasKeyCall is null || existingHasKeyCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

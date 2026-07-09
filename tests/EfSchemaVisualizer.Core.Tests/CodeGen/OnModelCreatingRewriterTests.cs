@@ -468,6 +468,34 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void RemoveKey_ExistingCall_RemovesHasKeyStatementEntirely()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveKey(SourceWithSingleKey, entityName: "Person");
+
+        Assert.DoesNotContain("HasKey", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void RemoveKey_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveKey(SourceWithEntityConfiguredNoKey, entityName: "Person");
+
+        Assert.Equal(SourceWithEntityConfiguredNoKey, result);
+    }
+
+    [Fact]
+    public void RemoveKey_EntityHasNoConfigAtAll_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveKey(SourceWithSingleKey, entityName: "Vehicle");
+
+        Assert.Equal(SourceWithSingleKey, result);
+    }
+
+    [Fact]
     public void RemoveMaxLength_ExistingCall_StripsHasMaxLengthLeavesBarePropertyCall()
     {
         var result = new OnModelCreatingRewriter()
