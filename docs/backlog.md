@@ -125,7 +125,13 @@ these matter before any new surface is added.
 > `[plan]` explicitly scopes the spike to `HasMaxLength` only; these follow the
 > established parse → merge → rewrite pattern.
 
-- [ ] **`[spec/plan]` `IsRequired` / nullability** as fluent config (distinct from CLR `?`).
+- [x] **`[spec/plan]` `IsRequired` / nullability** as fluent config (distinct from CLR `?`).
+      **Update:** `FluentConfigParser.ParseIsRequired` reads bare `.IsRequired()` and
+      explicit `.IsRequired(true/false)` calls into `IsRequiredConfig`;
+      `ModelMerger.ApplyIsRequired` folds that into `PropertyModel.IsRequiredOverride`,
+      kept separate from CLR-derived `IsNullable`; `OnModelCreatingRewriter.RewriteIsRequired`/
+      `RemoveIsRequired` mirror the full `HasMaxLength` rewrite/remove pattern (see
+      `2026-07-09-is-required-config-design.md`).
 - [ ] **`[spec/plan]` Precision / scale** (`HasPrecision`) for decimal.
 - [ ] **`[spec]` Keys** — `HasKey`, including composite keys.
 - [ ] **`[spec]` Indexes** — `HasIndex`, including unique.
