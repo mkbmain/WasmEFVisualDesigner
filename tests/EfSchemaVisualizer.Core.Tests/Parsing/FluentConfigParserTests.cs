@@ -212,4 +212,113 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
+
+    private const string SourceWithIsRequiredCalls = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired();
+                    entity.Property(e => e.Email).IsRequired(false);
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.Property(e => e.Line1).IsRequired(true);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseIsRequired_ReadsBareAndExplicitCalls_AcrossMultipleEntities()
+    {
+        var result = new FluentConfigParser().ParseIsRequired(SourceWithIsRequiredCalls);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(3, result.Value.Count);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Email", IsRequired: false });
+        Assert.Contains(result.Value, c => c is { EntityName: "Address", PropertyName: "Line1", IsRequired: true });
+    }
+
+    private const string SourceWithNoIsRequiredCalls = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseIsRequired_NoCallsPresent_ReturnsEmpty()
+    {
+        var result = new FluentConfigParser().ParseIsRequired(SourceWithNoIsRequiredCalls);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Empty(result.Value);
+    }
+
+    private const string SourceWithNonLiteralIsRequiredArgument = """
+        public class AppDbContext : DbContext
+        {
+            private const bool NameIsRequired = true;
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired(NameIsRequired);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseIsRequired_NonLiteralArgument_EmitsUnreadableIsRequiredArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseIsRequired(SourceWithNonLiteralIsRequiredArgument);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableIsRequiredArgument", diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Name", diagnostic.PropertyName);
+    }
+
+    private const string SourceWithUnresolvableIsRequiredPropertyLambda = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e =>
+                    {
+                        var name = e.Name;
+                        return name;
+                    }).IsRequired();
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseIsRequired_UnresolvablePropertyLambda_EmitsUnresolvablePropertyNameDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseIsRequired(SourceWithUnresolvableIsRequiredPropertyLambda);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnresolvablePropertyName", diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
 }
