@@ -99,6 +99,90 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string RewriteIsRequired(string sourceCode, string entityName, string propertyName, bool newIsRequired)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingIsRequiredCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "IsRequired"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingIsRequiredCall is not null)
+        {
+            return MutateExistingIsRequired(root, existingIsRequiredCall, newIsRequired);
+        }
+
+        var existingPropertyCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            return AppendIsRequiredToPropertyCall(root, existingPropertyCall, newIsRequired);
+        }
+
+        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+
+        if (existingEntityInvocation is not null)
+        {
+            return InsertIsRequiredPropertyStatement(root, existingEntityInvocation, propertyName, newIsRequired);
+        }
+
+        return InsertIsRequiredEntityBlock(root, entityName, propertyName, newIsRequired);
+    }
+
+    private static string MutateExistingIsRequired(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, bool newIsRequired)
+    {
+        var newCall = targetCall.WithArgumentList(BuildIsRequiredArgumentList(newIsRequired));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.ToFullString();
+    }
+
+    private static string AppendIsRequiredToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, bool newIsRequired)
+    {
+        var isRequiredCall = BuildIsRequiredCall(propertyCall, newIsRequired);
+
+        var newRoot = root.ReplaceNode(propertyCall, isRequiredCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static InvocationExpressionSyntax BuildIsRequiredCall(ExpressionSyntax propertyCallExpression, bool isRequired)
+    {
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                propertyCallExpression,
+                SyntaxFactory.IdentifierName("IsRequired")),
+            BuildIsRequiredArgumentList(isRequired));
+    }
+
+    private static ArgumentListSyntax BuildIsRequiredArgumentList(bool isRequired)
+    {
+        if (isRequired)
+        {
+            return SyntaxFactory.ArgumentList();
+        }
+
+        return SyntaxFactory.ArgumentList(
+            SyntaxFactory.SingletonSeparatedList(
+                SyntaxFactory.Argument(
+                    SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression))));
+    }
+
+    private static string InsertIsRequiredPropertyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, bool newIsRequired)
+    {
+        throw new NotImplementedException();
+    }
+
+    private static string InsertIsRequiredEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, bool newIsRequired)
+    {
+        throw new NotImplementedException();
+    }
+
     public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

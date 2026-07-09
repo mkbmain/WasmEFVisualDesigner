@@ -236,6 +236,88 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Name).HasMaxLength(40)", result);
     }
 
+    private const string SourceWithIsRequiredCalls = """
+        public class AppDbContext : DbContext
+        {
+            // unrelated comment that must survive untouched
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired();
+                    entity.Property(e => e.Email).IsRequired(false);
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.Property(e => e.Line1).IsRequired();
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteIsRequired_ExistingBareCall_MutatesToFalse()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithIsRequiredCalls, entityName: "Person", propertyName: "Name", newIsRequired: false);
+
+        Assert.Contains("entity.Property(e => e.Name).IsRequired(false)", result);
+
+        // Untouched: Person.Email, Address.Line1, and the unrelated comment.
+        Assert.Contains("entity.Property(e => e.Email).IsRequired(false)", result);
+        Assert.Contains("entity.Property(e => e.Line1).IsRequired()", result);
+        Assert.Contains("// unrelated comment that must survive untouched", result);
+    }
+
+    [Fact]
+    public void RewriteIsRequired_ExistingExplicitFalseCall_MutatesToBareTrue()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithIsRequiredCalls, entityName: "Person", propertyName: "Email", newIsRequired: true);
+
+        Assert.Contains("entity.Property(e => e.Email).IsRequired()", result);
+        Assert.DoesNotContain("IsRequired(false)", result);
+    }
+
+    private const string SourceWithUnconfiguredIsRequiredProperty = """
+        public class AppDbContext : DbContext
+        {
+            // unrelated comment that must survive untouched
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired();
+                    entity.Property(e => e.Email);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteIsRequired_PropertyExistsWithoutIsRequired_AppendsBareIsRequiredCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithUnconfiguredIsRequiredProperty, entityName: "Person", propertyName: "Email", newIsRequired: true);
+
+        Assert.Contains("entity.Property(e => e.Email).IsRequired()", result);
+        Assert.Contains("// unrelated comment that must survive untouched", result);
+
+        var configs = new FluentConfigParser().ParseIsRequired(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Email", IsRequired: true });
+    }
+
+    [Fact]
+    public void RewriteIsRequired_PropertyExistsWithoutIsRequired_AppendsExplicitFalseCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithUnconfiguredIsRequiredProperty, entityName: "Person", propertyName: "Email", newIsRequired: false);
+
+        Assert.Contains("entity.Property(e => e.Email).IsRequired(false)", result);
+    }
+
     [Fact]
     public void RemoveMaxLength_ExistingCall_StripsHasMaxLengthLeavesBarePropertyCall()
     {
