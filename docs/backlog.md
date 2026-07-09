@@ -105,7 +105,16 @@ these matter before any new surface is added.
       composed calls, not one orchestrated operation, matching the
       add/drop-property split. Record positional parameters and
       free-text references outside these patterns remain out of scope.
-- [ ] **`[plan]` Add / remove an entity** — mint a whole new `modelBuilder.Entity<T>(...)` block, or remove one, without disturbing siblings.
+- [x] **`[plan]` Add / remove an entity** — mint a whole new `modelBuilder.Entity<T>(...)` block, or remove one, without disturbing siblings.
+      **Update:** `EntityClassRewriter.AddClass`/`RemoveClass` mint or
+      delete the POCO side; `OnModelCreatingRewriter.AddEntity`/
+      `RemoveEntity` mint or delete the `DbSet<T>` property and the
+      `Entity<T>(...)` config block together in one pass each (see
+      `2026-07-09-add-remove-entity-design.md`). Two separate composed
+      calls, not one orchestrated operation, matching the
+      rename/add/drop-property split. No duplicate/collision detection on
+      either `Add*` method; `RemoveEntity` only handles the bare,
+      unchained `Entity<T>(...)` statement shape.
 - [x] **`[found]` Remove a fluent config** (e.g. clearing a max length) — the delete counterpart of the insert above.
       **Update:** Implemented as `OnModelCreatingRewriter.RemoveMaxLength`
       alongside "Drop a property" above — see
