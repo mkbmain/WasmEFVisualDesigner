@@ -4,4 +4,5 @@ public sealed record PropertyModel(
     string Name,
     string ClrType,
     bool IsNullable,
-    int? MaxLength);
+    int? MaxLength,
+    bool? IsRequiredOverride = null);

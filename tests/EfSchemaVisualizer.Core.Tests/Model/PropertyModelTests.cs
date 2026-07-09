@@ -18,6 +18,18 @@ public class PropertyModelTests
     }
 
     [Fact]
+    public void WithIsRequiredOverride_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new PropertyModel("Name", "string", IsNullable: true, MaxLength: null);
+
+        var updated = original with { IsRequiredOverride = false };
+
+        Assert.Null(original.IsRequiredOverride);
+        Assert.False(updated.IsRequiredOverride);
+        Assert.Equal(original.Name, updated.Name);
+    }
+
+    [Fact]
     public void EntityModel_ExposesNameAndProperties()
     {
         var properties = new List<PropertyModel>
