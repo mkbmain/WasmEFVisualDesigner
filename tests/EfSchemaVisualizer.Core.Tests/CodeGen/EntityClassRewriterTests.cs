@@ -356,4 +356,28 @@ public class EntityClassRewriterTests
         Assert.Contains("public string Line1 { get; set; }", result);
         Assert.DoesNotContain("public string Name {", result);
     }
+
+    [Fact]
+    public void AddClass_FileWithExistingClasses_AppendsNewClassAsLastMember()
+    {
+        var result = new EntityClassRewriter().AddClass(SourceWithMultipleTopLevelTypes, className: "Order");
+
+        Assert.Contains("public class Order", result);
+        Assert.Contains("class Person", result);
+        Assert.Contains("class Address", result);
+
+        var addressIndex = result.IndexOf("class Address", StringComparison.Ordinal);
+        var orderIndex = result.IndexOf("class Order", StringComparison.Ordinal);
+        Assert.True(orderIndex > addressIndex);
+    }
+
+    private const string EmptyFile = "";
+
+    [Fact]
+    public void AddClass_FileWithNoTopLevelTypes_NewClassBecomesOnlyMember()
+    {
+        var result = new EntityClassRewriter().AddClass(EmptyFile, className: "Person");
+
+        Assert.Contains("public class Person", result);
+    }
 }

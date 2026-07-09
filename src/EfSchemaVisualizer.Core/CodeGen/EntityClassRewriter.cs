@@ -23,6 +23,18 @@ public sealed class EntityClassRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string AddClass(string sourceCode, string className)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var newClass = SyntaxFactory.ClassDeclaration(className)
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword));
+
+        var newRoot = root.AddMembers(newClass);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string RemoveProperty(string sourceCode, string className, string propertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
