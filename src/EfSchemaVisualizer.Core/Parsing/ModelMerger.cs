@@ -20,4 +20,19 @@ public static class ModelMerger
 
         return entity with { Properties = updatedProperties };
     }
+
+    public static EntityModel ApplyIsRequired(EntityModel entity, IReadOnlyList<IsRequiredConfig> configs)
+    {
+        var updatedProperties = entity.Properties
+            .Select(property =>
+            {
+                var config = configs.FirstOrDefault(c =>
+                    c.EntityName == entity.Name && c.PropertyName == property.Name);
+
+                return config is null ? property : property with { IsRequiredOverride = config.IsRequired };
+            })
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
 }

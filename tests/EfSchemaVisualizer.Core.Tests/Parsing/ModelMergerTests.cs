@@ -28,4 +28,27 @@ public class ModelMergerTests
         Assert.Null(merged.Properties.Single(p => p.Name == "Id").MaxLength);
         Assert.Equal(100, merged.Properties.Single(p => p.Name == "Name").MaxLength);
     }
+
+    [Fact]
+    public void ApplyIsRequired_SetsIsRequiredOverrideOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var configs = new List<IsRequiredConfig>
+        {
+            new("Person", "Name", true),
+            new("Address", "Line1", false), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyIsRequired(entity, configs);
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").IsRequiredOverride);
+        Assert.True(merged.Properties.Single(p => p.Name == "Name").IsRequiredOverride);
+        // CLR-derived IsNullable is untouched by the fluent override.
+        Assert.True(merged.Properties.Single(p => p.Name == "Name").IsNullable);
+    }
 }
