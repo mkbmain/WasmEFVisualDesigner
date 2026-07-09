@@ -144,7 +144,15 @@ these matter before any new surface is added.
       `RemoveIsRequired` mirror the full `HasMaxLength` rewrite/remove pattern (see
       `2026-07-09-is-required-config-design.md`).
 - [ ] **`[spec/plan]` Precision / scale** (`HasPrecision`) for decimal.
-- [ ] **`[spec]` Keys** — `HasKey`, including composite keys.
+- [x] **`[spec]` Keys** — `HasKey`, including composite keys.
+      **Update:** `FluentConfigParser.ParseKeys` reads `HasKey(e => e.Id)`,
+      `HasKey(e => new { e.A, e.B })`, `HasKey("Id")`, and
+      `HasKey("A", "B")` into `KeyConfig`; `ModelMerger.ApplyKeys` folds
+      that into `EntityModel.KeyPropertyNames` (entity-level, not a
+      per-property field, since composite key order matters);
+      `OnModelCreatingRewriter.SetKey`/`RemoveKey` write it back, always
+      emitting the canonical lambda form (see
+      `2026-07-09-has-key-config-design.md`).
 - [ ] **`[spec]` Indexes** — `HasIndex`, including unique.
 - [ ] **`[spec]` Relationships** — 1:1, 1:many, many:many (`HasOne`/`WithMany`/`HasForeignKey` etc.). Largest single item; likely its own plan.
 - [ ] **`[spec]` Column/table mapping** — `ToTable`, `HasColumnName`, `HasColumnType`, default values.
