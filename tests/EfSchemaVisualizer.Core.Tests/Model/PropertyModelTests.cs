@@ -43,4 +43,23 @@ public class PropertyModelTests
         Assert.Equal("Person", entity.Name);
         Assert.Equal(2, entity.Properties.Count);
     }
+
+    [Fact]
+    public void EntityModel_KeyPropertyNames_DefaultsToEmpty()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        Assert.Empty(entity.KeyPropertyNames);
+    }
+
+    [Fact]
+    public void EntityModel_WithKeyPropertyNames_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new EntityModel("Person", new List<PropertyModel>());
+
+        var updated = original with { KeyPropertyNames = new List<string> { "Id" } };
+
+        Assert.Empty(original.KeyPropertyNames);
+        Assert.Equal(new[] { "Id" }, updated.KeyPropertyNames);
+    }
 }
