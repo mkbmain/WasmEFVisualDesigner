@@ -35,4 +35,11 @@ public static class ModelMerger
 
         return entity with { Properties = updatedProperties };
     }
+
+    public static EntityModel ApplyKeys(EntityModel entity, IReadOnlyList<KeyConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { KeyPropertyNames = config.PropertyNames };
+    }
 }

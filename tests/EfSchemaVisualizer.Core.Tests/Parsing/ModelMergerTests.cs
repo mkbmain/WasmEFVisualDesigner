@@ -51,4 +51,44 @@ public class ModelMergerTests
         // CLR-derived IsNullable is untouched by the fluent override.
         Assert.True(merged.Properties.Single(p => p.Name == "Name").IsNullable);
     }
+
+    [Fact]
+    public void ApplyKeys_SetsKeyPropertyNamesOnMatchingEntity_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var configs = new List<KeyConfig>
+        {
+            new("Person", new List<string> { "Id" }),
+            new("Address", new List<string> { "Id" }), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyKeys(entity, configs);
+
+        Assert.Equal(new[] { "Id" }, merged.KeyPropertyNames);
+        // Properties themselves are untouched by the merge.
+        Assert.Equal(2, merged.Properties.Count);
+    }
+
+    [Fact]
+    public void ApplyKeys_NoMatchingConfig_LeavesKeyPropertyNamesEmpty()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<KeyConfig>
+        {
+            new("Address", new List<string> { "Id" }),
+        };
+
+        var merged = ModelMerger.ApplyKeys(entity, configs);
+
+        Assert.Empty(merged.KeyPropertyNames);
+    }
 }
