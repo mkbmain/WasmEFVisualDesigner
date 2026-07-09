@@ -115,4 +115,16 @@ internal static class FluentSyntaxHelpers
             ? generic.TypeArgumentList.Arguments.FirstOrDefault()?.ToString()
             : null;
     }
+
+    /// Given a `public DbSet&lt;T&gt; Name { get; set; }` property declaration, returns the `T` type
+    /// argument node if it's a single identifier matching `entityName`; otherwise null.
+    internal static IdentifierNameSyntax? GetDbSetEntityTypeArgument(PropertyDeclarationSyntax property, string entityName)
+    {
+        return property.Type is GenericNameSyntax { Identifier.Text: "DbSet" } dbSetGeneric
+            && dbSetGeneric.TypeArgumentList.Arguments.Count == 1
+            && dbSetGeneric.TypeArgumentList.Arguments[0] is IdentifierNameSyntax dbSetTypeArgument
+            && dbSetTypeArgument.Identifier.Text == entityName
+                ? dbSetTypeArgument
+                : null;
+    }
 }

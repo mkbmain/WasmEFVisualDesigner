@@ -244,10 +244,7 @@ public sealed class OnModelCreatingRewriter
 
         foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
         {
-            if (property.Type is GenericNameSyntax { Identifier.Text: "DbSet" } dbSetGeneric
-                && dbSetGeneric.TypeArgumentList.Arguments.Count == 1
-                && dbSetGeneric.TypeArgumentList.Arguments[0] is IdentifierNameSyntax dbSetTypeArgument
-                && dbSetTypeArgument.Identifier.Text == oldEntityName)
+            if (FluentSyntaxHelpers.GetDbSetEntityTypeArgument(property, oldEntityName) is { } dbSetTypeArgument)
             {
                 targets.Add(dbSetTypeArgument);
             }
@@ -332,10 +329,7 @@ public sealed class OnModelCreatingRewriter
 
         foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>())
         {
-            if (property.Type is GenericNameSyntax { Identifier.Text: "DbSet" } dbSetGeneric
-                && dbSetGeneric.TypeArgumentList.Arguments.Count == 1
-                && dbSetGeneric.TypeArgumentList.Arguments[0] is IdentifierNameSyntax dbSetTypeArgument
-                && dbSetTypeArgument.Identifier.Text == entityName)
+            if (FluentSyntaxHelpers.GetDbSetEntityTypeArgument(property, entityName) is not null)
             {
                 nodesToRemove.Add(property);
             }
