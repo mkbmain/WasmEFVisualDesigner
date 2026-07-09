@@ -829,3 +829,198 @@ to:
 git add docs/backlog.md
 git commit -m "Check off 'IsRequired / nullability' in backlog"
 ```
+
+---
+
+### Task 7: Fix `GetPropertyNameFor` to walk multi-config chains
+
+> **Added after the whole-branch final review of Tasks 1-6.** The review found a real, reachable bug: `FluentSyntaxHelpers.GetPropertyNameFor` only resolves a config call (`HasMaxLength(...)`, `IsRequired(...)`) when that call is the *immediate* receiver of the `Property(...)` call. Once a property carries two config calls chained together — e.g. `entity.Property(e => e.Name).IsRequired().HasMaxLength(100)` — the earlier-added call (`IsRequired()` here) is no longer the immediate receiver of anything looking for `HasMaxLength`'s property, but more importantly, a *rewrite* that appends a second config bumps the first one out of the "immediate receiver of `Property()`" position entirely. Concretely, verified end-to-end: `RewriteMaxLength(100)` then `RewriteIsRequired(true)` then `RewriteMaxLength(200)` produces `entity.Property(e => e.Name).HasMaxLength(200).IsRequired().HasMaxLength(100)` — a duplicate `HasMaxLength` call where EF's last-wins semantics silently discard the user's new `200` in favor of the stale `100`. The same failure mode causes `RemoveMaxLength`/`RemoveIsRequired` to silently no-op when the target call has been bumped out of position by a later-appended config.
+>
+> This task fixes the shared helper so it works regardless of how many config calls are chained onto `Property(...)`, or in what order they were added — fixing the bug for both existing config kinds (`HasMaxLength`, `IsRequired`) and any future ones, since they all route through this one helper.
+
+**Files:**
+- Modify: `src/EfSchemaVisualizer.Core/Parsing/FluentSyntaxHelpers.cs`
+- Test: `tests/EfSchemaVisualizer.Core.Tests/Parsing/FluentConfigParserTests.cs`
+- Test: `tests/EfSchemaVisualizer.Core.Tests/CodeGen/OnModelCreatingRewriterTests.cs`
+
+**Interfaces:**
+- Consumes: `GetPropertyNameForPropertyCall(InvocationExpressionSyntax propertyInvocation)` (unchanged, still the leaf resolver for the actual `Property(...)` call).
+- Produces: `GetPropertyNameFor(InvocationExpressionSyntax fluentCall)` — same public signature and return type as before (`string?`), but now walks down the receiver chain past any number of intervening fluent calls (not just zero) until it finds the `Property(...)` call, instead of requiring it to be the immediate receiver.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `tests/EfSchemaVisualizer.Core.Tests/Parsing/FluentConfigParserTests.cs` (inside the `FluentConfigParserTests` class):
+
+```csharp
+    private const string SourceWithBothConfigsChained = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMaxLengths_HasMaxLengthChainedAfterIsRequired_StillResolvesPropertyName()
+    {
+        var result = new FluentConfigParser().ParseMaxLengths(SourceWithBothConfigsChained);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+    }
+
+    [Fact]
+    public void ParseIsRequired_IsRequiredFollowedByHasMaxLength_StillResolvesPropertyName()
+    {
+        var result = new FluentConfigParser().ParseIsRequired(SourceWithBothConfigsChained);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
+    }
+```
+
+Add to `tests/EfSchemaVisualizer.Core.Tests/CodeGen/OnModelCreatingRewriterTests.cs` (inside the `OnModelCreatingRewriterTests` class):
+
+```csharp
+    private const string SourceWithBothConfigsChainedForRewrite = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_HasMaxLengthChainedAfterIsRequired_MutatesInPlaceWithoutDuplicating()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name", newMaxLength: 200);
+
+        Assert.Contains("entity.Property(e => e.Name).IsRequired().HasMaxLength(200)", result);
+        Assert.DoesNotContain("HasMaxLength(100)", result);
+
+        // Exactly one HasMaxLength call must remain — not two.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(result, "HasMaxLength").Count);
+    }
+
+    [Fact]
+    public void RewriteIsRequired_IsRequiredPrecedingHasMaxLength_MutatesInPlaceWithoutDuplicating()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name", newIsRequired: false);
+
+        Assert.Contains("entity.Property(e => e.Name).IsRequired(false).HasMaxLength(100)", result);
+
+        // Exactly one IsRequired call must remain — not two.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(result, "IsRequired").Count);
+    }
+
+    [Fact]
+    public void RemoveMaxLength_HasMaxLengthChainedAfterIsRequired_RemovesCallLeavingIsRequiredIntact()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveMaxLength(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("entity.Property(e => e.Name).IsRequired();", result);
+        Assert.DoesNotContain("HasMaxLength", result);
+    }
+
+    [Fact]
+    public void RemoveIsRequired_IsRequiredPrecedingHasMaxLength_RemovesCallLeavingHasMaxLengthIntact()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveIsRequired(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100);", result);
+        Assert.DoesNotContain("IsRequired", result);
+    }
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `dotnet test --filter "FullyQualifiedName~FluentConfigParserTests|FullyQualifiedName~OnModelCreatingRewriterTests"`
+Expected: FAIL — the six new tests fail. The `ParseMaxLengths`/`ParseIsRequired` tests fail because `GetPropertyNameFor` returns `null` for the non-immediate-receiver call, so `FluentConfigParser` emits an `UnresolvablePropertyName` diagnostic instead of the expected config (or, for `RemoveIsRequired`/`RemoveMaxLength`, the existing call isn't found so the source is returned unchanged and the assertions fail).
+
+- [ ] **Step 3: Fix `GetPropertyNameFor`**
+
+Replace the existing `GetPropertyNameFor` method in `src/EfSchemaVisualizer.Core/Parsing/FluentSyntaxHelpers.cs`:
+
+```csharp
+    /// Given a fluent call like `entity.Property(e => e.Name).HasMaxLength(100)`, returns "Name".
+    /// Also resolves the string overload `entity.Property("Name")`, a block-bodied lambda with
+    /// a single `return e.Name;` statement, and any number of other fluent calls chained between
+    /// `Property(...)` and `fluentCall` itself (e.g. `entity.Property(e => e.Name).IsRequired().HasMaxLength(100)`
+    /// resolves "Name" for both the `IsRequired()` and the `HasMaxLength(100)` call).
+    public static string? GetPropertyNameFor(InvocationExpressionSyntax fluentCall)
+    {
+        var current = fluentCall;
+
+        while (current.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax innerInvocation })
+        {
+            var name = GetPropertyNameForPropertyCall(innerInvocation);
+
+            if (name is not null)
+            {
+                return name;
+            }
+
+            current = innerInvocation;
+        }
+
+        return null;
+    }
+```
+
+The change: instead of requiring `fluentCall`'s immediate receiver to already be the `Property(...)` invocation, walk down through however many intervening invocations there are (each iteration tries `GetPropertyNameForPropertyCall` on the current receiver; if that receiver isn't the `Property(...)` call, its own receiver is tried next), stopping as soon as the `Property(...)` call is found or the chain runs out.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `dotnet test --filter "FullyQualifiedName~FluentConfigParserTests|FullyQualifiedName~OnModelCreatingRewriterTests"`
+Expected: PASS — all six new tests, plus every pre-existing test in both files (the fix is additive: it still resolves the immediate-receiver case exactly as before, since that's just a chain of length one).
+
+- [ ] **Step 5: Run the full test suite**
+
+Run: `dotnet test`
+Expected: PASS — entire solution green, no regressions anywhere (this helper is used by both `HasMaxLength` and `IsRequired` parsing/rewriting/removal, so a full-suite run is the right regression check for a shared-helper change).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/EfSchemaVisualizer.Core/Parsing/FluentSyntaxHelpers.cs tests/EfSchemaVisualizer.Core.Tests/Parsing/FluentConfigParserTests.cs tests/EfSchemaVisualizer.Core.Tests/CodeGen/OnModelCreatingRewriterTests.cs
+git commit -m "Fix GetPropertyNameFor to resolve property name through chained config calls"
+```
+
+- [ ] **Step 7: Update backlog with the fix**
+
+In `docs/backlog.md`, add a new `[found]` item under Priority 0 (Correctness & trust gaps), already checked off, documenting the fix:
+
+```markdown
+- [x] **`[found]` Config-call chain position bug in `GetPropertyNameFor`.**
+      Discovered during the final review of the `IsRequired` feature: once a
+      property carries two chained fluent config calls (e.g.
+      `entity.Property(e => e.Name).IsRequired().HasMaxLength(100)`), the
+      shared `FluentSyntaxHelpers.GetPropertyNameFor` helper failed to
+      resolve the property name for whichever call wasn't the immediate
+      receiver of `Property(...)` — causing re-edits to duplicate calls
+      (with EF's last-wins semantics silently discarding the user's new
+      value) and causing removes to silently no-op. Fixed by walking the
+      full receiver chain instead of checking only the immediate receiver;
+      see `2026-07-09-is-required-config-design.md` addendum.
+```
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add docs/backlog.md
+git commit -m "Document GetPropertyNameFor chain-position fix in backlog"
+```

@@ -132,3 +132,22 @@ New test files/sections mirroring the existing `HasMaxLength` coverage:
   exists.
 - No validation that `IsRequiredOverride` and `IsNullable` are consistent; the model
   simply stores both facts.
+
+## Addendum (post-review): multi-config chain-position fix
+
+The whole-branch final review (after Tasks 1-6 landed) found that
+`FluentSyntaxHelpers.GetPropertyNameFor` only resolved a config call's
+property when that call was the *immediate* receiver of `Property(...)`.
+Once a property carries two chained config calls — e.g.
+`entity.Property(e => e.Name).IsRequired().HasMaxLength(100)` — appending a
+second config bumps the first one out of that position, so re-editing or
+removing the earlier-added config silently failed (duplicating a call, with
+EF's last-wins semantics discarding the user's newest edit, or no-op'ing a
+remove). This was unreachable with `HasMaxLength` alone but became reachable
+the moment `IsRequired` shipped alongside it.
+
+Fixed (Task 7) by making `GetPropertyNameFor` walk the full receiver chain —
+trying `GetPropertyNameForPropertyCall` at each level until it finds the
+`Property(...)` call — instead of only checking the immediate receiver. This
+fixes the bug for both `HasMaxLength` and `IsRequired`, and for any future
+config kind that reuses the same helper, since they all route through it.
