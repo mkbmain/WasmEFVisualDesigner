@@ -352,4 +352,149 @@ public class FluentConfigParserTests
         Assert.Empty(result.Diagnostics);
         Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
     }
+
+    private const string SourceWithSingleAndCompositeKeys = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+
+                modelBuilder.Entity<OrderLine>(entity =>
+                {
+                    entity.HasKey(e => new { e.OrderId, e.LineNumber });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_ReadsSingleAndCompositeLambdaKeys_AcrossMultipleEntities()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithSingleAndCompositeKeys);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Id" }));
+        Assert.Contains(result.Value, c => c.EntityName == "OrderLine" && c.PropertyNames.SequenceEqual(new[] { "OrderId", "LineNumber" }));
+    }
+
+    private const string SourceWithStringKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey("Id");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_StringOverload_IsRead()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithStringKey);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Id" }));
+    }
+
+    private const string SourceWithStringArrayKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<OrderLine>(entity =>
+                {
+                    entity.HasKey("OrderId", "LineNumber");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_StringParamsOverload_IsReadInOrder()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithStringArrayKey);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c.EntityName == "OrderLine" && c.PropertyNames.SequenceEqual(new[] { "OrderId", "LineNumber" }));
+    }
+
+    private const string SourceWithExplicitNameAnonymousMember = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => new { Key = e.Id });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_ExplicitNameAnonymousMember_EmitsUnreadableHasKeyArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithExplicitNameAnonymousMember);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasKeyArgument", diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
+
+    private const string SourceWithMethodCallKeyArgument = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(GetKeySelector());
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_MethodCallArgument_EmitsUnreadableHasKeyArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithMethodCallKeyArgument);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasKeyArgument", diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
+
+    private const string SourceWithNoHasKeyCall = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_NoCallPresent_ReturnsEmpty()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithNoHasKeyCall);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Empty(result.Value);
+    }
 }
