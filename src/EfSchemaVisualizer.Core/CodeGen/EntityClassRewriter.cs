@@ -14,11 +14,7 @@ public sealed class EntityClassRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var targetType = root.DescendantNodes()
-            .OfType<TypeDeclarationSyntax>()
-            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
-            .FirstOrDefault(t => t.Identifier.Text == className)
-            ?? throw new InvalidOperationException($"No top-level class, record, or struct named '{className}' found in source.");
+        var targetType = FindTopLevelType(root, className);
 
         var newProperty = BuildPropertyDeclaration(property);
         var newType = targetType.AddMembers(newProperty);
@@ -32,11 +28,7 @@ public sealed class EntityClassRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var targetType = root.DescendantNodes()
-            .OfType<TypeDeclarationSyntax>()
-            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
-            .FirstOrDefault(t => t.Identifier.Text == className)
-            ?? throw new InvalidOperationException($"No top-level class, record, or struct named '{className}' found in source.");
+        var targetType = FindTopLevelType(root, className);
 
         var targetProperty = targetType.Members
             .OfType<PropertyDeclarationSyntax>()
@@ -54,11 +46,7 @@ public sealed class EntityClassRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var targetType = root.DescendantNodes()
-            .OfType<TypeDeclarationSyntax>()
-            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
-            .FirstOrDefault(t => t.Identifier.Text == oldClassName)
-            ?? throw new InvalidOperationException($"No top-level class, record, or struct named '{oldClassName}' found in source.");
+        var targetType = FindTopLevelType(root, oldClassName);
 
         var newType = targetType.WithIdentifier(SyntaxFactory.Identifier(newClassName));
 
@@ -75,11 +63,7 @@ public sealed class EntityClassRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var targetType = root.DescendantNodes()
-            .OfType<TypeDeclarationSyntax>()
-            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
-            .FirstOrDefault(t => t.Identifier.Text == className)
-            ?? throw new InvalidOperationException($"No top-level class, record, or struct named '{className}' found in source.");
+        var targetType = FindTopLevelType(root, className);
 
         var targetProperty = targetType.Members
             .OfType<PropertyDeclarationSyntax>()
@@ -90,6 +74,15 @@ public sealed class EntityClassRewriter
 
         var newRoot = root.ReplaceNode(targetProperty, newProperty);
         return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static TypeDeclarationSyntax FindTopLevelType(CompilationUnitSyntax root, string className)
+    {
+        return root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
+            .FirstOrDefault(t => t.Identifier.Text == className)
+            ?? throw new InvalidOperationException($"No top-level class, record, or struct named '{className}' found in source.");
     }
 
     private static PropertyDeclarationSyntax BuildPropertyDeclaration(PropertyModel property)
