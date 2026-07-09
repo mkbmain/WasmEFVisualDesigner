@@ -60,6 +60,17 @@ these matter before any new surface is added.
 - [x] **`[found]` No property filtering.**
       `[NotMapped]`, `static`, and get-only/computed properties all become schema
       columns. Filter to mapped instance properties.
+- [x] **`[found]` Config-call chain position bug in `GetPropertyNameFor`.**
+      Discovered during the final review of the `IsRequired` feature: once a
+      property carries two chained fluent config calls (e.g.
+      `entity.Property(e => e.Name).IsRequired().HasMaxLength(100)`), the
+      shared `FluentSyntaxHelpers.GetPropertyNameFor` helper failed to
+      resolve the property name for whichever call wasn't the immediate
+      receiver of `Property(...)` — causing re-edits to duplicate calls
+      (with EF's last-wins semantics silently discarding the user's new
+      value) and causing removes to silently no-op. Fixed by walking the
+      full receiver chain instead of checking only the immediate receiver;
+      see `2026-07-09-is-required-config-design.md` addendum.
 
 ## Priority 1 — Editing capability the user explicitly wants (add / drop / rename)
 
