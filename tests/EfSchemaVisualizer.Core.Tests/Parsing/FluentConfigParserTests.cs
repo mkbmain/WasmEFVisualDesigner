@@ -321,4 +321,35 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
+
+    private const string SourceWithBothConfigsChained = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMaxLengths_HasMaxLengthChainedAfterIsRequired_StillResolvesPropertyName()
+    {
+        var result = new FluentConfigParser().ParseMaxLengths(SourceWithBothConfigsChained);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+    }
+
+    [Fact]
+    public void ParseIsRequired_IsRequiredFollowedByHasMaxLength_StillResolvesPropertyName()
+    {
+        var result = new FluentConfigParser().ParseIsRequired(SourceWithBothConfigsChained);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
+    }
 }

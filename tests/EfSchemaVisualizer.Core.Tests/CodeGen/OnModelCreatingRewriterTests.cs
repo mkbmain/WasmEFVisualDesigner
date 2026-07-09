@@ -690,4 +690,62 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("modelBuilder.Entity<Person>(entity =>", result);
         Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
     }
+
+    private const string SourceWithBothConfigsChainedForRewrite = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_HasMaxLengthChainedAfterIsRequired_MutatesInPlaceWithoutDuplicating()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name", newMaxLength: 200);
+
+        Assert.Contains("entity.Property(e => e.Name).IsRequired().HasMaxLength(200)", result);
+        Assert.DoesNotContain("HasMaxLength(100)", result);
+
+        // Exactly one HasMaxLength call must remain — not two.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(result, "HasMaxLength").Count);
+    }
+
+    [Fact]
+    public void RewriteIsRequired_IsRequiredPrecedingHasMaxLength_MutatesInPlaceWithoutDuplicating()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name", newIsRequired: false);
+
+        Assert.Contains("entity.Property(e => e.Name).IsRequired(false).HasMaxLength(100)", result);
+
+        // Exactly one IsRequired call must remain — not two.
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(result, "IsRequired").Count);
+    }
+
+    [Fact]
+    public void RemoveMaxLength_HasMaxLengthChainedAfterIsRequired_RemovesCallLeavingIsRequiredIntact()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveMaxLength(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("entity.Property(e => e.Name).IsRequired();", result);
+        Assert.DoesNotContain("HasMaxLength", result);
+    }
+
+    [Fact]
+    public void RemoveIsRequired_IsRequiredPrecedingHasMaxLength_RemovesCallLeavingHasMaxLengthIntact()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveIsRequired(SourceWithBothConfigsChainedForRewrite, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100);", result);
+        Assert.DoesNotContain("IsRequired", result);
+    }
 }

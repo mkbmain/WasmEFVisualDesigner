@@ -51,19 +51,27 @@ internal static class FluentSyntaxHelpers
     }
 
     /// Given a fluent call like `entity.Property(e => e.Name).HasMaxLength(100)`, returns "Name".
-    /// Also resolves the string overload `entity.Property("Name")` and a block-bodied lambda with
-    /// a single `return e.Name;` statement.
+    /// Also resolves the string overload `entity.Property("Name")`, a block-bodied lambda with
+    /// a single `return e.Name;` statement, and any number of other fluent calls chained between
+    /// `Property(...)` and `fluentCall` itself (e.g. `entity.Property(e => e.Name).IsRequired().HasMaxLength(100)`
+    /// resolves "Name" for both the `IsRequired()` and the `HasMaxLength(100)` call).
     public static string? GetPropertyNameFor(InvocationExpressionSyntax fluentCall)
     {
-        if (fluentCall.Expression is not MemberAccessExpressionSyntax
-            {
-                Expression: InvocationExpressionSyntax propertyInvocation
-            })
+        var current = fluentCall;
+
+        while (current.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax innerInvocation })
         {
-            return null;
+            var name = GetPropertyNameForPropertyCall(innerInvocation);
+
+            if (name is not null)
+            {
+                return name;
+            }
+
+            current = innerInvocation;
         }
 
-        return GetPropertyNameForPropertyCall(propertyInvocation);
+        return null;
     }
 
     /// Given a bare `entity.Property(e => e.Name)` invocation itself (string overload and
