@@ -175,12 +175,53 @@ public sealed class OnModelCreatingRewriter
 
     private static string InsertIsRequiredPropertyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, bool newIsRequired)
     {
-        throw new NotImplementedException();
+        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
+        var block = lambda.Block!;
+        var blockReceiverName = lambda.Parameter.Identifier.Text;
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+
+        var newStatement = BuildIsRequiredPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, newIsRequired);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
     }
 
     private static string InsertIsRequiredEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, bool newIsRequired)
     {
-        throw new NotImplementedException();
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var propertyStatement = BuildIsRequiredPropertyStatement("entity", "e", propertyName, newIsRequired);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(propertyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildIsRequiredPropertyStatement(string blockReceiverName, string propertyLambdaParam, string propertyName, bool isRequired)
+    {
+        var propertyCall = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("Property")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.SimpleLambdaExpression(
+                            SyntaxFactory.Parameter(SyntaxFactory.Identifier(propertyLambdaParam)),
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName(propertyLambdaParam),
+                                SyntaxFactory.IdentifierName(propertyName)))))));
+
+        return SyntaxFactory.ExpressionStatement(BuildIsRequiredCall(propertyCall, isRequired));
     }
 
     public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
@@ -306,6 +347,28 @@ public sealed class OnModelCreatingRewriter
         var propertyCallExpression = ((MemberAccessExpressionSyntax)existingMaxLengthCall.Expression).Expression;
 
         var newRoot = root.ReplaceNode(existingMaxLengthCall, propertyCallExpression);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string RemoveIsRequired(string sourceCode, string entityName, string propertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingIsRequiredCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "IsRequired"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingIsRequiredCall is null)
+        {
+            return sourceCode;
+        }
+
+        var propertyCallExpression = ((MemberAccessExpressionSyntax)existingIsRequiredCall.Expression).Expression;
+
+        var newRoot = root.ReplaceNode(existingIsRequiredCall, propertyCallExpression);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 

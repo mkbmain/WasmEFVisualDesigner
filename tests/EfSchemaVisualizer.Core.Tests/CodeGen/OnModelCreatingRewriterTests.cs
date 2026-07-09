@@ -319,6 +319,78 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void RewriteIsRequired_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithIsRequiredCalls, entityName: "Vehicle", propertyName: "Name", newIsRequired: true);
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Name).IsRequired()", result);
+
+        var configs = new FluentConfigParser().ParseIsRequired(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Vehicle", PropertyName: "Name", IsRequired: true });
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
+    }
+
+    private const string SourceWithMissingIsRequiredPropertyMention = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsRequired();
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteIsRequired_PropertyNeverMentioned_InsertsNewStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceWithMissingIsRequiredPropertyMention, entityName: "Person", propertyName: "Email", newIsRequired: false);
+
+        Assert.Contains("entity.Property(e => e.Email).IsRequired(false)", result);
+
+        var configs = new FluentConfigParser().ParseIsRequired(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
+        Assert.Contains(configs, c => c is { EntityName: "Person", PropertyName: "Email", IsRequired: false });
+    }
+
+    [Fact]
+    public void RemoveIsRequired_ExistingCall_StripsIsRequiredLeavesBarePropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveIsRequired(SourceWithIsRequiredCalls, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("entity.Property(e => e.Name);", result);
+        Assert.DoesNotContain("e.Name).IsRequired()", result);
+
+        // Untouched: Person.Email, Address.Line1.
+        Assert.Contains("entity.Property(e => e.Email).IsRequired(false)", result);
+        Assert.Contains("entity.Property(e => e.Line1).IsRequired()", result);
+    }
+
+    [Fact]
+    public void RemoveIsRequired_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveIsRequired(SourceWithIsRequiredCalls, entityName: "Person", propertyName: "DoesNotExist");
+
+        Assert.Equal(SourceWithIsRequiredCalls, result);
+    }
+
+    [Fact]
+    public void RemoveIsRequired_EntityHasNoConfigAtAll_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveIsRequired(SourceWithIsRequiredCalls, entityName: "Vehicle", propertyName: "Name");
+
+        Assert.Equal(SourceWithIsRequiredCalls, result);
+    }
+
+    [Fact]
     public void RemoveMaxLength_ExistingCall_StripsHasMaxLengthLeavesBarePropertyCall()
     {
         var result = new OnModelCreatingRewriter()
