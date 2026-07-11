@@ -91,4 +91,75 @@ public class ModelMergerTests
 
         Assert.Empty(merged.KeyPropertyNames);
     }
+
+    // ─── ApplyIndexes ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyIndexes_PopulatesIndexesFromMatchingConfig()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Email", "string", IsNullable: true, MaxLength: null)
+        });
+        var configs = new List<IndexConfig>
+        {
+            new("Person", new List<string> { "Email" }, IsUnique: true, Name: "IX_Person_Email")
+        };
+
+        var result = ModelMerger.ApplyIndexes(entity, configs);
+
+        var index = Assert.Single(result.Indexes);
+        Assert.Equal(new[] { "Email" }, index.PropertyNames);
+        Assert.True(index.IsUnique);
+        Assert.Equal("IX_Person_Email", index.Name);
+    }
+
+    [Fact]
+    public void ApplyIndexes_CollectsAllMatchingConfigsForSameEntity()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+        var configs = new List<IndexConfig>
+        {
+            new("Person", new List<string> { "Email" }, IsUnique: true, Name: null),
+            new("Person", new List<string> { "LastName", "FirstName" }, IsUnique: false, Name: null)
+        };
+
+        var result = ModelMerger.ApplyIndexes(entity, configs);
+
+        Assert.Equal(2, result.Indexes.Count);
+        Assert.Equal(new[] { "Email" }, result.Indexes[0].PropertyNames);
+        Assert.Equal(new[] { "LastName", "FirstName" }, result.Indexes[1].PropertyNames);
+    }
+
+    [Fact]
+    public void ApplyIndexes_LeavesIndexesEmptyWhenNoMatchingConfigs()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+        var configs = new List<IndexConfig>
+        {
+            new("Order", new List<string> { "OrderDate" }, IsUnique: false, Name: null)
+        };
+
+        var result = ModelMerger.ApplyIndexes(entity, configs);
+
+        Assert.Empty(result.Indexes);
+    }
+
+    [Fact]
+    public void ApplyIndexes_DoesNotAffectPropertiesOrKeyPropertyNames()
+    {
+        var prop = new PropertyModel("Email", "string", IsNullable: false, MaxLength: null);
+        var entity = new EntityModel("Person", new List<PropertyModel> { prop },
+            KeyPropertyNames: new List<string> { "Id" });
+        var configs = new List<IndexConfig>
+        {
+            new("Person", new List<string> { "Email" }, IsUnique: true, Name: null)
+        };
+
+        var result = ModelMerger.ApplyIndexes(entity, configs);
+
+        Assert.Single(result.Properties);
+        Assert.Equal("Email", result.Properties[0].Name);
+        Assert.Equal(new[] { "Id" }, result.KeyPropertyNames);
+    }
 }

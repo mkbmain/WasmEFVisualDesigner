@@ -42,4 +42,14 @@ public static class ModelMerger
 
         return config is null ? entity : entity with { KeyPropertyNames = config.PropertyNames };
     }
+
+    public static EntityModel ApplyIndexes(EntityModel entity, IReadOnlyList<IndexConfig> configs)
+    {
+        var indexes = configs
+            .Where(c => c.EntityName == entity.Name)
+            .Select(c => new IndexModel(c.PropertyNames, c.IsUnique, c.Name))
+            .ToList();
+
+        return entity with { Indexes = indexes };
+    }
 }
