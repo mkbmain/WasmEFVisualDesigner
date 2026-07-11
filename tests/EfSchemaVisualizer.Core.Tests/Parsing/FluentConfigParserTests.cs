@@ -757,4 +757,26 @@ public class FluentConfigParserTests
         Assert.Empty(result.Value);
         Assert.Empty(result.Diagnostics);
     }
+
+    [Fact]
+    public void ParseIndexes_StringArrayWithoutIndexName_ReadsColumnsOnly()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(new[] { "LastName", "FirstName" });
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "LastName", "FirstName" }, config.PropertyNames);
+        Assert.Null(config.Name);
+        Assert.False(config.IsUnique);
+        Assert.Empty(result.Diagnostics);
+    }
 }

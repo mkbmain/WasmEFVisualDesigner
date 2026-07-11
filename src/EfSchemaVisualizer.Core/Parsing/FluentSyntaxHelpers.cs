@@ -176,10 +176,8 @@ internal static class FluentSyntaxHelpers
             return (props, indexName);
         }
 
-        // new[] { "A", "B" } + string name.
-        if (firstArg is ImplicitArrayCreationExpressionSyntax implicitArray
-            && secondArg is LiteralExpressionSyntax nameArg
-            && nameArg.IsKind(SyntaxKind.StringLiteralExpression))
+        // new[] { "A", "B" } (+ optional string name).
+        if (firstArg is ImplicitArrayCreationExpressionSyntax implicitArray)
         {
             var names = new List<string>();
             foreach (var expr in implicitArray.Initializer.Expressions)
@@ -190,7 +188,15 @@ internal static class FluentSyntaxHelpers
                 else
                     return null;
             }
-            return (names, nameArg.Token.ValueText);
+
+            string? indexName = null;
+            if (secondArg is LiteralExpressionSyntax nameArg
+                    && nameArg.IsKind(SyntaxKind.StringLiteralExpression))
+                indexName = nameArg.Token.ValueText;
+            else if (secondArg is not null)
+                return null; // second arg present but not a string literal
+
+            return (names, indexName);
         }
 
         return null;
