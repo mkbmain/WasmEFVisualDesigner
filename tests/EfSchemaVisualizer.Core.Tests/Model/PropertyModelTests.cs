@@ -62,4 +62,34 @@ public class PropertyModelTests
         Assert.Empty(original.KeyPropertyNames);
         Assert.Equal(new[] { "Id" }, updated.KeyPropertyNames);
     }
+
+    [Fact]
+    public void EntityModel_Indexes_DefaultsToEmpty()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        Assert.Empty(entity.Indexes);
+    }
+
+    [Fact]
+    public void EntityModel_WithIndexes_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new EntityModel("Person", new List<PropertyModel>());
+        var index = new IndexModel(new List<string> { "Email" }, IsUnique: true, Name: "IX_Email");
+
+        var updated = original with { Indexes = new List<IndexModel> { index } };
+
+        Assert.Empty(original.Indexes);
+        Assert.Single(updated.Indexes);
+        Assert.Equal("IX_Email", updated.Indexes[0].Name);
+        Assert.True(updated.Indexes[0].IsUnique);
+    }
+
+    [Fact]
+    public void IndexModel_Name_DefaultsToNull()
+    {
+        var index = new IndexModel(new List<string> { "Email" }, IsUnique: false);
+
+        Assert.Null(index.Name);
+    }
 }
