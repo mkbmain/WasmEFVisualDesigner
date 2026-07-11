@@ -135,4 +135,85 @@ internal static class FluentSyntaxHelpers
                 ? dbSetTypeArgument
                 : null;
     }
+
+    /// Reads the property names (and optional index name) from a `HasIndex(...)` invocation.
+    /// Returns null when the argument shape is not recognized (→ diagnostic).
+    internal static (IReadOnlyList<string> PropertyNames, string? Name)? TryReadIndexPropertyNames(
+        InvocationExpressionSyntax hasIndexCall)
+    {
+        var arguments = hasIndexCall.ArgumentList.Arguments;
+
+        if (arguments.Count == 0)
+            return null;
+
+        var firstArg = arguments[0].Expression;
+        var secondArg = arguments.Count >= 2 ? arguments[1].Expression : null;
+
+        // All bare string literals → params overload (column names; no index name).
+        if (arguments.All(a => a.Expression is LiteralExpressionSyntax lit
+                && lit.IsKind(SyntaxKind.StringLiteralExpression)))
+        {
+            var names = arguments
+                .Select(a => ((LiteralExpressionSyntax)a.Expression).Token.ValueText)
+                .ToList();
+            return (names, null);
+        }
+
+        // Lambda (+ optional string name).
+        if (firstArg is SimpleLambdaExpressionSyntax { ExpressionBody: { } body })
+        {
+            var props = TryReadIndexPropertyNamesFromLambdaBody(body);
+            if (props is null)
+                return null;
+
+            string? indexName = null;
+            if (secondArg is LiteralExpressionSyntax nameLit
+                    && nameLit.IsKind(SyntaxKind.StringLiteralExpression))
+                indexName = nameLit.Token.ValueText;
+            else if (secondArg is not null)
+                return null;
+
+            return (props, indexName);
+        }
+
+        // new[] { "A", "B" } + string name.
+        if (firstArg is ImplicitArrayCreationExpressionSyntax implicitArray
+            && secondArg is LiteralExpressionSyntax nameArg
+            && nameArg.IsKind(SyntaxKind.StringLiteralExpression))
+        {
+            var names = new List<string>();
+            foreach (var expr in implicitArray.Initializer.Expressions)
+            {
+                if (expr is LiteralExpressionSyntax elemLit
+                        && elemLit.IsKind(SyntaxKind.StringLiteralExpression))
+                    names.Add(elemLit.Token.ValueText);
+                else
+                    return null;
+            }
+            return (names, nameArg.Token.ValueText);
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string>? TryReadIndexPropertyNamesFromLambdaBody(ExpressionSyntax body)
+    {
+        if (body is MemberAccessExpressionSyntax { Name.Identifier.Text: var singleName })
+            return new List<string> { singleName };
+
+        if (body is AnonymousObjectCreationExpressionSyntax anonymousObject)
+        {
+            var names = new List<string>();
+            foreach (var initializer in anonymousObject.Initializers)
+            {
+                if (initializer.NameEquals is not null
+                    || initializer.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var name })
+                    return null;
+                names.Add(name);
+            }
+            return names;
+        }
+
+        return null;
+    }
 }

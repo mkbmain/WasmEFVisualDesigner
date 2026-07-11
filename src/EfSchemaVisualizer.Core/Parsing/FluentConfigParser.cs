@@ -221,4 +221,81 @@ public sealed class FluentConfigParser
 
         return null;
     }
+
+    public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexes(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<IndexConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        var entityNames = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+            .Where(name => name is not null)
+            .Distinct()!;
+
+        foreach (var entityName in entityNames)
+        {
+            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
+            {
+                foreach (var hasIndexCall in FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasIndex"))
+                {
+                    var indexArgs = FluentSyntaxHelpers.TryReadIndexPropertyNames(hasIndexCall);
+
+                    if (indexArgs is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnreadableHasIndexArgument",
+                            "HasIndex argument(s) could not be read as property name(s).",
+                            entityName,
+                            PropertyName: null,
+                            hasIndexCall.Span));
+                        continue;
+                    }
+
+                    var (isUnique, isUniqueDiag) = TryReadIsUnique(hasIndexCall, entityName!);
+                    if (isUniqueDiag is not null)
+                        diagnostics.Add(isUniqueDiag);
+
+                    results.Add(new IndexConfig(entityName!, indexArgs.Value.PropertyNames, isUnique, indexArgs.Value.Name));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<IndexConfig>>(results, diagnostics);
+    }
+
+    private static (bool IsUnique, Diagnostic? Diagnostic) TryReadIsUnique(
+        InvocationExpressionSyntax hasIndexCall, string entityName)
+    {
+        SyntaxNode? cursor = hasIndexCall.Parent;
+        while (cursor is not null && cursor is not StatementSyntax)
+        {
+            if (cursor is MemberAccessExpressionSyntax { Name.Identifier.Text: "IsUnique" }
+                && cursor.Parent is InvocationExpressionSyntax isUniqueInvocation)
+            {
+                var arg = isUniqueInvocation.ArgumentList.Arguments.FirstOrDefault();
+                if (arg is null)
+                    return (true, null);
+
+                if (arg.Expression is LiteralExpressionSyntax literal
+                    && (literal.IsKind(SyntaxKind.TrueLiteralExpression)
+                        || literal.IsKind(SyntaxKind.FalseLiteralExpression)))
+                    return (literal.IsKind(SyntaxKind.TrueLiteralExpression), null);
+
+                return (false, new Diagnostic(
+                    "UnreadableIsUniqueArgument",
+                    "IsUnique argument is not a boolean literal and could not be read.",
+                    entityName,
+                    PropertyName: null,
+                    arg.Span));
+            }
+
+            cursor = cursor.Parent;
+        }
+
+        return (false, null);
+    }
 }

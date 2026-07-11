@@ -497,4 +497,264 @@ public class FluentConfigParserTests
         Assert.Empty(result.Diagnostics);
         Assert.Empty(result.Value);
     }
+
+    // ─── ParseIndexes ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseIndexes_SinglePropertyLambda_NoUniqueNoName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.False(config.IsUnique);
+        Assert.Null(config.Name);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_CompositeLambda_PreservesColumnOrder()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => new { e.LastName, e.FirstName });
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "LastName", "FirstName" }, config.PropertyNames);
+        Assert.False(config.IsUnique);
+        Assert.Null(config.Name);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_SingleStringParam_ReadsColumnName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex("Email");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.Null(config.Name);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_BareStringParamsComposite_ReadsAllColumnNames()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex("LastName", "FirstName");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "LastName", "FirstName" }, config.PropertyNames);
+        Assert.Null(config.Name);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_LambdaWithIndexName_ReadsNameFromSecondArg()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email, "IX_Person_Email");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.Equal("IX_Person_Email", config.Name);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_StringArrayWithIndexName_ReadsColumnsAndName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(new[] { "LastName", "FirstName" }, "IX_Person_Name");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "LastName", "FirstName" }, config.PropertyNames);
+        Assert.Equal("IX_Person_Name", config.Name);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_IsUnique_Bare_SetsFlagTrue()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsUnique();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.True(config.IsUnique);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_IsUnique_ExplicitFalse_SetsFlagFalse()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsUnique(false);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.False(config.IsUnique);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_IsUnique_NonBoolLiteralArg_EmitsDiagnosticAndDefaultsFalse()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsUnique(someVariable);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.False(config.IsUnique);
+        var diag = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableIsUniqueArgument", diag.Code);
+        Assert.Equal("Person", diag.EntityName);
+        Assert.Null(diag.PropertyName);
+    }
+
+    [Fact]
+    public void ParseIndexes_ExplicitNameAnonymousMember_EmitsDiagnosticAndSkipsIndex()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => new { Key = e.Email });
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        Assert.Empty(result.Value);
+        var diag = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasIndexArgument", diag.Code);
+        Assert.Equal("Person", diag.EntityName);
+        Assert.Null(diag.PropertyName);
+    }
+
+    [Fact]
+    public void ParseIndexes_MultipleHasIndexCalls_AllAppearInResult()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsUnique();
+                        entity.HasIndex(e => new { e.LastName, e.FirstName });
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        Assert.Equal(2, result.Value.Count);
+        Assert.Equal(new[] { "Email" }, result.Value[0].PropertyNames);
+        Assert.True(result.Value[0].IsUnique);
+        Assert.Equal(new[] { "LastName", "FirstName" }, result.Value[1].PropertyNames);
+        Assert.False(result.Value[1].IsUnique);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_NoHasIndexCalls_ReturnsEmpty()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        Assert.Empty(result.Value);
+        Assert.Empty(result.Diagnostics);
+    }
 }
