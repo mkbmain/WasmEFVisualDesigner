@@ -153,7 +153,14 @@ these matter before any new surface is added.
       `OnModelCreatingRewriter.SetKey`/`RemoveKey` write it back, always
       emitting the canonical lambda form (see
       `2026-07-09-has-key-config-design.md`).
-- [ ] **`[spec]` Indexes** — `HasIndex`, including unique.
+- [x] **`[spec]` Indexes** — `HasIndex`, including unique.
+      **Update:** `FluentConfigParser.ParseIndexes` reads single/composite lambda,
+      bare string params, lambda+name, and string-array+name overloads into `IndexConfig`;
+      `ModelMerger.ApplyIndexes` folds all matching configs into `EntityModel.Indexes`
+      (a list — entities may have multiple indexes); `OnModelCreatingRewriter.SetIndex`/
+      `RemoveIndex` write it back using property-set identity (`SequenceEqual`), always
+      emitting the canonical lambda form with optional `.IsUnique()` chain and inline
+      name arg (see `2026-07-11-has-index-config-design.md`).
 - [ ] **`[spec]` Relationships** — 1:1, 1:many, many:many (`HasOne`/`WithMany`/`HasForeignKey` etc.). Largest single item; likely its own plan.
 - [ ] **`[spec]` Column/table mapping** — `ToTable`, `HasColumnName`, `HasColumnType`, default values.
 - [ ] **`[found]` Diagnostic codes are bare string literals.** `NoEntityDeclarations`,

@@ -578,6 +578,179 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetIndex(string sourceCode, string entityName, IReadOnlyList<string> propertyNames, bool isUnique, string? name = null)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingHasIndexCall = entityInvocations
+            .SelectMany(inv => FluentSyntaxHelpers.FindCallsNamed(inv, "HasIndex"))
+            .FirstOrDefault(call =>
+            {
+                var args = FluentSyntaxHelpers.TryReadIndexPropertyNames(call);
+                return args is not null && args.Value.PropertyNames.SequenceEqual(propertyNames);
+            });
+
+        if (existingHasIndexCall is not null)
+        {
+            return MutateExistingIndex(root, existingHasIndexCall, propertyNames, isUnique, name);
+        }
+
+        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+
+        if (existingEntityInvocation is not null)
+        {
+            return InsertIndexStatement(root, existingEntityInvocation, propertyNames, isUnique, name);
+        }
+
+        return InsertIndexEntityBlock(root, entityName, propertyNames, isUnique, name);
+    }
+
+    private static string MutateExistingIndex(
+        CompilationUnitSyntax root,
+        InvocationExpressionSyntax hasIndexCall,
+        IReadOnlyList<string> propertyNames,
+        bool isUnique,
+        string? name)
+    {
+        var blockReceiverName = ((MemberAccessExpressionSyntax)hasIndexCall.Expression).Expression.ToString();
+        var existingStatement = hasIndexCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
+        var newStatement = BuildHasIndexStatement(blockReceiverName, propertyNames, isUnique, name);
+
+        var newRoot = root.ReplaceNode(existingStatement, newStatement);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertIndexStatement(
+        CompilationUnitSyntax root,
+        InvocationExpressionSyntax entityInvocation,
+        IReadOnlyList<string> propertyNames,
+        bool isUnique,
+        string? name)
+    {
+        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
+        var block = lambda.Block!;
+        var blockReceiverName = lambda.Parameter.Identifier.Text;
+
+        var newStatement = BuildHasIndexStatement(blockReceiverName, propertyNames, isUnique, name);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertIndexEntityBlock(
+        CompilationUnitSyntax root,
+        string entityName,
+        IReadOnlyList<string> propertyNames,
+        bool isUnique,
+        string? name)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var indexStatement = BuildHasIndexStatement("entity", propertyNames, isUnique, name);
+        var entityBlockStatement = BuildEntityInvocationStatement(
+            modelBuilderParamName, entityName, SyntaxFactory.Block(indexStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildHasIndexStatement(
+        string blockReceiverName,
+        IReadOnlyList<string> propertyNames,
+        bool isUnique,
+        string? name)
+    {
+        ExpressionSyntax expression = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("HasIndex")),
+            BuildHasIndexArgumentList(propertyNames, name));
+
+        if (isUnique)
+        {
+            expression = SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    expression,
+                    SyntaxFactory.IdentifierName("IsUnique")),
+                SyntaxFactory.ArgumentList());
+        }
+
+        return SyntaxFactory.ExpressionStatement(expression);
+    }
+
+    private static ArgumentListSyntax BuildHasIndexArgumentList(IReadOnlyList<string> propertyNames, string? name)
+    {
+        const string lambdaParam = "e";
+
+        ExpressionSyntax body = propertyNames.Count == 1
+            ? SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(lambdaParam),
+                SyntaxFactory.IdentifierName(propertyNames[0]))
+            : SyntaxFactory.AnonymousObjectCreationExpression(
+                SyntaxFactory.SeparatedList(
+                    propertyNames.Select(n => SyntaxFactory.AnonymousObjectMemberDeclarator(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.IdentifierName(lambdaParam),
+                            SyntaxFactory.IdentifierName(n))))));
+
+        var lambdaArg = SyntaxFactory.Argument(
+            SyntaxFactory.SimpleLambdaExpression(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier(lambdaParam)),
+                body));
+
+        if (name is not null)
+        {
+            return SyntaxFactory.ArgumentList(
+                SyntaxFactory.SeparatedList(new[]
+                {
+                    lambdaArg,
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.StringLiteralExpression,
+                            SyntaxFactory.Literal(name)))
+                }));
+        }
+
+        return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(lambdaArg));
+    }
+
+    public string RemoveIndex(string sourceCode, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingHasIndexCall = entityInvocations
+            .SelectMany(inv => FluentSyntaxHelpers.FindCallsNamed(inv, "HasIndex"))
+            .FirstOrDefault(call =>
+            {
+                var args = FluentSyntaxHelpers.TryReadIndexPropertyNames(call);
+                return args is not null && args.Value.PropertyNames.SequenceEqual(propertyNames);
+            });
+
+        if (existingHasIndexCall is null)
+            return sourceCode;
+
+        var statement = existingHasIndexCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string RemoveEntity(string sourceCode, string entityName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

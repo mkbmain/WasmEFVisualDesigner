@@ -853,4 +853,187 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100);", result);
         Assert.DoesNotContain("IsRequired", result);
     }
+
+    // ─── SetIndex / RemoveIndex ──────────────────────────────────────────────────
+
+    [Fact]
+    public void SetIndex_MutatesExistingHasIndex_ToAddIsUnique()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(source, "Person", new[] { "Email" }, isUnique: true);
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.True(config.IsUnique);
+        Assert.Null(config.Name);
+    }
+
+    [Fact]
+    public void SetIndex_MutatesExistingHasIndex_ToRemoveUniqueness()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsUnique();
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(source, "Person", new[] { "Email" }, isUnique: false);
+
+        Assert.DoesNotContain("IsUnique", result);
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.False(config.IsUnique);
+    }
+
+    [Fact]
+    public void SetIndex_MutatesExistingHasIndex_ToChangeName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email, "IX_Old");
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(source, "Person", new[] { "Email" }, isUnique: false, name: "IX_New");
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal("IX_New", config.Name);
+        Assert.False(config.IsUnique);
+    }
+
+    [Fact]
+    public void SetIndex_InsertsStatementIntoExistingEntityBlock()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(source, "Person", new[] { "Email" }, isUnique: true);
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.True(config.IsUnique);
+        Assert.Contains("HasMaxLength", result);
+    }
+
+    [Fact]
+    public void SetIndex_SynthesizesNewEntityBlock_WhenEntityNotConfigured()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(source, "Person", new[] { "Email" }, isUnique: false, name: "IX_Person_Email");
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.Equal("IX_Person_Email", config.Name);
+        Assert.False(config.IsUnique);
+    }
+
+    [Fact]
+    public void SetIndex_CompositeColumns_WrittenInOrder()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(source, "Person", new[] { "LastName", "FirstName" }, isUnique: false);
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal(new[] { "LastName", "FirstName" }, config.PropertyNames);
+    }
+
+    [Fact]
+    public void RemoveIndex_RemovesStatementIncludingIsUniqueChain()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsUnique();
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().RemoveIndex(source, "Person", new[] { "Email" });
+
+        Assert.DoesNotContain("HasIndex", result);
+        Assert.DoesNotContain("IsUnique", result);
+    }
+
+    [Fact]
+    public void RemoveIndex_LeavesOtherIndexesUntouched()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsUnique();
+                        entity.HasIndex(e => new { e.LastName, e.FirstName });
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().RemoveIndex(source, "Person", new[] { "Email" });
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal(new[] { "LastName", "FirstName" }, config.PropertyNames);
+    }
+
+    [Fact]
+    public void RemoveIndex_IsNoop_WhenNoMatchingIndex()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().RemoveIndex(source, "Person", new[] { "PhoneNumber" });
+
+        Assert.Equal(source, result);
+    }
 }
