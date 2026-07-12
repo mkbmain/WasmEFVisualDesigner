@@ -53,6 +53,42 @@ public class ModelMergerTests
     }
 
     [Fact]
+    public void ApplyPrecisions_SetsPrecisionAndScaleOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Total", "decimal", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<PrecisionConfig>
+        {
+            new("Order", "Total", 18, 2),
+            new("Address", "Line1", 10, null), // different entity, must not affect Order
+        };
+
+        var merged = ModelMerger.ApplyPrecisions(entity, configs);
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").Precision);
+        Assert.Equal(18, merged.Properties.Single(p => p.Name == "Total").Precision);
+        Assert.Equal(2, merged.Properties.Single(p => p.Name == "Total").Scale);
+    }
+
+    [Fact]
+    public void ApplyPrecisions_NoMatchingConfig_LeavesPrecisionAndScaleNull()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Rate", "decimal", IsNullable: false, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyPrecisions(entity, new List<PrecisionConfig>());
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Rate").Precision);
+        Assert.Null(merged.Properties.Single(p => p.Name == "Rate").Scale);
+    }
+
+    [Fact]
     public void ApplyKeys_SetsKeyPropertyNamesOnMatchingEntity_LeavesOthersUntouched()
     {
         var entity = new EntityModel("Person", new List<PropertyModel>
