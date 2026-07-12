@@ -139,7 +139,7 @@ public sealed class OnModelCreatingRewriter
         var newCall = targetCall.WithArgumentList(BuildPrecisionArgumentList(precision, scale));
 
         var newRoot = root.ReplaceNode(targetCall, newCall);
-        return newRoot.NormalizeWhitespace().ToFullString();
+        return newRoot.ToFullString();
     }
 
     private static string AppendPrecisionToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, int precision, int? scale)
@@ -228,7 +228,10 @@ public sealed class OnModelCreatingRewriter
                 SyntaxKind.NumericLiteralExpression,
                 SyntaxFactory.Literal(scale.Value)));
 
-        return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[] { precisionArg, scaleArg }));
+        return SyntaxFactory.ArgumentList(
+            SyntaxFactory.SeparatedList(
+                new[] { precisionArg, scaleArg },
+                new[] { SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space) }));
     }
 
     public string RewriteIsRequired(string sourceCode, string entityName, string propertyName, bool newIsRequired)

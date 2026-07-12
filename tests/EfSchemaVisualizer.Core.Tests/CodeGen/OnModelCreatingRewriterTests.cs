@@ -1063,6 +1063,16 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void RewritePrecision_ExistingCall_LeavesEverythingElseIdentical()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(PrecisionSource, entityName: "Order", propertyName: "Total", precision: 20, scale: 4);
+
+        Assert.Contains("entity.Property(e => e.Total).HasPrecision(20, 4)", result);
+        Assert.Contains("entity.Property(e => e.Rate).HasPrecision(5)", result);
+    }
+
+    [Fact]
     public void RewritePrecision_ExistingCall_MutatesFromPrecisionScaleToPrecisionOnly()
     {
         var result = new OnModelCreatingRewriter()
