@@ -966,4 +966,56 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Name", diagnostic.PropertyName);
     }
+
+    private const string ColumnTypeSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasColumnType("decimal(18,2)");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseColumnTypes_ReadsStringLiteralArgument()
+    {
+        var result = new FluentConfigParser().ParseColumnTypes(ColumnTypeSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Order", config.EntityName);
+        Assert.Equal("Total", config.PropertyName);
+        Assert.Equal("decimal(18,2)", config.ColumnType);
+    }
+
+    private const string ColumnTypeSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string ColumnType = "decimal(18,2)";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasColumnType(ColumnType);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseColumnTypes_NonLiteralArgument_EmitsUnreadableHasColumnTypeArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseColumnTypes(ColumnTypeSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasColumnTypeArgument", diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        Assert.Equal("Total", diagnostic.PropertyName);
+    }
 }
