@@ -68,6 +68,82 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<MaxLengthConfig>>(results, diagnostics);
     }
 
+    public ParseResult<IReadOnlyList<PrecisionConfig>> ParsePrecisions(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<PrecisionConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        var entityNames = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+            .Where(name => name is not null)
+            .Distinct()!;
+
+        foreach (var entityName in entityNames)
+        {
+            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
+            {
+                foreach (var precisionCall in FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasPrecision"))
+                {
+                    var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(precisionCall);
+
+                    if (propertyName is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnresolvablePropertyName",
+                            "Could not determine which property this HasPrecision call configures.",
+                            entityName,
+                            PropertyName: null,
+                            precisionCall.Span));
+                        continue;
+                    }
+
+                    var arguments = precisionCall.ArgumentList.Arguments;
+
+                    if (arguments.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    if (!int.TryParse(arguments[0].Expression.ToString(), out var precision))
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnreadableHasPrecisionArgument",
+                            "HasPrecision argument is not an integer literal and could not be read.",
+                            entityName,
+                            propertyName,
+                            arguments[0].Span));
+                        continue;
+                    }
+
+                    if (arguments.Count == 1)
+                    {
+                        results.Add(new PrecisionConfig(entityName!, propertyName, precision, Scale: null));
+                        continue;
+                    }
+
+                    if (!int.TryParse(arguments[1].Expression.ToString(), out var scale))
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnreadableHasPrecisionArgument",
+                            "HasPrecision argument is not an integer literal and could not be read.",
+                            entityName,
+                            propertyName,
+                            arguments[1].Span));
+                        continue;
+                    }
+
+                    results.Add(new PrecisionConfig(entityName!, propertyName, precision, scale));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<PrecisionConfig>>(results, diagnostics);
+    }
+
     public ParseResult<IReadOnlyList<IsRequiredConfig>> ParseIsRequired(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

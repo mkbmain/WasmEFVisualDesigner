@@ -779,4 +779,83 @@ public class FluentConfigParserTests
         Assert.False(config.IsUnique);
         Assert.Empty(result.Diagnostics);
     }
+
+    private const string PrecisionSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasPrecision(18, 2);
+                    entity.Property(e => e.Rate).HasPrecision(5);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParsePrecisions_ReadsPrecisionOnlyAndPrecisionWithScale()
+    {
+        var result = new FluentConfigParser().ParsePrecisions(PrecisionSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c is { EntityName: "Order", PropertyName: "Total", Precision: 18, Scale: 2 });
+        Assert.Contains(result.Value, c => c is { EntityName: "Order", PropertyName: "Rate", Precision: 5, Scale: null });
+    }
+
+    private const string PrecisionSourceWithNonLiteralFirstArg = """
+        public class AppDbContext : DbContext
+        {
+            private const int DefaultPrecision = 18;
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasPrecision(DefaultPrecision, 2);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParsePrecisions_NonLiteralFirstArgument_EmitsUnreadableHasPrecisionArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParsePrecisions(PrecisionSourceWithNonLiteralFirstArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasPrecisionArgument", diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        Assert.Equal("Total", diagnostic.PropertyName);
+    }
+
+    private const string PrecisionSourceWithNonLiteralSecondArg = """
+        public class AppDbContext : DbContext
+        {
+            private const int DefaultScale = 2;
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasPrecision(18, DefaultScale);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParsePrecisions_NonLiteralSecondArgument_EmitsUnreadableHasPrecisionArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParsePrecisions(PrecisionSourceWithNonLiteralSecondArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasPrecisionArgument", diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        Assert.Equal("Total", diagnostic.PropertyName);
+    }
 }
