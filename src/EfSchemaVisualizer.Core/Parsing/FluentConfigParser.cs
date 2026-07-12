@@ -298,6 +298,69 @@ public sealed class FluentConfigParser
         return null;
     }
 
+    public ParseResult<IReadOnlyList<TableConfig>> ParseTableMappings(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<TableConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        var entityNames = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+            .Where(name => name is not null)
+            .Distinct()!;
+
+        foreach (var entityName in entityNames)
+        {
+            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
+            {
+                foreach (var toTableCall in FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "ToTable"))
+                {
+                    var arguments = toTableCall.ArgumentList.Arguments;
+
+                    if (arguments.Count == 0
+                        || arguments[0].Expression is not LiteralExpressionSyntax { } tableNameLiteral
+                        || !tableNameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnreadableToTableArgument",
+                            "ToTable argument is not a string literal and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            toTableCall.Span));
+                        continue;
+                    }
+
+                    string? schema = null;
+                    if (arguments.Count >= 2)
+                    {
+                        if (arguments[1].Expression is LiteralExpressionSyntax { } schemaLiteral
+                            && schemaLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                        {
+                            schema = schemaLiteral.Token.ValueText;
+                        }
+                        else
+                        {
+                            diagnostics.Add(new Diagnostic(
+                                "UnreadableToTableArgument",
+                                "ToTable schema argument is not a string literal and could not be read.",
+                                entityName,
+                                PropertyName: null,
+                                toTableCall.Span));
+                            continue;
+                        }
+                    }
+
+                    results.Add(new TableConfig(entityName!, tableNameLiteral.Token.ValueText, schema));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<TableConfig>>(results, diagnostics);
+    }
+
     public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexes(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

@@ -858,4 +858,60 @@ public class FluentConfigParserTests
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("Total", diagnostic.PropertyName);
     }
+
+    private const string TableMappingSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToTable("People", "dbo");
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.ToTable("Addresses");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseTableMappings_ReadsTableNameOnly_AndTableNameWithSchema()
+    {
+        var result = new FluentConfigParser().ParseTableMappings(TableMappingSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", TableName: "People", Schema: "dbo" });
+        Assert.Contains(result.Value, c => c is { EntityName: "Address", TableName: "Addresses", Schema: null });
+    }
+
+    private const string TableMappingSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string TableName = "People";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToTable(TableName);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseTableMappings_NonLiteralArgument_EmitsUnreadableToTableArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseTableMappings(TableMappingSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableToTableArgument", diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
 }
