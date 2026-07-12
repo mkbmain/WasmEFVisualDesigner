@@ -914,4 +914,56 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
+
+    private const string ColumnNameSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasColumnName("full_name");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseColumnNames_ReadsStringLiteralArgument()
+    {
+        var result = new FluentConfigParser().ParseColumnNames(ColumnNameSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Name", config.PropertyName);
+        Assert.Equal("full_name", config.ColumnName);
+    }
+
+    private const string ColumnNameSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string ColumnName = "full_name";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasColumnName(ColumnName);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseColumnNames_NonLiteralArgument_EmitsUnreadableHasColumnNameArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseColumnNames(ColumnNameSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasColumnNameArgument", diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Name", diagnostic.PropertyName);
+    }
 }

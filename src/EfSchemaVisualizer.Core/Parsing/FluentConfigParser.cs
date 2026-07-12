@@ -361,6 +361,61 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<TableConfig>>(results, diagnostics);
     }
 
+    public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<ColumnNameConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        var entityNames = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+            .Where(name => name is not null)
+            .Distinct()!;
+
+        foreach (var entityName in entityNames)
+        {
+            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
+            {
+                foreach (var call in FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasColumnName"))
+                {
+                    var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                    if (propertyName is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnresolvablePropertyName",
+                            "Could not determine which property this HasColumnName call configures.",
+                            entityName,
+                            PropertyName: null,
+                            call.Span));
+                        continue;
+                    }
+
+                    var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+                    if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                    {
+                        results.Add(new ColumnNameConfig(entityName!, propertyName, literal.Token.ValueText));
+                    }
+                    else
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnreadableHasColumnNameArgument",
+                            "HasColumnName argument is not a string literal and could not be read.",
+                            entityName,
+                            propertyName,
+                            (arg ?? (SyntaxNode)call).Span));
+                    }
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<ColumnNameConfig>>(results, diagnostics);
+    }
+
     public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexes(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
