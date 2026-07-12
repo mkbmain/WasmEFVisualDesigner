@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -171,6 +172,54 @@ internal static class FluentSyntaxHelpers
         }
 
         return null;
+    }
+
+    /// Finds the invocation immediately chained onto `invocation` via `.methodName(...)`, e.g. given
+    /// the `HasOne(...)` invocation, `FindChainedCall(hasOneCall, "WithMany")` finds the
+    /// `.WithMany(...)` invocation wrapping it. Returns null if nothing is chained onto `invocation`,
+    /// or if what's chained isn't named `methodName`.
+    internal static InvocationExpressionSyntax? FindChainedCall(InvocationExpressionSyntax invocation, string methodName)
+    {
+        return invocation.Parent is MemberAccessExpressionSyntax { Name.Identifier.Text: var name } memberAccess
+            && memberAccess.Expression == invocation
+            && name == methodName
+            && memberAccess.Parent is InvocationExpressionSyntax chained
+                ? chained
+                : null;
+    }
+
+    private static readonly string[] CollectionWrapperNames =
+    {
+        "ICollection", "IList", "List", "IEnumerable", "HashSet", "ISet",
+    };
+
+    /// Given a property's ClrType text (e.g. "ICollection<Order>", "Order[]", or bare "Order"),
+    /// returns the element type name for recognized collection wrapper shapes, or the type text
+    /// unchanged if it isn't a generic/array shape at all. Returns null for a generic wrapper shape
+    /// that isn't recognized (e.g. "IQueryable<Order>").
+    internal static string? TryGetElementTypeName(string clrType)
+    {
+        if (clrType.EndsWith("[]", StringComparison.Ordinal))
+        {
+            return clrType[..^2];
+        }
+
+        var genericOpen = clrType.IndexOf('<');
+        if (genericOpen < 0)
+        {
+            return clrType;
+        }
+
+        var wrapperName = clrType[..genericOpen];
+        if (!CollectionWrapperNames.Contains(wrapperName))
+        {
+            return null;
+        }
+
+        var genericClose = clrType.LastIndexOf('>');
+        return genericClose > genericOpen
+            ? clrType[(genericOpen + 1)..genericClose]
+            : null;
     }
 
     internal static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)

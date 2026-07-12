@@ -74,4 +74,83 @@ public class FluentSyntaxHelpersTests
 
         Assert.Null(names);
     }
+
+    [Fact]
+    public void FindChainedCall_ImmediateNextCallMatches_ReturnsIt()
+    {
+        var wrapped = """
+            public class C
+            {
+                void M()
+                {
+                    entity.HasOne(d => d.Customer).WithMany(p => p.Orders);
+                }
+            }
+            """;
+        var tree = CSharpSyntaxTree.ParseText(wrapped);
+        var root = tree.GetCompilationUnitRoot();
+        var hasOneCall = root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Single(i => i.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "HasOne" });
+
+        var chained = EfSchemaVisualizer.Core.Parsing.FluentSyntaxHelpers.FindChainedCall(hasOneCall, "WithMany");
+
+        Assert.NotNull(chained);
+        Assert.Equal("WithMany", ((MemberAccessExpressionSyntax)chained!.Expression).Name.Identifier.Text);
+    }
+
+    [Fact]
+    public void FindChainedCall_NextCallHasDifferentName_ReturnsNull()
+    {
+        var wrapped = """
+            public class C
+            {
+                void M()
+                {
+                    entity.HasOne(d => d.Customer).WithOne(p => p.Person);
+                }
+            }
+            """;
+        var tree = CSharpSyntaxTree.ParseText(wrapped);
+        var root = tree.GetCompilationUnitRoot();
+        var hasOneCall = root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Single(i => i.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "HasOne" });
+
+        var chained = EfSchemaVisualizer.Core.Parsing.FluentSyntaxHelpers.FindChainedCall(hasOneCall, "WithMany");
+
+        Assert.Null(chained);
+    }
+
+    [Fact]
+    public void FindChainedCall_NothingChained_ReturnsNull()
+    {
+        var invocation = ParseSingleInvocation("entity.HasOne(d => d.Customer)");
+
+        var chained = EfSchemaVisualizer.Core.Parsing.FluentSyntaxHelpers.FindChainedCall(invocation, "WithMany");
+
+        Assert.Null(chained);
+    }
+
+    [Theory]
+    [InlineData("ICollection<Order>", "Order")]
+    [InlineData("IList<Order>", "Order")]
+    [InlineData("List<Order>", "Order")]
+    [InlineData("IEnumerable<Order>", "Order")]
+    [InlineData("HashSet<Order>", "Order")]
+    [InlineData("ISet<Order>", "Order")]
+    [InlineData("Order[]", "Order")]
+    [InlineData("Order", "Order")]
+    public void TryGetElementTypeName_RecognizedShapes_ReturnsElementType(string clrType, string expected)
+    {
+        var result = EfSchemaVisualizer.Core.Parsing.FluentSyntaxHelpers.TryGetElementTypeName(clrType);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void TryGetElementTypeName_UnrecognizedGenericWrapper_ReturnsNull()
+    {
+        var result = EfSchemaVisualizer.Core.Parsing.FluentSyntaxHelpers.TryGetElementTypeName("IQueryable<Order>");
+
+        Assert.Null(result);
+    }
 }
