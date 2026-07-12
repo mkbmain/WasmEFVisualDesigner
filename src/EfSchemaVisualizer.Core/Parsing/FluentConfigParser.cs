@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using EfSchemaVisualizer.Core.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -517,6 +519,287 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<IndexConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<RelationshipConfig>> ParseRelationships(
+        string sourceCode, IReadOnlyList<EntityModel> entities)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<RelationshipConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        var entityNames = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+            .Where(name => name is not null)
+            .Distinct()!;
+
+        foreach (var entityName in entityNames)
+        {
+            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
+            {
+                var calls = FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasOne")
+                    .Concat(FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasMany"))
+                    .ToList();
+
+                if (FluentSyntaxHelpers.FindChainedCall(entityInvocation, "HasOne") is { } chainedHasOne)
+                {
+                    calls.Add(chainedHasOne);
+                }
+
+                if (FluentSyntaxHelpers.FindChainedCall(entityInvocation, "HasMany") is { } chainedHasMany)
+                {
+                    calls.Add(chainedHasMany);
+                }
+
+                foreach (var call in calls)
+                {
+                    ParseRelationshipChain(call, entityName!, entities, results, diagnostics);
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<RelationshipConfig>>(results, diagnostics);
+    }
+
+    private static void ParseRelationshipChain(
+        InvocationExpressionSyntax call,
+        string configuringEntityName,
+        IReadOnlyList<EntityModel> entities,
+        List<RelationshipConfig> results,
+        List<Diagnostic> diagnostics)
+    {
+        var isHasMany = GetInvokedMethodName(call) == "HasMany";
+
+        var withCall = FluentSyntaxHelpers.FindChainedCall(call, "WithMany")
+            ?? FluentSyntaxHelpers.FindChainedCall(call, "WithOne");
+
+        if (withCall is null)
+        {
+            return;
+        }
+
+        var isWithMany = GetInvokedMethodName(withCall) == "WithMany";
+
+        var (targetEntityName, targetResolved) = ResolveRelatedEntity(call, configuringEntityName, entities);
+
+        if (!targetResolved)
+        {
+            diagnostics.Add(new Diagnostic(
+                DiagnosticCodes.UnresolvableRelationshipTarget,
+                $"Could not determine the related entity for this {(isHasMany ? "HasMany" : "HasOne")} call.",
+                configuringEntityName,
+                PropertyName: null,
+                call.Span));
+            return;
+        }
+
+        var kind = (isHasMany, isWithMany) switch
+        {
+            (false, true) => RelationshipKind.OneToMany,  // HasOne...WithMany
+            (true, false) => RelationshipKind.OneToMany,  // HasMany...WithOne
+            (true, true) => RelationshipKind.ManyToMany,  // HasMany...WithMany
+            (false, false) => RelationshipKind.OneToOne,  // HasOne...WithOne
+        };
+
+        InvocationExpressionSyntax? hasForeignKeyCall = null;
+        InvocationExpressionSyntax? onDeleteCall = null;
+        InvocationExpressionSyntax? usingEntityCall = null;
+
+        WalkRelationshipTailChain(withCall, invocation =>
+        {
+            switch (GetInvokedMethodName(invocation))
+            {
+                case "HasForeignKey": hasForeignKeyCall = invocation; break;
+                case "OnDelete": onDeleteCall = invocation; break;
+                case "UsingEntity": usingEntityCall = invocation; break;
+            }
+        });
+
+        string principalEntity;
+        string dependentEntity;
+
+        if (kind == RelationshipKind.OneToOne)
+        {
+            var explicitDependent = TryGetGenericTypeArgument(hasForeignKeyCall);
+            dependentEntity = explicitDependent ?? configuringEntityName;
+            principalEntity = dependentEntity == configuringEntityName ? targetEntityName! : configuringEntityName;
+        }
+        else if (kind == RelationshipKind.ManyToMany)
+        {
+            principalEntity = configuringEntityName;
+            dependentEntity = targetEntityName!;
+        }
+        else if (!isHasMany) // HasOne...WithMany
+        {
+            principalEntity = targetEntityName!;
+            dependentEntity = configuringEntityName;
+        }
+        else // HasMany...WithOne
+        {
+            principalEntity = configuringEntityName;
+            dependentEntity = targetEntityName!;
+        }
+
+        var configuringNav = TryReadNavigationName(call);
+        var targetNav = TryReadNavigationName(withCall);
+
+        string? principalNavigation;
+        string? dependentNavigation;
+
+        if (kind == RelationshipKind.OneToOne)
+        {
+            if (dependentEntity == configuringEntityName)
+            {
+                dependentNavigation = configuringNav;
+                principalNavigation = targetNav;
+            }
+            else
+            {
+                dependentNavigation = targetNav;
+                principalNavigation = configuringNav;
+            }
+        }
+        else if (kind == RelationshipKind.ManyToMany)
+        {
+            principalNavigation = configuringNav;
+            dependentNavigation = targetNav;
+        }
+        else if (!isHasMany) // HasOne...WithMany
+        {
+            dependentNavigation = configuringNav;
+            principalNavigation = targetNav;
+        }
+        else // HasMany...WithOne
+        {
+            principalNavigation = configuringNav;
+            dependentNavigation = targetNav;
+        }
+
+        IReadOnlyList<string> foreignKeyProperties = Array.Empty<string>();
+        if (hasForeignKeyCall is not null)
+        {
+            var props = FluentSyntaxHelpers.TryReadPropertyNameList(hasForeignKeyCall);
+
+            if (props is null)
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticCodes.UnreadableHasForeignKeyArgument,
+                    "HasForeignKey argument(s) could not be read as property name(s).",
+                    dependentEntity,
+                    PropertyName: null,
+                    hasForeignKeyCall.Span));
+            }
+            else
+            {
+                foreignKeyProperties = props;
+            }
+        }
+
+        string? onDeleteBehavior = null;
+        if (onDeleteCall is not null)
+        {
+            var arg = onDeleteCall.ArgumentList.Arguments.FirstOrDefault();
+
+            if (arg?.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var behaviorName })
+            {
+                onDeleteBehavior = behaviorName;
+            }
+            else
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticCodes.UnreadableOnDeleteArgument,
+                    "OnDelete argument is not a DeleteBehavior member access and could not be read.",
+                    dependentEntity,
+                    PropertyName: null,
+                    arg?.Span ?? onDeleteCall.Span));
+            }
+        }
+
+        var joinEntityName = kind == RelationshipKind.ManyToMany ? TryGetGenericTypeArgument(usingEntityCall) : null;
+
+        results.Add(new RelationshipConfig(
+            principalEntity,
+            dependentEntity,
+            kind,
+            principalNavigation,
+            dependentNavigation,
+            foreignKeyProperties,
+            onDeleteBehavior,
+            joinEntityName));
+    }
+
+    private static (string? EntityName, bool Resolved) ResolveRelatedEntity(
+        InvocationExpressionSyntax call, string configuringEntityName, IReadOnlyList<EntityModel> entities)
+    {
+        var explicitTarget = TryGetGenericTypeArgument(call);
+        if (explicitTarget is not null)
+        {
+            return (explicitTarget, true);
+        }
+
+        var navigationName = TryReadNavigationName(call);
+        if (navigationName is null)
+        {
+            return (null, false);
+        }
+
+        var configuringEntity = entities.FirstOrDefault(e => e.Name == configuringEntityName);
+        var property = configuringEntity?.Properties.FirstOrDefault(p => p.Name == navigationName);
+
+        if (property is null)
+        {
+            return (null, false);
+        }
+
+        var elementTypeName = FluentSyntaxHelpers.TryGetElementTypeName(property.ClrType);
+
+        return elementTypeName is null ? (null, false) : (elementTypeName, true);
+    }
+
+    private static string? TryReadNavigationName(InvocationExpressionSyntax call)
+    {
+        var argumentExpression = call.ArgumentList.Arguments
+            .Select(a => a.Expression)
+            .FirstOrDefault();
+
+        return argumentExpression switch
+        {
+            SimpleLambdaExpressionSyntax { ExpressionBody: MemberAccessExpressionSyntax { Name.Identifier.Text: var name } } => name,
+            ParenthesizedLambdaExpressionSyntax { ExpressionBody: MemberAccessExpressionSyntax { Name.Identifier.Text: var name } } => name,
+            _ => null,
+        };
+    }
+
+    private static string? GetInvokedMethodName(InvocationExpressionSyntax invocation)
+    {
+        return invocation.Expression is MemberAccessExpressionSyntax { Name: SimpleNameSyntax simpleName }
+            ? simpleName.Identifier.Text
+            : null;
+    }
+
+    private static string? TryGetGenericTypeArgument(InvocationExpressionSyntax? invocation)
+    {
+        return invocation?.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArg] } }
+            ? typeArg.ToString()
+            : null;
+    }
+
+    private static void WalkRelationshipTailChain(InvocationExpressionSyntax withCall, Action<InvocationExpressionSyntax> visit)
+    {
+        SyntaxNode? cursor = withCall.Parent;
+
+        while (cursor is not null && cursor is not StatementSyntax)
+        {
+            if (cursor is MemberAccessExpressionSyntax && cursor.Parent is InvocationExpressionSyntax invocation)
+            {
+                visit(invocation);
+            }
+
+            cursor = cursor.Parent;
+        }
     }
 
     private static (bool IsUnique, Diagnostic? Diagnostic) TryReadIsUnique(

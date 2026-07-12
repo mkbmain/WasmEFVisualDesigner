@@ -1,3 +1,4 @@
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 
@@ -1096,5 +1097,361 @@ public class FluentConfigParserTests
         Assert.Equal(DiagnosticCodes.UnreadableHasDefaultValueArgument, diagnostic.Code);
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("CreatedAt", diagnostic.PropertyName);
+    }
+
+    // ─── ParseRelationships ─────────────────────────────────────────────────────
+
+    private static readonly IReadOnlyList<EntityModel> OrderCustomerEntities = new List<EntityModel>
+    {
+        new("Customer", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Orders", "ICollection<Order>", IsNullable: false, MaxLength: null),
+        }),
+        new("Order", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("CustomerId", "int", IsNullable: false, MaxLength: null),
+            new("Customer", "Customer", IsNullable: false, MaxLength: null),
+        }),
+    };
+
+    private const string SourceWithHasOneWithManyBlockNested = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasOne(d => d.Customer)
+                          .WithMany(p => p.Orders)
+                          .HasForeignKey(d => d.CustomerId);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseRelationships_HasOneWithMany_BlockNested_ResolvesOneToMany()
+    {
+        var result = new FluentConfigParser().ParseRelationships(SourceWithHasOneWithManyBlockNested, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
+        Assert.Equal("Customer", relationship.PrincipalEntity);
+        Assert.Equal("Order", relationship.DependentEntity);
+        Assert.Equal("Orders", relationship.PrincipalNavigation);
+        Assert.Equal("Customer", relationship.DependentNavigation);
+        Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
+    }
+
+    private const string SourceWithHasOneWithManyChained = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>()
+                    .HasOne(d => d.Customer)
+                    .WithMany(p => p.Orders)
+                    .HasForeignKey(d => d.CustomerId);
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseRelationships_HasOneWithMany_ChainedOffBareEntity_ResolvesOneToMany()
+    {
+        var result = new FluentConfigParser().ParseRelationships(SourceWithHasOneWithManyChained, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
+        Assert.Equal("Customer", relationship.PrincipalEntity);
+        Assert.Equal("Order", relationship.DependentEntity);
+        Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_HasManyWithOne_ResolvesOneToMany_PrincipalIsConfiguringEntity()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Customer>(entity =>
+                    {
+                        entity.HasMany(p => p.Orders)
+                              .WithOne(d => d.Customer)
+                              .HasForeignKey(d => d.CustomerId);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
+        Assert.Equal("Customer", relationship.PrincipalEntity);
+        Assert.Equal("Order", relationship.DependentEntity);
+        Assert.Equal("Orders", relationship.PrincipalNavigation);
+        Assert.Equal("Customer", relationship.DependentNavigation);
+        Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_BareWithMany_NoInverseNavigation_PrincipalNavigationIsNull()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer).WithMany();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Null(relationship.PrincipalNavigation);
+        Assert.Equal("Customer", relationship.DependentNavigation);
+        Assert.Empty(relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_NoHasForeignKeyCall_ForeignKeyPropertiesEmpty_NoDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer).WithMany(p => p.Orders);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Empty(relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_ExplicitGenericTarget_NoNavLambda_ResolvesEntity()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne<Customer>().WithMany();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal("Customer", relationship.PrincipalEntity);
+        Assert.Equal("Order", relationship.DependentEntity);
+    }
+
+    [Fact]
+    public void ParseRelationships_MalformedChain_NoWithCall_SkippedSilently()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Empty(result.Value);
+    }
+
+    [Fact]
+    public void ParseRelationships_UnresolvableNavigation_EmitsUnresolvableRelationshipTargetDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.NoSuchProperty).WithMany(p => p.Orders);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnresolvableRelationshipTarget, diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+    }
+
+    [Fact]
+    public void ParseRelationships_UnrecognizedCollectionWrapper_EmitsUnresolvableRelationshipTargetDiagnostic()
+    {
+        var entities = new List<EntityModel>
+        {
+            new("Customer", new List<PropertyModel>
+            {
+                new("Orders", "IQueryable<Order>", IsNullable: false, MaxLength: null),
+            }),
+            new("Order", new List<PropertyModel>()),
+        };
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Customer>(entity =>
+                    {
+                        entity.HasMany(p => p.Orders).WithOne();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, entities);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnresolvableRelationshipTarget, diagnostic.Code);
+    }
+
+    [Fact]
+    public void ParseRelationships_UnreadableHasForeignKeyArgument_EmitsDiagnostic_RelationshipStillRecorded()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer).WithMany(p => p.Orders).HasForeignKey(GetFkExpression());
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasForeignKeyArgument, diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        var relationship = Assert.Single(result.Value);
+        Assert.Empty(relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_OnDelete_Present_IsRead()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .HasForeignKey(d => d.CustomerId)
+                              .OnDelete(DeleteBehavior.Cascade);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal("Cascade", relationship.OnDeleteBehavior);
+    }
+
+    [Fact]
+    public void ParseRelationships_OnDelete_UnreadableArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .OnDelete(GetBehavior());
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableOnDeleteArgument, diagnostic.Code);
+        var relationship = Assert.Single(result.Value);
+        Assert.Null(relationship.OnDeleteBehavior);
+    }
+
+    [Fact]
+    public void ParseRelationships_HasForeignKeyAndOnDelete_OrderReversed_BothStillRead()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .OnDelete(DeleteBehavior.Restrict)
+                              .HasForeignKey(d => d.CustomerId);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
+        Assert.Equal("Restrict", relationship.OnDeleteBehavior);
     }
 }
