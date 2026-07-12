@@ -23,7 +23,7 @@ public sealed class EntityClassParser
         if (typeDeclarations.Count == 0)
         {
             var diagnostic = new Diagnostic(
-                "NoEntityDeclarations",
+                DiagnosticCodes.NoEntityDeclarations,
                 "No class, record, or struct declarations found in file; nothing to parse.",
                 EntityName: null,
                 PropertyName: null,

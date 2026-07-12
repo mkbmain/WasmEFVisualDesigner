@@ -54,7 +54,7 @@ public class EntityClassParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("NoEntityDeclarations", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.NoEntityDeclarations, diagnostic.Code);
     }
 
     [Fact]

@@ -40,7 +40,7 @@ public sealed class FluentConfigParser
                     if (propertyName is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnresolvablePropertyName",
+                            DiagnosticCodes.UnresolvablePropertyName,
                             "Could not determine which property this HasMaxLength call configures.",
                             entityName,
                             PropertyName: null,
@@ -55,7 +55,7 @@ public sealed class FluentConfigParser
                     else
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableMaxLengthArgument",
+                            DiagnosticCodes.UnreadableMaxLengthArgument,
                             "HasMaxLength argument is not an integer literal and could not be read.",
                             entityName,
                             propertyName,
@@ -93,7 +93,7 @@ public sealed class FluentConfigParser
                     if (propertyName is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnresolvablePropertyName",
+                            DiagnosticCodes.UnresolvablePropertyName,
                             "Could not determine which property this HasPrecision call configures.",
                             entityName,
                             PropertyName: null,
@@ -111,7 +111,7 @@ public sealed class FluentConfigParser
                     if (!int.TryParse(arguments[0].Expression.ToString(), out var precision))
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableHasPrecisionArgument",
+                            DiagnosticCodes.UnreadableHasPrecisionArgument,
                             "HasPrecision argument is not an integer literal and could not be read.",
                             entityName,
                             propertyName,
@@ -128,7 +128,7 @@ public sealed class FluentConfigParser
                     if (!int.TryParse(arguments[1].Expression.ToString(), out var scale))
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableHasPrecisionArgument",
+                            DiagnosticCodes.UnreadableHasPrecisionArgument,
                             "HasPrecision argument is not an integer literal and could not be read.",
                             entityName,
                             propertyName,
@@ -170,7 +170,7 @@ public sealed class FluentConfigParser
                     if (propertyName is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnresolvablePropertyName",
+                            DiagnosticCodes.UnresolvablePropertyName,
                             "Could not determine which property this IsRequired call configures.",
                             entityName,
                             PropertyName: null,
@@ -192,7 +192,7 @@ public sealed class FluentConfigParser
                     else
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableIsRequiredArgument",
+                            DiagnosticCodes.UnreadableIsRequiredArgument,
                             "IsRequired argument is not a boolean literal and could not be read.",
                             entityName,
                             propertyName,
@@ -230,7 +230,7 @@ public sealed class FluentConfigParser
                     if (propertyNames is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableHasKeyArgument",
+                            DiagnosticCodes.UnreadableHasKeyArgument,
                             "HasKey argument(s) could not be read as property name(s).",
                             entityName,
                             PropertyName: null,
@@ -325,7 +325,7 @@ public sealed class FluentConfigParser
                         || !tableNameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableToTableArgument",
+                            DiagnosticCodes.UnreadableToTableArgument,
                             "ToTable argument is not a string literal and could not be read.",
                             entityName,
                             PropertyName: null,
@@ -344,7 +344,7 @@ public sealed class FluentConfigParser
                         else
                         {
                             diagnostics.Add(new Diagnostic(
-                                "UnreadableToTableArgument",
+                                DiagnosticCodes.UnreadableToTableArgument,
                                 "ToTable schema argument is not a string literal and could not be read.",
                                 entityName,
                                 PropertyName: null,
@@ -386,7 +386,7 @@ public sealed class FluentConfigParser
                     if (propertyName is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnresolvablePropertyName",
+                            DiagnosticCodes.UnresolvablePropertyName,
                             "Could not determine which property this HasColumnName call configures.",
                             entityName,
                             PropertyName: null,
@@ -403,7 +403,7 @@ public sealed class FluentConfigParser
                     else
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableHasColumnNameArgument",
+                            DiagnosticCodes.UnreadableHasColumnNameArgument,
                             "HasColumnName argument is not a string literal and could not be read.",
                             entityName,
                             propertyName,
@@ -441,7 +441,7 @@ public sealed class FluentConfigParser
                     if (propertyName is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnresolvablePropertyName",
+                            DiagnosticCodes.UnresolvablePropertyName,
                             "Could not determine which property this HasColumnType call configures.",
                             entityName,
                             PropertyName: null,
@@ -458,7 +458,7 @@ public sealed class FluentConfigParser
                     else
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableHasColumnTypeArgument",
+                            DiagnosticCodes.UnreadableHasColumnTypeArgument,
                             "HasColumnType argument is not a string literal and could not be read.",
                             entityName,
                             propertyName,
@@ -496,7 +496,7 @@ public sealed class FluentConfigParser
                     if (propertyName is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnresolvablePropertyName",
+                            DiagnosticCodes.UnresolvablePropertyName,
                             "Could not determine which property this HasDefaultValue call configures.",
                             entityName,
                             PropertyName: null,
@@ -513,7 +513,7 @@ public sealed class FluentConfigParser
                     else
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableHasDefaultValueArgument",
+                            DiagnosticCodes.UnreadableHasDefaultValueArgument,
                             "HasDefaultValue argument is not a literal and could not be read.",
                             entityName,
                             propertyName,
@@ -551,7 +551,7 @@ public sealed class FluentConfigParser
                     if (indexArgs is null)
                     {
                         diagnostics.Add(new Diagnostic(
-                            "UnreadableHasIndexArgument",
+                            DiagnosticCodes.UnreadableHasIndexArgument,
                             "HasIndex argument(s) could not be read as property name(s).",
                             entityName,
                             PropertyName: null,
@@ -590,7 +590,7 @@ public sealed class FluentConfigParser
                     return (literal.IsKind(SyntaxKind.TrueLiteralExpression), null);
 
                 return (false, new Diagnostic(
-                    "UnreadableIsUniqueArgument",
+                    DiagnosticCodes.UnreadableIsUniqueArgument,
                     "IsUnique argument is not a boolean literal and could not be read.",
                     entityName,
                     PropertyName: null,

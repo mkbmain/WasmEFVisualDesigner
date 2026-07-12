@@ -181,20 +181,18 @@ these matter before any new surface is added.
       reusing the `HasKey`/`HasMaxLength` dispatch patterns (see
       `2026-07-12-column-table-mapping-config-design.md`). `HasDefaultValueSql`
       and non-literal defaults remain out of scope.
-- [ ] **`[found]` Diagnostic codes are bare string literals.** `NoEntityDeclarations`,
-      `UnresolvablePropertyName`, and `UnreadableMaxLengthArgument` are currently
-      scattered as bare string literals across `EntityClassParser.cs` and
-      `FluentConfigParser.cs`, each duplicated in test assertions. A shared
-      `DiagnosticCodes` constants class or enum would prevent drift as more
-      diagnostic codes are added, but with only three codes and no UI consumer
-      yet, this can wait until more codes accumulate or until the Blazor shell
-      needs to interpret them.
-- [ ] **`[found]` `GetPropertyNameFor` doesn't resolve parenthesized lambdas.** Calls like
-      `entity.Property((Person e) => e.Name)` use `ParenthesizedLambdaExpressionSyntax`,
-      which are not handled in the `switch` expression — the method falls through
-      and emits `UnresolvablePropertyName` rather than resolving "Name". This is
-      a plausible shape users could write, but is currently untested. Correct
-      behavior is diagnostic (not silent data loss), but resolving it is a future pass.
+- [x] **`[found]` Diagnostic codes are bare string literals.**
+      **Update:** all 12 codes (which had grown well past the original three)
+      now live in a `DiagnosticCodes` constants class
+      (`src/EfSchemaVisualizer.Core/Parsing/DiagnosticCodes.cs`); both parsers
+      and all test assertions reference the constants instead of bare
+      strings.
+- [x] **`[found]` `GetPropertyNameFor` doesn't resolve parenthesized lambdas.**
+      **Update:** `GetPropertyNameForPropertyCall` (`FluentSyntaxHelpers.cs`) now
+      matches `ParenthesizedLambdaExpressionSyntax` (expression-bodied and
+      single-`return`-statement block-bodied) the same way it already matched
+      `SimpleLambdaExpressionSyntax`, so `entity.Property((Person e) => e.Name)`
+      resolves to `"Name"` instead of emitting `UnresolvablePropertyName`.
 
 ## Priority 3 — Second config style
 

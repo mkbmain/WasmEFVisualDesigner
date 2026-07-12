@@ -154,7 +154,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableMaxLengthArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableMaxLengthArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Name", diagnostic.PropertyName);
     }
@@ -179,7 +179,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableMaxLengthArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableMaxLengthArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Name", diagnostic.PropertyName);
     }
@@ -208,9 +208,34 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnresolvablePropertyName", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnresolvablePropertyName, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
+    }
+
+    private const string SourceWithParenthesizedLambda = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property((Person e) => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMaxLengths_ParenthesizedLambda_ResolvesPropertyName()
+    {
+        var result = new FluentConfigParser().ParseMaxLengths(SourceWithParenthesizedLambda);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Name", config.PropertyName);
+        Assert.Equal(100, config.MaxLength);
     }
 
     private const string SourceWithIsRequiredCalls = """
@@ -288,7 +313,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableIsRequiredArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableIsRequiredArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Name", diagnostic.PropertyName);
     }
@@ -317,7 +342,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnresolvablePropertyName", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnresolvablePropertyName, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
@@ -446,7 +471,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasKeyArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasKeyArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
@@ -471,7 +496,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasKeyArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasKeyArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
@@ -688,7 +713,7 @@ public class FluentConfigParserTests
         var config = Assert.Single(result.Value);
         Assert.False(config.IsUnique);
         var diag = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableIsUniqueArgument", diag.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableIsUniqueArgument, diag.Code);
         Assert.Equal("Person", diag.EntityName);
         Assert.Null(diag.PropertyName);
     }
@@ -710,7 +735,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diag = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasIndexArgument", diag.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasIndexArgument, diag.Code);
         Assert.Equal("Person", diag.EntityName);
         Assert.Null(diag.PropertyName);
     }
@@ -827,7 +852,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasPrecisionArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasPrecisionArgument, diagnostic.Code);
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("Total", diagnostic.PropertyName);
     }
@@ -854,7 +879,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasPrecisionArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasPrecisionArgument, diagnostic.Code);
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("Total", diagnostic.PropertyName);
     }
@@ -910,7 +935,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableToTableArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableToTableArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
@@ -962,7 +987,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasColumnNameArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasColumnNameArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Name", diagnostic.PropertyName);
     }
@@ -1014,7 +1039,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasColumnTypeArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasColumnTypeArgument, diagnostic.Code);
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("Total", diagnostic.PropertyName);
     }
@@ -1068,7 +1093,7 @@ public class FluentConfigParserTests
 
         Assert.Empty(result.Value);
         var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("UnreadableHasDefaultValueArgument", diagnostic.Code);
+        Assert.Equal(DiagnosticCodes.UnreadableHasDefaultValueArgument, diagnostic.Code);
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("CreatedAt", diagnostic.PropertyName);
     }
