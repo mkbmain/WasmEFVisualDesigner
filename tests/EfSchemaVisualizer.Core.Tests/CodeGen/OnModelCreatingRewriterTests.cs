@@ -1036,4 +1036,98 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(source, result);
     }
+
+    private const string PrecisionSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasPrecision(18, 2);
+                    entity.Property(e => e.Rate).HasPrecision(5);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewritePrecision_ExistingCall_MutatesArguments()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(PrecisionSource, entityName: "Order", propertyName: "Total", precision: 20, scale: 4);
+
+        Assert.Contains("entity.Property(e => e.Total).HasPrecision(20, 4)", result);
+        Assert.Contains("entity.Property(e => e.Rate).HasPrecision(5)", result);
+        Assert.DoesNotContain("HasPrecision(18, 2)", result);
+    }
+
+    [Fact]
+    public void RewritePrecision_ExistingCall_MutatesFromPrecisionScaleToPrecisionOnly()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(PrecisionSource, entityName: "Order", propertyName: "Total", precision: 10, scale: null);
+
+        Assert.Contains("entity.Property(e => e.Total).HasPrecision(10)", result);
+        Assert.DoesNotContain("HasPrecision(18, 2)", result);
+    }
+
+    private const string SourceWithPropertyButNoPrecision = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewritePrecision_BarePropertyCall_AppendsHasPrecision()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(SourceWithPropertyButNoPrecision, entityName: "Order", propertyName: "Total", precision: 18, scale: 2);
+
+        Assert.Contains("entity.Property(e => e.Total).HasPrecision(18, 2)", result);
+    }
+
+    private const string SourceWithEntityConfiguredNoPrecisionProperty = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Rate).HasPrecision(5);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewritePrecision_EntityConfiguredWithoutTargetProperty_InsertsNewStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(SourceWithEntityConfiguredNoPrecisionProperty, entityName: "Order", propertyName: "Total", precision: 18, scale: 2);
+
+        Assert.Contains("entity.Property(e => e.Total).HasPrecision(18, 2)", result);
+        Assert.Contains("entity.Property(e => e.Rate).HasPrecision(5)", result);
+    }
+
+    [Fact]
+    public void RewritePrecision_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(PrecisionSource, entityName: "Vehicle", propertyName: "Weight", precision: 8, scale: 1);
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Weight).HasPrecision(8, 1)", result);
+
+        var configs = new FluentConfigParser().ParsePrecisions(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Vehicle", PropertyName: "Weight", Precision: 8, Scale: 1 });
+        Assert.Contains(configs, c => c is { EntityName: "Order", PropertyName: "Total", Precision: 18, Scale: 2 });
+    }
 }

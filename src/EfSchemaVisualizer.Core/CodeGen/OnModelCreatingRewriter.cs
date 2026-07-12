@@ -99,6 +99,138 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string RewritePrecision(string sourceCode, string entityName, string propertyName, int precision, int? scale)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingPrecisionCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasPrecision"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingPrecisionCall is not null)
+        {
+            return MutateExistingPrecision(root, existingPrecisionCall, precision, scale);
+        }
+
+        var existingPropertyCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            return AppendPrecisionToPropertyCall(root, existingPropertyCall, precision, scale);
+        }
+
+        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+
+        if (existingEntityInvocation is not null)
+        {
+            return InsertPrecisionStatement(root, existingEntityInvocation, propertyName, precision, scale);
+        }
+
+        return InsertPrecisionEntityBlock(root, entityName, propertyName, precision, scale);
+    }
+
+    private static string MutateExistingPrecision(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, int precision, int? scale)
+    {
+        var newCall = targetCall.WithArgumentList(BuildPrecisionArgumentList(precision, scale));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string AppendPrecisionToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, int precision, int? scale)
+    {
+        var precisionCall = BuildPrecisionCall(propertyCall, precision, scale);
+
+        var newRoot = root.ReplaceNode(propertyCall, precisionCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertPrecisionStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, int precision, int? scale)
+    {
+        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
+        var block = lambda.Block!;
+        var blockReceiverName = lambda.Parameter.Identifier.Text;
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+
+        var newStatement = BuildPrecisionPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, precision, scale);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertPrecisionEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, int precision, int? scale)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var propertyStatement = BuildPrecisionPropertyStatement("entity", "e", propertyName, precision, scale);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(propertyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildPrecisionPropertyStatement(string blockReceiverName, string propertyLambdaParam, string propertyName, int precision, int? scale)
+    {
+        var propertyCall = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("Property")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.SimpleLambdaExpression(
+                            SyntaxFactory.Parameter(SyntaxFactory.Identifier(propertyLambdaParam)),
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName(propertyLambdaParam),
+                                SyntaxFactory.IdentifierName(propertyName)))))));
+
+        return SyntaxFactory.ExpressionStatement(BuildPrecisionCall(propertyCall, precision, scale));
+    }
+
+    private static InvocationExpressionSyntax BuildPrecisionCall(ExpressionSyntax propertyCallExpression, int precision, int? scale)
+    {
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                propertyCallExpression,
+                SyntaxFactory.IdentifierName("HasPrecision")),
+            BuildPrecisionArgumentList(precision, scale));
+    }
+
+    private static ArgumentListSyntax BuildPrecisionArgumentList(int precision, int? scale)
+    {
+        var precisionArg = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(precision)));
+
+        if (scale is null)
+        {
+            return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(precisionArg));
+        }
+
+        var scaleArg = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.NumericLiteralExpression,
+                SyntaxFactory.Literal(scale.Value)));
+
+        return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[] { precisionArg, scaleArg }));
+    }
+
     public string RewriteIsRequired(string sourceCode, string entityName, string propertyName, bool newIsRequired)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
