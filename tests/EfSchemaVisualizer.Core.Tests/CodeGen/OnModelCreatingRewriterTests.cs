@@ -1351,4 +1351,78 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(SourceWithPropertyButNoColumnName, result);
     }
+
+    private const string ColumnTypeSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasColumnType("decimal(18,2)");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetColumnType_ExistingCall_MutatesArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnType(ColumnTypeSource, entityName: "Order", propertyName: "Total", columnType: "money");
+
+        Assert.Contains("entity.Property(e => e.Total).HasColumnType(\"money\")", result);
+        Assert.DoesNotContain("HasColumnType(\"decimal(18,2)\")", result);
+    }
+
+    private const string SourceWithPropertyButNoColumnType = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetColumnType_BarePropertyCall_AppendsHasColumnType()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnType(SourceWithPropertyButNoColumnType, entityName: "Order", propertyName: "Total", columnType: "decimal(18,2)");
+
+        Assert.Contains("entity.Property(e => e.Total).HasColumnType(\"decimal(18,2)\")", result);
+    }
+
+    [Fact]
+    public void SetColumnType_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnType(ColumnTypeSource, entityName: "Vehicle", propertyName: "Price", columnType: "money");
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Price).HasColumnType(\"money\")", result);
+    }
+
+    [Fact]
+    public void RemoveColumnType_ExistingCall_RemovesCall_LeavesBarePropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveColumnType(ColumnTypeSource, entityName: "Order", propertyName: "Total");
+
+        Assert.Contains("entity.Property(e => e.Total);", result);
+        Assert.DoesNotContain("HasColumnType(\"decimal(18,2)\")", result);
+    }
+
+    [Fact]
+    public void RemoveColumnType_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveColumnType(SourceWithPropertyButNoColumnType, entityName: "Order", propertyName: "Total");
+
+        Assert.Equal(SourceWithPropertyButNoColumnType, result);
+    }
 }

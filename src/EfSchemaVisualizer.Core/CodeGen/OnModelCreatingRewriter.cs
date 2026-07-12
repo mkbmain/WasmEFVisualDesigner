@@ -614,6 +614,46 @@ public sealed class OnModelCreatingRewriter
         return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasColumnName");
     }
 
+    public string SetColumnType(string sourceCode, string entityName, string propertyName, string columnType)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasColumnType"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is not null)
+        {
+            return MutateExistingStringArgCall(root, existingCall, columnType);
+        }
+
+        var existingPropertyCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            return AppendStringArgCallToPropertyCall(root, existingPropertyCall, "HasColumnType", columnType);
+        }
+
+        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+
+        if (existingEntityInvocation is not null)
+        {
+            return InsertStringArgPropertyStatement(root, existingEntityInvocation, propertyName, "HasColumnType", columnType);
+        }
+
+        return InsertStringArgEntityBlock(root, entityName, propertyName, "HasColumnType", columnType);
+    }
+
+    public string RemoveColumnType(string sourceCode, string entityName, string propertyName)
+    {
+        return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasColumnType");
+    }
+
     private static string MutateExistingStringArgCall(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string value)
     {
         var newArgument = SyntaxFactory.Argument(
