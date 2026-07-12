@@ -161,4 +161,31 @@ public class PropertyModelTests
 
         Assert.Null(index.Name);
     }
+
+    [Fact]
+    public void RelationshipModel_ForeignKeyProperties_DefaultsToEmpty()
+    {
+        var relationship = new RelationshipModel(
+            "Customer", "Order", RelationshipKind.OneToMany,
+            PrincipalNavigation: "Orders", DependentNavigation: "Customer");
+
+        Assert.Empty(relationship.ForeignKeyProperties);
+        Assert.Null(relationship.OnDeleteBehavior);
+        Assert.Null(relationship.JoinEntityName);
+    }
+
+    [Fact]
+    public void RelationshipModel_WithForeignKeyProperties_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new RelationshipModel(
+            "Customer", "Order", RelationshipKind.OneToMany,
+            PrincipalNavigation: "Orders", DependentNavigation: "Customer");
+
+        var updated = original with { ForeignKeyProperties = new List<string> { "CustomerId" }, OnDeleteBehavior = "Cascade" };
+
+        Assert.Empty(original.ForeignKeyProperties);
+        Assert.Equal(new[] { "CustomerId" }, updated.ForeignKeyProperties);
+        Assert.Equal("Cascade", updated.OnDeleteBehavior);
+        Assert.Equal(original.PrincipalEntity, updated.PrincipalEntity);
+    }
 }
