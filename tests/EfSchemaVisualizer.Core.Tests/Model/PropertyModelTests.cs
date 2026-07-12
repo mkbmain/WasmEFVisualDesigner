@@ -53,6 +53,31 @@ public class PropertyModelTests
     }
 
     [Fact]
+    public void WithColumnMapping_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new PropertyModel("Total", "decimal", IsNullable: false, MaxLength: null);
+
+        var updated = original with { ColumnName = "total_amount", ColumnType = "decimal(18,2)", DefaultValueLiteral = "0" };
+
+        Assert.Null(original.ColumnName);
+        Assert.Null(original.ColumnType);
+        Assert.Null(original.DefaultValueLiteral);
+        Assert.Equal("total_amount", updated.ColumnName);
+        Assert.Equal("decimal(18,2)", updated.ColumnType);
+        Assert.Equal("0", updated.DefaultValueLiteral);
+    }
+
+    [Fact]
+    public void ColumnMappingFields_DefaultToNull()
+    {
+        var property = new PropertyModel("Total", "decimal", IsNullable: false, MaxLength: null);
+
+        Assert.Null(property.ColumnName);
+        Assert.Null(property.ColumnType);
+        Assert.Null(property.DefaultValueLiteral);
+    }
+
+    [Fact]
     public void EntityModel_ExposesNameAndProperties()
     {
         var properties = new List<PropertyModel>
@@ -106,6 +131,27 @@ public class PropertyModelTests
         Assert.Single(updated.Indexes);
         Assert.Equal("IX_Email", updated.Indexes[0].Name);
         Assert.True(updated.Indexes[0].IsUnique);
+    }
+
+    [Fact]
+    public void EntityModel_TableNameAndSchema_DefaultToNull()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        Assert.Null(entity.TableName);
+        Assert.Null(entity.Schema);
+    }
+
+    [Fact]
+    public void EntityModel_WithTableNameAndSchema_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new EntityModel("Person", new List<PropertyModel>());
+
+        var updated = original with { TableName = "People", Schema = "dbo" };
+
+        Assert.Null(original.TableName);
+        Assert.Equal("People", updated.TableName);
+        Assert.Equal("dbo", updated.Schema);
     }
 
     [Fact]

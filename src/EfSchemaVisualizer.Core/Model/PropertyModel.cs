@@ -7,4 +7,7 @@ public sealed record PropertyModel(
     int? MaxLength,
     bool? IsRequiredOverride = null,
     int? Precision = null,
-    int? Scale = null);
+    int? Scale = null,
+    string? ColumnName = null,
+    string? ColumnType = null,
+    string? DefaultValueLiteral = null);
