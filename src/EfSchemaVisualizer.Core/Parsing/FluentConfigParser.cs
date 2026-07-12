@@ -225,7 +225,7 @@ public sealed class FluentConfigParser
             {
                 foreach (var hasKeyCall in FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasKey"))
                 {
-                    var propertyNames = TryReadKeyPropertyNames(hasKeyCall);
+                    var propertyNames = FluentSyntaxHelpers.TryReadPropertyNameList(hasKeyCall);
 
                     if (propertyNames is null)
                     {
@@ -244,58 +244,6 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<KeyConfig>>(results, diagnostics);
-    }
-
-    private static IReadOnlyList<string>? TryReadKeyPropertyNames(InvocationExpressionSyntax hasKeyCall)
-    {
-        var arguments = hasKeyCall.ArgumentList.Arguments;
-
-        if (arguments.Count == 0)
-        {
-            return null;
-        }
-
-        if (arguments.All(a => a.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression)))
-        {
-            return arguments
-                .Select(a => ((LiteralExpressionSyntax)a.Expression).Token.ValueText)
-                .ToList();
-        }
-
-        if (arguments.Count == 1 && arguments[0].Expression is SimpleLambdaExpressionSyntax { ExpressionBody: { } body })
-        {
-            return TryReadKeyPropertyNamesFromLambdaBody(body);
-        }
-
-        return null;
-    }
-
-    private static IReadOnlyList<string>? TryReadKeyPropertyNamesFromLambdaBody(ExpressionSyntax body)
-    {
-        if (body is MemberAccessExpressionSyntax { Name.Identifier.Text: var singleName })
-        {
-            return new List<string> { singleName };
-        }
-
-        if (body is AnonymousObjectCreationExpressionSyntax anonymousObject)
-        {
-            var names = new List<string>();
-
-            foreach (var initializer in anonymousObject.Initializers)
-            {
-                if (initializer.NameEquals is not null
-                    || initializer.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var name })
-                {
-                    return null;
-                }
-
-                names.Add(name);
-            }
-
-            return names;
-        }
-
-        return null;
     }
 
     public ParseResult<IReadOnlyList<TableConfig>> ParseTableMappings(string sourceCode)

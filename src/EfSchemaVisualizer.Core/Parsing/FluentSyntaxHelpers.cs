@@ -4,6 +4,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("EfSchemaVisualizer.Core.Tests")]
+
 namespace EfSchemaVisualizer.Core.Parsing;
 
 internal static class FluentSyntaxHelpers
@@ -113,6 +115,62 @@ internal static class FluentSyntaxHelpers
         }
 
         return "e";
+    }
+
+    /// Reads a property name list from an invocation's arguments: a single lambda member access
+    /// (`e => e.Id`), a composite anonymous-object lambda (`e => new { e.A, e.B }`), or bare string
+    /// literal params (single or composite), e.g. for `HasKey(...)` or `HasForeignKey(...)`.
+    /// Returns null when the argument shape isn't recognized.
+    internal static IReadOnlyList<string>? TryReadPropertyNameList(InvocationExpressionSyntax call)
+    {
+        var arguments = call.ArgumentList.Arguments;
+
+        if (arguments.Count == 0)
+        {
+            return null;
+        }
+
+        if (arguments.All(a => a.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression)))
+        {
+            return arguments
+                .Select(a => ((LiteralExpressionSyntax)a.Expression).Token.ValueText)
+                .ToList();
+        }
+
+        if (arguments.Count == 1 && arguments[0].Expression is SimpleLambdaExpressionSyntax { ExpressionBody: { } body })
+        {
+            return TryReadPropertyNameListFromLambdaBody(body);
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string>? TryReadPropertyNameListFromLambdaBody(ExpressionSyntax body)
+    {
+        if (body is MemberAccessExpressionSyntax { Name.Identifier.Text: var singleName })
+        {
+            return new List<string> { singleName };
+        }
+
+        if (body is AnonymousObjectCreationExpressionSyntax anonymousObject)
+        {
+            var names = new List<string>();
+
+            foreach (var initializer in anonymousObject.Initializers)
+            {
+                if (initializer.NameEquals is not null
+                    || initializer.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var name })
+                {
+                    return null;
+                }
+
+                names.Add(name);
+            }
+
+            return names;
+        }
+
+        return null;
     }
 
     internal static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)
