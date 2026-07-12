@@ -1062,14 +1062,40 @@ public class OnModelCreatingRewriterTests
         Assert.DoesNotContain("HasPrecision(18, 2)", result);
     }
 
+    // Deliberately irregular formatting (mismatched indentation on the untouched sibling
+    // statement, a blank line before it, and non-canonical spacing before its trailing
+    // comment) that Roslyn's NormalizeWhitespace() would rewrite away but a surgical,
+    // non-reformatting edit must leave completely untouched.
+    private const string PrecisionSourceWithIrregularFormatting = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                        entity.Property(e => e.Total).HasPrecision(18, 2);
+
+                    entity.Property(e => e.Rate).HasPrecision(5);   // rate note
+                });
+            }
+        }
+        """;
+
     [Fact]
     public void RewritePrecision_ExistingCall_LeavesEverythingElseIdentical()
     {
         var result = new OnModelCreatingRewriter()
-            .RewritePrecision(PrecisionSource, entityName: "Order", propertyName: "Total", precision: 20, scale: 4);
+            .RewritePrecision(PrecisionSourceWithIrregularFormatting, entityName: "Order", propertyName: "Total", precision: 20, scale: 4);
 
-        Assert.Contains("entity.Property(e => e.Total).HasPrecision(20, 4)", result);
-        Assert.Contains("entity.Property(e => e.Rate).HasPrecision(5)", result);
+        // The mutated call's arguments change, but every other byte of the file - including
+        // the sibling statement's mismatched indentation, the blank line above it, and the
+        // irregular spacing before its trailing comment - must survive untouched. A whole-file
+        // NormalizeWhitespace() pass would silently reformat all of these away.
+        var expected = PrecisionSourceWithIrregularFormatting.Replace(
+            "entity.Property(e => e.Total).HasPrecision(18, 2);",
+            "entity.Property(e => e.Total).HasPrecision(20, 4);");
+
+        Assert.Equal(expected, result);
     }
 
     [Fact]
