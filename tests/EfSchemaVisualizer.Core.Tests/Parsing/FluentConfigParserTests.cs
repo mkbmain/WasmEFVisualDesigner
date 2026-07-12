@@ -1454,4 +1454,78 @@ public class FluentConfigParserTests
         Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
         Assert.Equal("Restrict", relationship.OnDeleteBehavior);
     }
+
+    private static readonly IReadOnlyList<EntityModel> PersonAddressEntities = new List<EntityModel>
+    {
+        new("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Address", "Address", IsNullable: true, MaxLength: null),
+        }),
+        new("Address", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("PersonId", "int", IsNullable: false, MaxLength: null),
+            new("Person", "Person", IsNullable: false, MaxLength: null),
+        }),
+    };
+
+    [Fact]
+    public void ParseRelationships_HasOneWithOne_ExplicitForeignKeyGeneric_ResolvesDependent()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasOne(p => p.Address)
+                              .WithOne(a => a.Person)
+                              .HasForeignKey<Address>(a => a.PersonId);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PersonAddressEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.OneToOne, relationship.Kind);
+        Assert.Equal("Person", relationship.PrincipalEntity);
+        Assert.Equal("Address", relationship.DependentEntity);
+        Assert.Equal("Address", relationship.PrincipalNavigation);
+        Assert.Equal("Person", relationship.DependentNavigation);
+        Assert.Equal(new[] { "PersonId" }, relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_HasOneWithOne_NoExplicitGeneric_DefaultsDependentToConfiguringEntity()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Address>(entity =>
+                    {
+                        entity.HasOne(a => a.Person)
+                              .WithOne(p => p.Address)
+                              .HasForeignKey(a => a.PersonId);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PersonAddressEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.OneToOne, relationship.Kind);
+        Assert.Equal("Address", relationship.DependentEntity);
+        Assert.Equal("Person", relationship.PrincipalEntity);
+        Assert.Equal("Person", relationship.DependentNavigation);
+        Assert.Equal("Address", relationship.PrincipalNavigation);
+    }
 }
