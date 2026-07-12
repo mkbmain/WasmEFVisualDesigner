@@ -168,7 +168,19 @@ these matter before any new surface is added.
       emitting the canonical lambda form with optional `.IsUnique()` chain and inline
       name arg (see `2026-07-11-has-index-config-design.md`).
 - [ ] **`[spec]` Relationships** — 1:1, 1:many, many:many (`HasOne`/`WithMany`/`HasForeignKey` etc.). Largest single item; likely its own plan.
-- [ ] **`[spec]` Column/table mapping** — `ToTable`, `HasColumnName`, `HasColumnType`, default values.
+- [x] **`[spec]` Column/table mapping** — `ToTable`, `HasColumnName`, `HasColumnType`, default values.
+      **Update:** `FluentConfigParser.ParseTableMappings`/`ParseColumnNames`/
+      `ParseColumnTypes`/`ParseDefaultValues` read `ToTable(name[, schema])`,
+      `HasColumnName(...)`, `HasColumnType(...)`, and `HasDefaultValue(...)`
+      (literals only) into four separate config DTOs;
+      `ModelMerger.ApplyTableMapping`/`ApplyColumnNames`/`ApplyColumnTypes`/
+      `ApplyDefaultValues` fold them into `EntityModel.TableName`/`Schema`
+      and `PropertyModel.ColumnName`/`ColumnType`/`DefaultValueLiteral`;
+      `OnModelCreatingRewriter.SetTable`/`SetColumnName`/`SetColumnType`/
+      `SetDefaultValue` (and their `Remove*` counterparts) write it back,
+      reusing the `HasKey`/`HasMaxLength` dispatch patterns (see
+      `2026-07-12-column-table-mapping-config-design.md`). `HasDefaultValueSql`
+      and non-literal defaults remain out of scope.
 - [ ] **`[found]` Diagnostic codes are bare string literals.** `NoEntityDeclarations`,
       `UnresolvablePropertyName`, and `UnreadableMaxLengthArgument` are currently
       scattered as bare string literals across `EntityClassParser.cs` and
