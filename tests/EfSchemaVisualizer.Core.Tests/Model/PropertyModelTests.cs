@@ -30,6 +30,29 @@ public class PropertyModelTests
     }
 
     [Fact]
+    public void WithPrecisionAndScale_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new PropertyModel("Total", "decimal", IsNullable: false, MaxLength: null);
+
+        var updated = original with { Precision = 18, Scale = 2 };
+
+        Assert.Null(original.Precision);
+        Assert.Null(original.Scale);
+        Assert.Equal(18, updated.Precision);
+        Assert.Equal(2, updated.Scale);
+        Assert.Equal(original.Name, updated.Name);
+    }
+
+    [Fact]
+    public void Precision_And_Scale_DefaultToNull()
+    {
+        var property = new PropertyModel("Total", "decimal", IsNullable: false, MaxLength: null);
+
+        Assert.Null(property.Precision);
+        Assert.Null(property.Scale);
+    }
+
+    [Fact]
     public void EntityModel_ExposesNameAndProperties()
     {
         var properties = new List<PropertyModel>
