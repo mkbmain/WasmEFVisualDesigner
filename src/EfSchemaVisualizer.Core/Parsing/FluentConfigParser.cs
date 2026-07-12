@@ -471,6 +471,61 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<ColumnTypeConfig>>(results, diagnostics);
     }
 
+    public ParseResult<IReadOnlyList<DefaultValueConfig>> ParseDefaultValues(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<DefaultValueConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        var entityNames = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+            .Where(name => name is not null)
+            .Distinct()!;
+
+        foreach (var entityName in entityNames)
+        {
+            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
+            {
+                foreach (var call in FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasDefaultValue"))
+                {
+                    var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                    if (propertyName is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnresolvablePropertyName",
+                            "Could not determine which property this HasDefaultValue call configures.",
+                            entityName,
+                            PropertyName: null,
+                            call.Span));
+                        continue;
+                    }
+
+                    var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+                    if (arg?.Expression is LiteralExpressionSyntax literal)
+                    {
+                        results.Add(new DefaultValueConfig(entityName!, propertyName, literal.ToString()));
+                    }
+                    else
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            "UnreadableHasDefaultValueArgument",
+                            "HasDefaultValue argument is not a literal and could not be read.",
+                            entityName,
+                            propertyName,
+                            (arg ?? (SyntaxNode)call).Span));
+                    }
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<DefaultValueConfig>>(results, diagnostics);
+    }
+
     public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexes(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

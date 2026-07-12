@@ -1018,4 +1018,58 @@ public class FluentConfigParserTests
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("Total", diagnostic.PropertyName);
     }
+
+    private const string DefaultValueSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Quantity).HasDefaultValue(1);
+                    entity.Property(e => e.Status).HasDefaultValue("pending");
+                    entity.Property(e => e.IsArchived).HasDefaultValue(false);
+                    entity.Property(e => e.CanceledAt).HasDefaultValue(null);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseDefaultValues_ReadsNumericStringBoolAndNullLiterals()
+    {
+        var result = new FluentConfigParser().ParseDefaultValues(DefaultValueSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(4, result.Value.Count);
+        Assert.Contains(result.Value, c => c is { EntityName: "Order", PropertyName: "Quantity", LiteralText: "1" });
+        Assert.Contains(result.Value, c => c is { EntityName: "Order", PropertyName: "Status", LiteralText: "\"pending\"" });
+        Assert.Contains(result.Value, c => c is { EntityName: "Order", PropertyName: "IsArchived", LiteralText: "false" });
+        Assert.Contains(result.Value, c => c is { EntityName: "Order", PropertyName: "CanceledAt", LiteralText: "null" });
+    }
+
+    private const string DefaultValueSourceWithMemberAccessArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.CreatedAt).HasDefaultValue(DateTime.UtcNow);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseDefaultValues_MemberAccessArgument_EmitsUnreadableHasDefaultValueArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseDefaultValues(DefaultValueSourceWithMemberAccessArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("UnreadableHasDefaultValueArgument", diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        Assert.Equal("CreatedAt", diagnostic.PropertyName);
+    }
 }
