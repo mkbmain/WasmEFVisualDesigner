@@ -479,6 +479,121 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetTable(string sourceCode, string entityName, string tableName, string? schema)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingToTableCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "ToTable"))
+            .FirstOrDefault();
+
+        if (existingToTableCall is not null)
+        {
+            return MutateExistingTable(root, existingToTableCall, tableName, schema);
+        }
+
+        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+
+        if (existingEntityInvocation is not null)
+        {
+            return InsertTableStatement(root, existingEntityInvocation, tableName, schema);
+        }
+
+        return InsertTableEntityBlock(root, entityName, tableName, schema);
+    }
+
+    private static string MutateExistingTable(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string tableName, string? schema)
+    {
+        var newCall = targetCall.WithArgumentList(BuildToTableArgumentList(tableName, schema));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertTableStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string tableName, string? schema)
+    {
+        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
+        var block = lambda.Block!;
+        var blockReceiverName = lambda.Parameter.Identifier.Text;
+
+        var newStatement = BuildToTableStatement(blockReceiverName, tableName, schema);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertTableEntityBlock(CompilationUnitSyntax root, string entityName, string tableName, string? schema)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var tableStatement = BuildToTableStatement("entity", tableName, schema);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(tableStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildToTableStatement(string blockReceiverName, string tableName, string? schema)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("ToTable")),
+                BuildToTableArgumentList(tableName, schema)));
+    }
+
+    private static ArgumentListSyntax BuildToTableArgumentList(string tableName, string? schema)
+    {
+        var tableNameArg = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(tableName)));
+
+        if (schema is null)
+        {
+            return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(tableNameArg));
+        }
+
+        var schemaArg = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(schema)));
+
+        return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[] { tableNameArg, schemaArg }));
+    }
+
+    public string RemoveTable(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingToTableCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "ToTable"))
+            .FirstOrDefault();
+
+        if (existingToTableCall is null || existingToTableCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

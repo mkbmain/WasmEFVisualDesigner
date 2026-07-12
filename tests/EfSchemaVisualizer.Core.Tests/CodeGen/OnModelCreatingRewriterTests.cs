@@ -1186,4 +1186,92 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(SourceWithPropertyButNoPrecision, result);
     }
+
+    private const string TableMappingSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToTable("People", "dbo");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetTable_ExistingCall_MutatesArguments()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetTable(TableMappingSource, entityName: "Person", tableName: "Persons", schema: "sales");
+
+        Assert.Contains("entity.ToTable(\"Persons\", \"sales\")", result);
+        Assert.DoesNotContain("ToTable(\"People\", \"dbo\")", result);
+    }
+
+    [Fact]
+    public void SetTable_ExistingCall_MutatesFromSchemaToNoSchema()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetTable(TableMappingSource, entityName: "Person", tableName: "Persons", schema: null);
+
+        Assert.Contains("entity.ToTable(\"Persons\")", result);
+        Assert.DoesNotContain("ToTable(\"People\", \"dbo\")", result);
+    }
+
+    private const string SourceWithEntityConfiguredNoTable = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetTable_EntityConfiguredWithoutToTable_InsertsStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetTable(SourceWithEntityConfiguredNoTable, entityName: "Person", tableName: "People", schema: "dbo");
+
+        Assert.Contains("entity.ToTable(\"People\", \"dbo\")", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void SetTable_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetTable(TableMappingSource, entityName: "Vehicle", tableName: "Vehicles", schema: null);
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.ToTable(\"Vehicles\")", result);
+
+        var configs = new FluentConfigParser().ParseTableMappings(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Vehicle", TableName: "Vehicles", Schema: null });
+        Assert.Contains(configs, c => c is { EntityName: "Person", TableName: "People", Schema: "dbo" });
+    }
+
+    [Fact]
+    public void RemoveTable_ExistingCall_RemovesStatementEntirely()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveTable(TableMappingSource, entityName: "Person");
+
+        Assert.DoesNotContain("ToTable", result);
+    }
+
+    [Fact]
+    public void RemoveTable_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveTable(SourceWithEntityConfiguredNoTable, entityName: "Person");
+
+        Assert.Equal(SourceWithEntityConfiguredNoTable, result);
+    }
 }
