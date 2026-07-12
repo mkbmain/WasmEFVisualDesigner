@@ -605,6 +605,28 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string RemovePrecision(string sourceCode, string entityName, string propertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+
+        var existingPrecisionCall = entityInvocations
+            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasPrecision"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingPrecisionCall is null)
+        {
+            return sourceCode;
+        }
+
+        var propertyCallExpression = ((MemberAccessExpressionSyntax)existingPrecisionCall.Expression).Expression;
+
+        var newRoot = root.ReplaceNode(existingPrecisionCall, propertyCallExpression);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string RemoveIsRequired(string sourceCode, string entityName, string propertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

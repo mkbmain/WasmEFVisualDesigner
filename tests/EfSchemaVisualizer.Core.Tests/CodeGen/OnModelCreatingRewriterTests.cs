@@ -1166,4 +1166,24 @@ public class OnModelCreatingRewriterTests
         Assert.Contains(configs, c => c is { EntityName: "Vehicle", PropertyName: "Weight", Precision: 8, Scale: 1 });
         Assert.Contains(configs, c => c is { EntityName: "Order", PropertyName: "Total", Precision: 18, Scale: 2 });
     }
+
+    [Fact]
+    public void RemovePrecision_ExistingCall_RemovesHasPrecisionCall_LeavesBarePropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemovePrecision(PrecisionSource, entityName: "Order", propertyName: "Total");
+
+        Assert.Contains("entity.Property(e => e.Total);", result);
+        Assert.DoesNotContain("HasPrecision(18, 2)", result);
+        Assert.Contains("entity.Property(e => e.Rate).HasPrecision(5)", result);
+    }
+
+    [Fact]
+    public void RemovePrecision_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemovePrecision(SourceWithPropertyButNoPrecision, entityName: "Order", propertyName: "Total");
+
+        Assert.Equal(SourceWithPropertyButNoPrecision, result);
+    }
 }
