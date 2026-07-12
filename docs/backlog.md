@@ -143,7 +143,13 @@ these matter before any new surface is added.
       kept separate from CLR-derived `IsNullable`; `OnModelCreatingRewriter.RewriteIsRequired`/
       `RemoveIsRequired` mirror the full `HasMaxLength` rewrite/remove pattern (see
       `2026-07-09-is-required-config-design.md`).
-- [ ] **`[spec/plan]` Precision / scale** (`HasPrecision`) for decimal.
+- [x] **`[spec/plan]` Precision / scale** (`HasPrecision`) for decimal.
+      **Update:** `FluentConfigParser.ParsePrecisions` reads `HasPrecision(18)`
+      and `HasPrecision(18, 2)` into `PrecisionConfig`; `ModelMerger.ApplyPrecisions`
+      folds that into `PropertyModel.Precision`/`Scale`;
+      `OnModelCreatingRewriter.RewritePrecision`/`RemovePrecision` reuse the
+      same four-case dispatch built for `HasMaxLength` (see
+      `2026-07-12-has-precision-config-design.md`).
 - [x] **`[spec]` Keys** — `HasKey`, including composite keys.
       **Update:** `FluentConfigParser.ParseKeys` reads `HasKey(e => e.Id)`,
       `HasKey(e => new { e.A, e.B })`, `HasKey("Id")`, and
