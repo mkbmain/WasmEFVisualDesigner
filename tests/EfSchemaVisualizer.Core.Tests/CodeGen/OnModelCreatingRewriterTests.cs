@@ -1425,4 +1425,91 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(SourceWithPropertyButNoColumnType, result);
     }
+
+    private const string DefaultValueSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Quantity).HasDefaultValue(1);
+                    entity.Property(e => e.Status).HasDefaultValue("pending");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetDefaultValue_ExistingCall_MutatesArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetDefaultValue(DefaultValueSource, entityName: "Order", propertyName: "Quantity", literalText: "5");
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasDefaultValue(5)", result);
+        Assert.Contains("entity.Property(e => e.Status).HasDefaultValue(\"pending\")", result);
+        Assert.DoesNotContain("HasDefaultValue(1)", result);
+    }
+
+    [Fact]
+    public void SetDefaultValue_ExistingCall_MutatesStringLiteralArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetDefaultValue(DefaultValueSource, entityName: "Order", propertyName: "Status", literalText: "\"active\"");
+
+        Assert.Contains("entity.Property(e => e.Status).HasDefaultValue(\"active\")", result);
+        Assert.DoesNotContain("HasDefaultValue(\"pending\")", result);
+    }
+
+    private const string SourceWithPropertyButNoDefaultValue = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Quantity);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetDefaultValue_BarePropertyCall_AppendsHasDefaultValue()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetDefaultValue(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", literalText: "1");
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasDefaultValue(1)", result);
+    }
+
+    [Fact]
+    public void SetDefaultValue_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetDefaultValue(DefaultValueSource, entityName: "Vehicle", propertyName: "Wheels", literalText: "4");
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Wheels).HasDefaultValue(4)", result);
+    }
+
+    [Fact]
+    public void RemoveDefaultValue_ExistingCall_RemovesCall_LeavesBarePropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveDefaultValue(DefaultValueSource, entityName: "Order", propertyName: "Quantity");
+
+        Assert.Contains("entity.Property(e => e.Quantity);", result);
+        Assert.DoesNotContain("HasDefaultValue(1)", result);
+        Assert.Contains("entity.Property(e => e.Status).HasDefaultValue(\"pending\")", result);
+    }
+
+    [Fact]
+    public void RemoveDefaultValue_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveDefaultValue(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity");
+
+        Assert.Equal(SourceWithPropertyButNoDefaultValue, result);
+    }
 }
