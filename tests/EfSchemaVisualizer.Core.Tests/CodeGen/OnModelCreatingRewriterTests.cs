@@ -1274,4 +1274,81 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(SourceWithEntityConfiguredNoTable, result);
     }
+
+    private const string ColumnNameSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasColumnName("full_name");
+                    entity.Property(e => e.Email).HasColumnName("email_address");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetColumnName_ExistingCall_MutatesArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnName(ColumnNameSource, entityName: "Person", propertyName: "Name", columnName: "display_name");
+
+        Assert.Contains("entity.Property(e => e.Name).HasColumnName(\"display_name\")", result);
+        Assert.Contains("entity.Property(e => e.Email).HasColumnName(\"email_address\")", result);
+        Assert.DoesNotContain("HasColumnName(\"full_name\")", result);
+    }
+
+    private const string SourceWithPropertyButNoColumnName = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetColumnName_BarePropertyCall_AppendsHasColumnName()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnName(SourceWithPropertyButNoColumnName, entityName: "Person", propertyName: "Name", columnName: "full_name");
+
+        Assert.Contains("entity.Property(e => e.Name).HasColumnName(\"full_name\")", result);
+    }
+
+    [Fact]
+    public void SetColumnName_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnName(ColumnNameSource, entityName: "Vehicle", propertyName: "Vin", columnName: "vin_number");
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Vin).HasColumnName(\"vin_number\")", result);
+    }
+
+    [Fact]
+    public void RemoveColumnName_ExistingCall_RemovesCall_LeavesBarePropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveColumnName(ColumnNameSource, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("entity.Property(e => e.Name);", result);
+        Assert.DoesNotContain("HasColumnName(\"full_name\")", result);
+        Assert.Contains("entity.Property(e => e.Email).HasColumnName(\"email_address\")", result);
+    }
+
+    [Fact]
+    public void RemoveColumnName_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveColumnName(SourceWithPropertyButNoColumnName, entityName: "Person", propertyName: "Name");
+
+        Assert.Equal(SourceWithPropertyButNoColumnName, result);
+    }
 }
