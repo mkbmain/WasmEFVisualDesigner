@@ -67,4 +67,56 @@ public static class ModelMerger
 
         return entity with { Indexes = indexes };
     }
+
+    public static EntityModel ApplyTableMapping(EntityModel entity, IReadOnlyList<TableConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { TableName = config.TableName, Schema = config.Schema };
+    }
+
+    public static EntityModel ApplyColumnNames(EntityModel entity, IReadOnlyList<ColumnNameConfig> configs)
+    {
+        var updatedProperties = entity.Properties
+            .Select(property =>
+            {
+                var config = configs.FirstOrDefault(c =>
+                    c.EntityName == entity.Name && c.PropertyName == property.Name);
+
+                return config is null ? property : property with { ColumnName = config.ColumnName };
+            })
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
+    public static EntityModel ApplyColumnTypes(EntityModel entity, IReadOnlyList<ColumnTypeConfig> configs)
+    {
+        var updatedProperties = entity.Properties
+            .Select(property =>
+            {
+                var config = configs.FirstOrDefault(c =>
+                    c.EntityName == entity.Name && c.PropertyName == property.Name);
+
+                return config is null ? property : property with { ColumnType = config.ColumnType };
+            })
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
+    public static EntityModel ApplyDefaultValues(EntityModel entity, IReadOnlyList<DefaultValueConfig> configs)
+    {
+        var updatedProperties = entity.Properties
+            .Select(property =>
+            {
+                var config = configs.FirstOrDefault(c =>
+                    c.EntityName == entity.Name && c.PropertyName == property.Name);
+
+                return config is null ? property : property with { DefaultValueLiteral = config.LiteralText };
+            })
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
 }

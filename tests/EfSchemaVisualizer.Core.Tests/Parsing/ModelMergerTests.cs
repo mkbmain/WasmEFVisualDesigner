@@ -198,4 +198,93 @@ public class ModelMergerTests
         Assert.Equal("Email", result.Properties[0].Name);
         Assert.Equal(new[] { "Id" }, result.KeyPropertyNames);
     }
+
+    [Fact]
+    public void ApplyTableMapping_SetsTableNameAndSchema_OnMatchingEntity()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var configs = new List<TableConfig>
+        {
+            new("Person", "People", "dbo"),
+            new("Address", "Addresses", null), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyTableMapping(entity, configs);
+
+        Assert.Equal("People", merged.TableName);
+        Assert.Equal("dbo", merged.Schema);
+    }
+
+    [Fact]
+    public void ApplyTableMapping_NoMatchingConfig_LeavesTableNameAndSchemaNull()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplyTableMapping(entity, new List<TableConfig>());
+
+        Assert.Null(merged.TableName);
+        Assert.Null(merged.Schema);
+    }
+
+    [Fact]
+    public void ApplyColumnNames_SetsColumnNameOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var configs = new List<ColumnNameConfig>
+        {
+            new("Person", "Name", "full_name"),
+            new("Address", "Line1", "line_1"), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyColumnNames(entity, configs);
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").ColumnName);
+        Assert.Equal("full_name", merged.Properties.Single(p => p.Name == "Name").ColumnName);
+    }
+
+    [Fact]
+    public void ApplyColumnTypes_SetsColumnTypeOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Total", "decimal", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<ColumnTypeConfig>
+        {
+            new("Order", "Total", "decimal(18,2)"),
+        };
+
+        var merged = ModelMerger.ApplyColumnTypes(entity, configs);
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").ColumnType);
+        Assert.Equal("decimal(18,2)", merged.Properties.Single(p => p.Name == "Total").ColumnType);
+    }
+
+    [Fact]
+    public void ApplyDefaultValues_SetsDefaultValueLiteralOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Quantity", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<DefaultValueConfig>
+        {
+            new("Order", "Quantity", "1"),
+        };
+
+        var merged = ModelMerger.ApplyDefaultValues(entity, configs);
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").DefaultValueLiteral);
+        Assert.Equal("1", merged.Properties.Single(p => p.Name == "Quantity").DefaultValueLiteral);
+    }
 }
