@@ -1669,4 +1669,164 @@ public class FluentConfigParserTests
         var relationship = Assert.Single(result.Value);
         Assert.Null(relationship.JoinEntityName);
     }
+
+    [Fact]
+    public void ParsePrecisions_EntityTypeConfigurationStyle_ReadsConfiguredProperty()
+    {
+        const string source = """
+            public class ProductConfiguration : IEntityTypeConfiguration<Product>
+            {
+                public void Configure(EntityTypeBuilder<Product> builder)
+                {
+                    builder.Property(e => e.Price).HasPrecision(18, 2);
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParsePrecisions(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Product", PropertyName: "Price", Precision: 18, Scale: 2 });
+    }
+
+    [Fact]
+    public void ParseIsRequired_EntityTypeConfigurationStyle_ReadsConfiguredProperty()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.Property(e => e.Name).IsRequired();
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIsRequired(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", IsRequired: true });
+    }
+
+    [Fact]
+    public void ParseKeys_EntityTypeConfigurationStyle_ReadsConfiguredKey()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.HasKey(e => e.Id);
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseKeys(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal(new[] { "Id" }, config.PropertyNames);
+    }
+
+    [Fact]
+    public void ParseTableMappings_EntityTypeConfigurationStyle_ReadsConfiguredTable()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.ToTable("People", "dbo");
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseTableMappings(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("People", config.TableName);
+        Assert.Equal("dbo", config.Schema);
+    }
+
+    [Fact]
+    public void ParseColumnNames_EntityTypeConfigurationStyle_ReadsConfiguredColumnName()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.Property(e => e.Name).HasColumnName("full_name");
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseColumnNames(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", ColumnName: "full_name" });
+    }
+
+    [Fact]
+    public void ParseColumnTypes_EntityTypeConfigurationStyle_ReadsConfiguredColumnType()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.Property(e => e.Name).HasColumnType("varchar(100)");
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseColumnTypes(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", ColumnType: "varchar(100)" });
+    }
+
+    [Fact]
+    public void ParseDefaultValues_EntityTypeConfigurationStyle_ReadsConfiguredDefault()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.Property(e => e.IsActive).HasDefaultValue(true);
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseDefaultValues(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "IsActive" } && c.LiteralText == "true");
+    }
+
+    [Fact]
+    public void ParseIndexes_EntityTypeConfigurationStyle_ReadsConfiguredIndex()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.HasIndex(e => e.Email).IsUnique();
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.True(config.IsUnique);
+    }
 }
