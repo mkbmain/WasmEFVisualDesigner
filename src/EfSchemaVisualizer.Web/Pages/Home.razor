@@ -1,80 +1,141 @@
-﻿@page "/"
+@page "/"
+@using EfSchemaVisualizer.Core.Model
 @using EfSchemaVisualizer.Core.Parsing
+@using EfSchemaVisualizer.Web.Diagram
+@using Blazor.Diagrams
+@using Blazor.Diagrams.Components
+@using Blazor.Diagrams.Core.Geometry
+@using Blazor.Diagrams.Core.Models
+@using Blazor.Diagrams.Options
 
 <PageTitle>EF Schema Visualizer</PageTitle>
 
-<h1>EF Schema Visualizer — Parser Demo</h1>
+<h1>EF Schema Visualizer — ER Diagram</h1>
 
-<p>Paste a C# entity class below and click Parse to run it through <code>EntityClassParser</code> directly in the browser.</p>
+<p>Paste entity classes and matching <code>OnModelCreating</code> fluent config below, then click Render Diagram.</p>
 
-<textarea @bind="_sourceCode" @bind:event="oninput" rows="12" style="width: 100%; font-family: monospace;"></textarea>
+<div style="display: flex; gap: 16px;">
+    <div style="flex: 1;">
+        <label>Entity classes</label>
+        <textarea @bind="_classSource" @bind:event="oninput" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+    </div>
+    <div style="flex: 1;">
+        <label>DbContext / OnModelCreating</label>
+        <textarea @bind="_configSource" @bind:event="oninput" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+    </div>
+</div>
 
 <p>
-    <button class="btn btn-primary" @onclick="Parse">Parse</button>
+    <button class="btn btn-primary" @onclick="RenderDiagram">Render Diagram</button>
 </p>
 
 @if (_error is not null)
 {
     <pre style="color: red;">@_error</pre>
 }
-else if (_result is not null)
+
+@if (_diagnostics is { Count: > 0 })
 {
-    <pre>@FormatResult(_result)</pre>
+    <pre style="color: darkorange;">Diagnostics:
+@foreach (var diagnostic in _diagnostics)
+{
+    @($"  [{diagnostic.Code}] {diagnostic.Message}{Environment.NewLine}")
+}</pre>
+}
+
+@if (_diagram is not null)
+{
+    <div style="height: 600px; width: 100%; border: 1px solid #ccc;">
+        <CascadingValue Value="_diagram">
+            <DiagramCanvas />
+        </CascadingValue>
+    </div>
 }
 
 @code {
-    private string _sourceCode = """
-        public class Person
+    private string _classSource = """
+        public class Blog
         {
             public int Id { get; set; }
-            public string Name { get; set; } = "";
-            public int? Age { get; set; }
+            public string Title { get; set; } = "";
+        }
+
+        public class Post
+        {
+            public int Id { get; set; }
+            public string Title { get; set; } = "";
+            public int BlogId { get; set; }
+            public Blog Blog { get; set; } = null!;
         }
         """;
 
-    private ParseResult<IReadOnlyList<EfSchemaVisualizer.Core.Model.EntityModel>>? _result;
+    private string _configSource = """
+        modelBuilder.Entity<Blog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+        });
+
+        modelBuilder.Entity<Post>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Blog).WithMany().HasForeignKey(e => e.BlogId);
+        });
+        """;
+
+    private BlazorDiagram? _diagram;
+    private IReadOnlyList<Diagnostic>? _diagnostics;
     private string? _error;
 
-    private void Parse()
+    private void RenderDiagram()
     {
         _error = null;
-        _result = null;
+        _diagnostics = null;
+        _diagram = null;
 
         try
         {
-            var parser = new EntityClassParser();
-            _result = parser.Parse(_sourceCode);
+            var result = DiagramModelBuilder.Build(_classSource, _configSource);
+            _diagnostics = result.Diagnostics;
+
+            var diagram = new BlazorDiagram(new BlazorDiagramOptions
+            {
+                AllowMultiSelection = true,
+            });
+            diagram.RegisterComponent<EntityNodeModel, EntityNode>();
+
+            var nodesByEntityName = new Dictionary<string, EntityNodeModel>();
+            const int columns = 4;
+            const double xSpacing = 320;
+            const double ySpacing = 260;
+
+            for (var i = 0; i < result.Entities.Count; i++)
+            {
+                var entity = result.Entities[i];
+                var column = i % columns;
+                var row = i / columns;
+                var node = new EntityNodeModel(entity, new Point(column * xSpacing, row * ySpacing));
+                diagram.Nodes.Add(node);
+                nodesByEntityName[entity.Name] = node;
+            }
+
+            foreach (var relationship in result.Relationships)
+            {
+                if (!nodesByEntityName.TryGetValue(relationship.PrincipalEntity, out var principalNode) ||
+                    !nodesByEntityName.TryGetValue(relationship.DependentEntity, out var dependentNode))
+                {
+                    continue;
+                }
+
+                var link = new LinkModel(dependentNode, principalNode);
+                link.AddLabel(RelationshipLabels.For(relationship.Kind));
+                diagram.Links.Add(link);
+            }
+
+            _diagram = diagram;
         }
         catch (Exception ex)
         {
             _error = ex.ToString();
         }
-    }
-
-    private static string FormatResult(ParseResult<IReadOnlyList<EfSchemaVisualizer.Core.Model.EntityModel>> result)
-    {
-        var lines = new List<string>();
-
-        foreach (var entity in result.Value)
-        {
-            lines.Add($"Entity: {entity.Name}");
-            foreach (var property in entity.Properties)
-            {
-                var nullable = property.IsNullable ? "?" : "";
-                lines.Add($"  {property.Name}: {property.ClrType}{nullable}");
-            }
-        }
-
-        if (result.Diagnostics.Count > 0)
-        {
-            lines.Add("");
-            lines.Add("Diagnostics:");
-            foreach (var diagnostic in result.Diagnostics)
-            {
-                lines.Add($"  [{diagnostic.Code}] {diagnostic.Message}");
-            }
-        }
-
-        return string.Join(Environment.NewLine, lines);
     }
 }
