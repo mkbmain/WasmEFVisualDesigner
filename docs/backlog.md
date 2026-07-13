@@ -227,8 +227,18 @@ these matter before any new surface is added.
       WASM; published `_framework` payload 46M) — see
       `2026-07-13-blazor-wasm-shell-design.md` /
       `2026-07-13-blazor-wasm-shell.md`.
-- [ ] **`[spec]` Read-only ER diagram render** of parsed `EntityModel`s first.
-      (Open risk in `[spec]`: no Blazor canvas/diagramming library chosen yet.)
+- [x] **`[spec]` Read-only ER diagram render** of parsed `EntityModel`s first.
+      **Update:** Two-textarea page (entity classes + `OnModelCreating` config)
+      runs the full parse/merge pipeline via a new `DiagramModelBuilder` and
+      renders entities as property-list nodes with key marking, connected by
+      labeled relationship lines, using `Z.Blazor.Diagrams` (MIT-licensed,
+      C#-first, chosen with the long-term WYSIWYG drag-and-drop goal in mind)
+      — see `2026-07-13-er-diagram-render-design.md` /
+      `2026-07-13-er-diagram-render.md`. Fixed-grid layout only, no
+      auto-layout. Build/publish and static-asset verification done;
+      interactive in-browser verification (drag, live render) was not
+      possible in the implementation sandbox (no browser available) and
+      remains an open follow-up before the next diagram slice builds on top.
 - [ ] **`[spec]` Editable diagram** wired to the rewriter (depends on Priority 1).
 - [ ] **`[spec]` `.zip` upload / download**, fully client-side, stateless.
 - [ ] **`[spec]` GitHub Actions → GitHub Pages** deploy on push to `main`.
