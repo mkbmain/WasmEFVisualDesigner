@@ -1528,4 +1528,94 @@ public class FluentConfigParserTests
         Assert.Equal("Person", relationship.DependentNavigation);
         Assert.Equal("Address", relationship.PrincipalNavigation);
     }
+
+    private static readonly IReadOnlyList<EntityModel> PostTagEntities = new List<EntityModel>
+    {
+        new("Post", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Tags", "ICollection<Tag>", IsNullable: false, MaxLength: null),
+        }),
+        new("Tag", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Posts", "ICollection<Post>", IsNullable: false, MaxLength: null),
+        }),
+    };
+
+    [Fact]
+    public void ParseRelationships_HasManyWithMany_ResolvesManyToMany()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.ManyToMany, relationship.Kind);
+        Assert.Equal("Post", relationship.PrincipalEntity);
+        Assert.Equal("Tag", relationship.DependentEntity);
+        Assert.Equal("Tags", relationship.PrincipalNavigation);
+        Assert.Equal("Posts", relationship.DependentNavigation);
+        Assert.Empty(relationship.ForeignKeyProperties);
+        Assert.Null(relationship.OnDeleteBehavior);
+        Assert.Null(relationship.JoinEntityName);
+    }
+
+    [Fact]
+    public void ParseRelationships_HasManyWithMany_ExplicitUsingEntityGeneric_SetsJoinEntityName()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal("PostTag", relationship.JoinEntityName);
+    }
+
+    [Fact]
+    public void ParseRelationships_HasManyWithMany_BareUsingEntity_JoinEntityNameNull_NoDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity(j => j.ToTable("PostTags"));
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Null(relationship.JoinEntityName);
+    }
 }
