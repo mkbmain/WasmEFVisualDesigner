@@ -240,6 +240,11 @@ these matter before any new surface is added.
       possible in the implementation sandbox (no browser available) and
       remains an open follow-up before the next diagram slice builds on top.
 - [ ] **`[spec]` Editable diagram** wired to the rewriter (depends on Priority 1).
+      Interaction model is WYSIWYG drag-and-drop (drag entities, draw
+      relationships), similar to SSMS's table designer — not a form-based
+      editor. See the Goal section of `2026-07-07-ef-schema-visualizer-design.md`
+      and `2026-07-13-er-diagram-render-design.md`'s library-choice rationale,
+      which already picked `Z.Blazor.Diagrams` with this in mind.
 - [ ] **`[spec]` `.zip` upload / download**, fully client-side, stateless.
 - [ ] **`[spec]` GitHub Actions → GitHub Pages** deploy on push to `main`.
 - [ ] **`[spec]` Roslyn WASM payload size / first-load time** — measure early, flagged as an open risk.

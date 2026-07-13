@@ -22,7 +22,12 @@ A free, open-source, web-based tool that:
 1. Reads existing EF Core entity classes + configuration from a C# project.
 2. Renders them as an editable ER diagram.
 3. Lets a user edit the diagram (entities, properties, types, relationships,
-   keys, indexes).
+   keys, indexes) via direct manipulation — drag entities to reposition,
+   draw relationships between them, similar to SQL Server Management
+   Studio's table designer — not a form-based editor bolted onto a static
+   render. This WYSIWYG interaction model is a stated goal, confirmed
+   2026-07-13, and shapes the diagramming library choice made in
+   `2026-07-13-er-diagram-render-design.md`.
 4. Regenerates the modified C# files for download.
 
 Built as a lean personal project, iterated in small working slices. Intended
