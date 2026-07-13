@@ -1,7 +1,80 @@
 ﻿@page "/"
+@using EfSchemaVisualizer.Core.Parsing
 
-<PageTitle>Home</PageTitle>
+<PageTitle>EF Schema Visualizer</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>EF Schema Visualizer — Parser Demo</h1>
 
-Welcome to your new app.
+<p>Paste a C# entity class below and click Parse to run it through <code>EntityClassParser</code> directly in the browser.</p>
+
+<textarea @bind="_sourceCode" @bind:event="oninput" rows="12" style="width: 100%; font-family: monospace;"></textarea>
+
+<p>
+    <button class="btn btn-primary" @onclick="Parse">Parse</button>
+</p>
+
+@if (_error is not null)
+{
+    <pre style="color: red;">@_error</pre>
+}
+else if (_result is not null)
+{
+    <pre>@FormatResult(_result)</pre>
+}
+
+@code {
+    private string _sourceCode = """
+        public class Person
+        {
+            public int Id { get; set; }
+            public string Name { get; set; } = "";
+            public int? Age { get; set; }
+        }
+        """;
+
+    private ParseResult<IReadOnlyList<EfSchemaVisualizer.Core.Model.EntityModel>>? _result;
+    private string? _error;
+
+    private void Parse()
+    {
+        _error = null;
+        _result = null;
+
+        try
+        {
+            var parser = new EntityClassParser();
+            _result = parser.Parse(_sourceCode);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.ToString();
+        }
+    }
+
+    private static string FormatResult(ParseResult<IReadOnlyList<EfSchemaVisualizer.Core.Model.EntityModel>> result)
+    {
+        var lines = new List<string>();
+
+        foreach (var entity in result.Value)
+        {
+            lines.Add($"Entity: {entity.Name}");
+            foreach (var property in entity.Properties)
+            {
+                var nullable = property.IsNullable ? "?" : "";
+                lines.Add($"  {property.Name}: {property.ClrType}{nullable}");
+            }
+        }
+
+        if (result.Diagnostics.Count > 0)
+        {
+            lines.Add("");
+            lines.Add("Diagnostics:");
+            foreach (var diagnostic in result.Diagnostics)
+            {
+                lines.Add($"  [{diagnostic.Code}] {diagnostic.Message}");
+            }
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+}
