@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.Parsing;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
@@ -152,5 +153,164 @@ public class FluentSyntaxHelpersTests
         var result = EfSchemaVisualizer.Core.Parsing.FluentSyntaxHelpers.TryGetElementTypeName("IQueryable<Order>");
 
         Assert.Null(result);
+    }
+
+    private static CompilationUnitSyntax ParseRoot(string source)
+    {
+        var tree = CSharpSyntaxTree.ParseText(source);
+        return tree.GetCompilationUnitRoot();
+    }
+
+    [Fact]
+    public void FindConfigurationScopes_EntityGenericStyle_ReturnsInvocationScope()
+    {
+        var root = ParseRoot("""
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """);
+
+        var scopes = FluentSyntaxHelpers.FindConfigurationScopes(root).ToList();
+
+        var scope = Assert.Single(scopes);
+        Assert.Equal("Person", scope.EntityName);
+        Assert.IsType<InvocationExpressionSyntax>(scope.Scope);
+    }
+
+    [Fact]
+    public void FindConfigurationScopes_EntityTypeConfigurationClass_ReturnsConfigureMethodScope()
+    {
+        var root = ParseRoot("""
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.Property(e => e.Name).HasMaxLength(100);
+                }
+            }
+            """);
+
+        var scopes = FluentSyntaxHelpers.FindConfigurationScopes(root).ToList();
+
+        var scope = Assert.Single(scopes);
+        Assert.Equal("Person", scope.EntityName);
+        Assert.IsType<MethodDeclarationSyntax>(scope.Scope);
+        Assert.Equal("Configure", ((MethodDeclarationSyntax)scope.Scope).Identifier.Text);
+    }
+
+    [Fact]
+    public void FindConfigurationScopes_MultipleEntityTypeConfigurationClasses_ReturnsAllScopes()
+    {
+        var root = ParseRoot("""
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.Property(e => e.Name).HasMaxLength(100);
+                }
+            }
+
+            public class AddressConfiguration : IEntityTypeConfiguration<Address>
+            {
+                public void Configure(EntityTypeBuilder<Address> builder)
+                {
+                    builder.Property(e => e.Line1).HasMaxLength(200);
+                }
+            }
+            """);
+
+        var scopes = FluentSyntaxHelpers.FindConfigurationScopes(root).ToList();
+
+        Assert.Equal(2, scopes.Count);
+        Assert.Contains(scopes, s => s.EntityName == "Person");
+        Assert.Contains(scopes, s => s.EntityName == "Address");
+    }
+
+    [Fact]
+    public void FindConfigurationScopes_MixedStyles_ReturnsBoth()
+    {
+        var root = ParseRoot("""
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+
+            public class AddressConfiguration : IEntityTypeConfiguration<Address>
+            {
+                public void Configure(EntityTypeBuilder<Address> builder)
+                {
+                    builder.Property(e => e.Line1).HasMaxLength(200);
+                }
+            }
+            """);
+
+        var scopes = FluentSyntaxHelpers.FindConfigurationScopes(root).ToList();
+
+        Assert.Equal(2, scopes.Count);
+        Assert.Contains(scopes, s => s.EntityName == "Person" && s.Scope is InvocationExpressionSyntax);
+        Assert.Contains(scopes, s => s.EntityName == "Address" && s.Scope is MethodDeclarationSyntax);
+    }
+
+    [Fact]
+    public void FindConfigurationScopes_QualifiedInterfaceName_ResolvesSameAsBareForm()
+    {
+        var root = ParseRoot("""
+            public class PersonConfiguration : Microsoft.EntityFrameworkCore.IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.Property(e => e.Name).HasMaxLength(100);
+                }
+            }
+            """);
+
+        var scopes = FluentSyntaxHelpers.FindConfigurationScopes(root).ToList();
+
+        var scope = Assert.Single(scopes);
+        Assert.Equal("Person", scope.EntityName);
+    }
+
+    [Fact]
+    public void FindConfigurationScopes_ClassImplementsInterfaceWithNoConfigureMethod_YieldsNoScope()
+    {
+        var root = ParseRoot("""
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+            }
+            """);
+
+        var scopes = FluentSyntaxHelpers.FindConfigurationScopes(root).ToList();
+
+        Assert.Empty(scopes);
+    }
+
+    [Fact]
+    public void FindConfigurationScopes_UnrelatedGenericInterface_IsIgnored()
+    {
+        var root = ParseRoot("""
+            public class PersonValidator : IValidatableObject<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                }
+            }
+            """);
+
+        var scopes = FluentSyntaxHelpers.FindConfigurationScopes(root).ToList();
+
+        Assert.Empty(scopes);
     }
 }

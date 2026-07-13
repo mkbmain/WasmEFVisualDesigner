@@ -233,6 +233,76 @@ internal static class FluentSyntaxHelpers
             : null;
     }
 
+    /// Finds every entity-name+scope pair configured in the source, from either the
+    /// `receiver.Entity&lt;T&gt;(...)` fluent style or the `IEntityTypeConfiguration&lt;T&gt;`
+    /// class style. `Scope` is the node whose descendants should be searched for fluent
+    /// config calls: the `Entity&lt;T&gt;(...)` invocation itself, or the `Configure` method
+    /// declaration for a config class. A single entity name can appear more than once
+    /// (e.g. configured across multiple `Entity&lt;T&gt;()` blocks in one file).
+    internal static IEnumerable<(string EntityName, SyntaxNode Scope)> FindConfigurationScopes(
+        CompilationUnitSyntax root)
+    {
+        var entityInvocationNames = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(GetConfiguredEntityName)
+            .Where(name => name is not null)
+            .Distinct()!;
+
+        foreach (var entityName in entityInvocationNames)
+        {
+            foreach (var entityInvocation in FindEntityConfigInvocations(root, entityName!))
+            {
+                yield return (entityName!, entityInvocation);
+            }
+        }
+
+        foreach (var classDeclaration in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+        {
+            var entityName = TryGetEntityTypeConfigurationEntityName(classDeclaration);
+            if (entityName is null)
+            {
+                continue;
+            }
+
+            var configureMethod = classDeclaration.Members
+                .OfType<MethodDeclarationSyntax>()
+                .FirstOrDefault(m => m.Identifier.Text == "Configure");
+
+            if (configureMethod is not null)
+            {
+                yield return (entityName, configureMethod);
+            }
+        }
+    }
+
+    /// Returns the `T` type argument text if `classDeclaration`'s base list includes
+    /// `IEntityTypeConfiguration&lt;T&gt;`, bare or namespace-qualified (e.g.
+    /// `Microsoft.EntityFrameworkCore.IEntityTypeConfiguration&lt;T&gt;`); otherwise null.
+    private static string? TryGetEntityTypeConfigurationEntityName(ClassDeclarationSyntax classDeclaration)
+    {
+        if (classDeclaration.BaseList is null)
+        {
+            return null;
+        }
+
+        foreach (var baseType in classDeclaration.BaseList.Types)
+        {
+            var generic = baseType.Type switch
+            {
+                GenericNameSyntax g => g,
+                QualifiedNameSyntax { Right: GenericNameSyntax g } => g,
+                _ => null,
+            };
+
+            if (generic is { Identifier.Text: "IEntityTypeConfiguration", TypeArgumentList.Arguments: [var typeArg] })
+            {
+                return typeArg.ToString();
+            }
+        }
+
+        return null;
+    }
+
     /// Given a `public DbSet&lt;T&gt; Name { get; set; }` property declaration, returns the `T` type
     /// argument node if it's a single identifier matching `entityName`; otherwise null.
     internal static IdentifierNameSyntax? GetDbSetEntityTypeArgument(PropertyDeclarationSyntax property, string entityName)
