@@ -18,51 +18,41 @@ public sealed class FluentConfigParser
         var results = new List<MaxLengthConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        // Distinct entity names configured anywhere in the file.
-        var entityNames = root.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
-            .Where(name => name is not null)
-            .Distinct()!;
-
-        foreach (var entityName in entityNames)
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
         {
-            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
+            foreach (var maxLengthCall in FluentSyntaxHelpers.FindCallsNamed(scope, "HasMaxLength"))
             {
-                foreach (var maxLengthCall in FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasMaxLength"))
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(maxLengthCall);
+                var arg = maxLengthCall.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg is null)
                 {
-                    var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(maxLengthCall);
-                    var arg = maxLengthCall.ArgumentList.Arguments.FirstOrDefault();
+                    continue;
+                }
 
-                    if (arg is null)
-                    {
-                        continue;
-                    }
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which property this HasMaxLength call configures.",
+                        entityName,
+                        PropertyName: null,
+                        maxLengthCall.Span));
+                    continue;
+                }
 
-                    if (propertyName is null)
-                    {
-                        diagnostics.Add(new Diagnostic(
-                            DiagnosticCodes.UnresolvablePropertyName,
-                            "Could not determine which property this HasMaxLength call configures.",
-                            entityName,
-                            PropertyName: null,
-                            maxLengthCall.Span));
-                        continue;
-                    }
-
-                    if (int.TryParse(arg.Expression.ToString(), out var maxLength))
-                    {
-                        results.Add(new MaxLengthConfig(entityName!, propertyName, maxLength));
-                    }
-                    else
-                    {
-                        diagnostics.Add(new Diagnostic(
-                            DiagnosticCodes.UnreadableMaxLengthArgument,
-                            "HasMaxLength argument is not an integer literal and could not be read.",
-                            entityName,
-                            propertyName,
-                            arg.Span));
-                    }
+                if (int.TryParse(arg.Expression.ToString(), out var maxLength))
+                {
+                    results.Add(new MaxLengthConfig(entityName, propertyName, maxLength));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableMaxLengthArgument,
+                        "HasMaxLength argument is not an integer literal and could not be read.",
+                        entityName,
+                        propertyName,
+                        arg.Span));
                 }
             }
         }

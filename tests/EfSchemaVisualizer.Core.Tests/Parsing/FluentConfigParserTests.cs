@@ -89,6 +89,57 @@ public class FluentConfigParserTests
         Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
     }
 
+    private const string SourceUsingEntityTypeConfiguration = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.Property(e => e.Name).HasMaxLength(100);
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMaxLengths_EntityTypeConfigurationStyle_ReadsConfiguredProperty()
+    {
+        var result = new FluentConfigParser().ParseMaxLengths(SourceUsingEntityTypeConfiguration);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+    }
+
+    private const string SourceMixingBothStylesForMaxLength = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+
+        public class AddressConfiguration : IEntityTypeConfiguration<Address>
+        {
+            public void Configure(EntityTypeBuilder<Address> builder)
+            {
+                builder.Property(e => e.Line1).HasMaxLength(200);
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMaxLengths_MixedStyles_ReadsBoth()
+    {
+        var result = new FluentConfigParser().ParseMaxLengths(SourceMixingBothStylesForMaxLength);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", MaxLength: 100 });
+        Assert.Contains(result.Value, c => c is { EntityName: "Address", PropertyName: "Line1", MaxLength: 200 });
+    }
+
     private const string SourceWithStringPropertyOverload = """
         public class AppDbContext : DbContext
         {
