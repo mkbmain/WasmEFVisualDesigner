@@ -167,7 +167,19 @@ these matter before any new surface is added.
       `RemoveIndex` write it back using property-set identity (`SequenceEqual`), always
       emitting the canonical lambda form with optional `.IsUnique()` chain and inline
       name arg (see `2026-07-11-has-index-config-design.md`).
-- [ ] **`[spec]` Relationships** — 1:1, 1:many, many:many (`HasOne`/`WithMany`/`HasForeignKey` etc.). Largest single item; likely its own plan.
+- [x] **`[spec]` Relationships** — 1:1, 1:many, many:many (`HasOne`/`WithMany`/`HasForeignKey` etc.).
+      **Update:** `FluentConfigParser.ParseRelationships` reads all four shapes
+      (`HasOne`/`WithMany`, `HasMany`/`WithOne`, `HasOne`/`WithOne`,
+      `HasMany`/`WithMany`), in both the block-nested and bare-`Entity<T>()`-chained
+      styles, resolving the related entity via explicit generic type arguments or by
+      cross-referencing navigation properties against the already-parsed
+      `EntityModel`s; `ModelMerger.ApplyRelationships` maps the results into
+      `RelationshipModel` (see
+      `2026-07-12-has-relationships-config-design.md`). Parse + merge only — no
+      rewriter yet (`SetRelationship`/`RemoveRelationship` deferred to a follow-up
+      spec, since there's no diagram consumer yet to validate the write-back shape
+      against). `UsingEntity`'s nested join-config, `HasPrincipalKey`, data-annotation
+      attributes, and redundant both-sides configuration remain out of scope.
 - [x] **`[spec]` Column/table mapping** — `ToTable`, `HasColumnName`, `HasColumnType`, default values.
       **Update:** `FluentConfigParser.ParseTableMappings`/`ParseColumnNames`/
       `ParseColumnTypes`/`ParseDefaultValues` read `ToTable(name[, schema])`,
