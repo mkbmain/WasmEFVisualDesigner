@@ -221,7 +221,12 @@ these matter before any new surface is added.
 
 ## Priority 4 — The application shell (next plan per `[plan]` "What's next")
 
-- [ ] **`[spec/plan]` Blazor WebAssembly shell** referencing `EfSchemaVisualizer.Core`.
+- [x] **`[spec/plan]` Blazor WebAssembly shell** referencing `EfSchemaVisualizer.Core`.
+      **Update:** Scaffolded, trimmed, wired to `EfSchemaVisualizer.Core`, and
+      manually verified in-browser (Roslyn's syntax-tree APIs work under Mono
+      WASM; published `_framework` payload 46M) — see
+      `2026-07-13-blazor-wasm-shell-design.md` /
+      `2026-07-13-blazor-wasm-shell.md`.
 - [ ] **`[spec]` Read-only ER diagram render** of parsed `EntityModel`s first.
       (Open risk in `[spec]`: no Blazor canvas/diagramming library chosen yet.)
 - [ ] **`[spec]` Editable diagram** wired to the rewriter (depends on Priority 1).
