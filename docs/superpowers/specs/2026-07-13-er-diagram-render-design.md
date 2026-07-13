@@ -163,8 +163,28 @@ browser):
    behavior) without the page erroring — even though this slice does not
    persist positions, dragging should not break rendering, since it's the
    foundation the WYSIWYG goal builds on next.
-6. Note the published payload size delta versus the shell slice's 46M
-   baseline, recorded here after implementation.
+6. Result (recorded 2026-07-13): `dotnet publish -c Release` succeeded.
+   Published `_framework` payload was 46M (`du -sh`; 47,305,557 bytes via
+   `du -sb`) — indistinguishable at this rounding from the shell slice's
+   46M baseline, so Z.Blazor.Diagrams itself adds negligible weight on top
+   of the Mono/Roslyn runtime, which dominates the payload. The
+   `_content/Z.Blazor.Diagrams/` static assets (`style.min.css`,
+   `script.min.js`, and their `.br`/`.gz` variants) were confirmed present
+   in the publish output, so the package's content files are wired into
+   the build correctly.
+
+   Interactive browser verification (page load timing, diagram rendering
+   of the two entity nodes with property lists and key marking, the
+   labeled relationship line, node dragging, diagnostics-on-parse-error
+   behavior) was **not performed** — this sandbox environment has no
+   browser, no Node.js, and no Playwright available, so there is no way to
+   drive a browser and observe actual rendering here. This remains an open
+   item: a future session (or the user, manually) needs to `dotnet
+   publish`, serve `wwwroot` locally (e.g. `python3 -m http.server`), open
+   it in a real browser, and confirm the six behaviors listed under
+   "Verification" step 2 above before this slice's core risk (does
+   Z.Blazor.Diagrams actually render and stay interactive under Mono WASM)
+   is considered resolved.
 
 ## Open risk this slice resolves
 
