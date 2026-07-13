@@ -83,9 +83,20 @@ Manual, not automated:
    without modification.
 4. Edit the textarea to a different/malformed class and confirm the output
    updates (or the error path renders) without a page crash.
-5. Record the published payload size and a rough first-load time in this
-   design doc as the result of the Roslyn-in-WASM risk check (filled in
-   during implementation).
+5. Result (recorded 2026-07-13): published `_framework` payload was 46M;
+   first load to interactive on localhost (via headless Chromium/Playwright,
+   `python3 -m http.server`) was approximately 585ms. Roslyn's syntax-tree
+   APIs (`CSharpSyntaxTree.ParseText`, `EntityClassParser.Parse`) executed
+   correctly under Mono WASM with no runtime errors across the
+   valid-entity and no-entity cases. The malformed-input case
+   (`this is not c#`) did not crash the page or throw into the `catch`
+   block, matching the expected tolerant-parsing behavior — but it also did
+   not exercise a distinct code path from the no-entity case: Roslyn parsed
+   it as a syntax tree with no class/record/struct declarations, so the UI
+   rendered the same `NoEntityDeclarations` diagnostic as the `IFoo`
+   interface case rather than a different malformed-syntax-specific
+   diagnostic. The page remained responsive (confirmed by clicking Parse
+   again afterward) in all three cases.
 
 No bUnit or other automated test project is added for this slice — there's
 no business logic in the Web project itself yet (it's a thin caller into
