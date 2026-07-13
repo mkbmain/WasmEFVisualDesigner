@@ -208,9 +208,16 @@ these matter before any new surface is added.
 
 ## Priority 3 — Second config style
 
-- [ ] **`[spec/plan]` `IEntityTypeConfiguration<T>` support.** Fast-follow after
+- [x] **`[spec/plan]` `IEntityTypeConfiguration<T>` support.** Fast-follow after
       `OnModelCreating`. Structurally easier (one entity per file), but a
       separate parsing/codegen path.
+      **Update:** All 10 `FluentConfigParser.Parse*` methods now transparently
+      recognize `IEntityTypeConfiguration<T>` classes via a shared
+      `FluentSyntaxHelpers.FindConfigurationScopes` helper, alongside the
+      existing `Entity<T>()` style — same method signatures, no new public API
+      (see `2026-07-13-ientitytypeconfiguration-support-design.md`). Parse +
+      merge only; the rewriter (write-back into config classes) is deferred to
+      a follow-up spec, matching the precedent set by relationships.
 
 ## Priority 4 — The application shell (next plan per `[plan]` "What's next")
 
