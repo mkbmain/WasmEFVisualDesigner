@@ -287,4 +287,37 @@ public class ModelMergerTests
         Assert.Null(merged.Properties.Single(p => p.Name == "Id").DefaultValueLiteral);
         Assert.Equal("1", merged.Properties.Single(p => p.Name == "Quantity").DefaultValueLiteral);
     }
+
+    // ─── ApplyRelationships ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyRelationships_MapsConfigsToModels_FieldForField()
+    {
+        var configs = new List<RelationshipConfig>
+        {
+            new("Customer", "Order", RelationshipKind.OneToMany,
+                PrincipalNavigation: "Orders", DependentNavigation: "Customer",
+                ForeignKeyProperties: new List<string> { "CustomerId" },
+                OnDeleteBehavior: "Cascade"),
+        };
+
+        var result = ModelMerger.ApplyRelationships(configs);
+
+        var relationship = Assert.Single(result);
+        Assert.Equal("Customer", relationship.PrincipalEntity);
+        Assert.Equal("Order", relationship.DependentEntity);
+        Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
+        Assert.Equal("Orders", relationship.PrincipalNavigation);
+        Assert.Equal("Customer", relationship.DependentNavigation);
+        Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
+        Assert.Equal("Cascade", relationship.OnDeleteBehavior);
+    }
+
+    [Fact]
+    public void ApplyRelationships_EmptyInput_ReturnsEmpty()
+    {
+        var result = ModelMerger.ApplyRelationships(new List<RelationshipConfig>());
+
+        Assert.Empty(result);
+    }
 }

@@ -119,4 +119,19 @@ public static class ModelMerger
 
         return entity with { Properties = updatedProperties };
     }
+
+    public static IReadOnlyList<RelationshipModel> ApplyRelationships(IReadOnlyList<RelationshipConfig> configs)
+    {
+        return configs
+            .Select(c => new RelationshipModel(
+                c.PrincipalEntity,
+                c.DependentEntity,
+                c.Kind,
+                c.PrincipalNavigation,
+                c.DependentNavigation,
+                c.ForeignKeyProperties,
+                c.OnDeleteBehavior,
+                c.JoinEntityName))
+            .ToList();
+    }
 }
