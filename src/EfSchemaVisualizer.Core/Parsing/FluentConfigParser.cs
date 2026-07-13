@@ -448,20 +448,17 @@ public sealed class FluentConfigParser
         var results = new List<RelationshipConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        var entityNames = root.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
-            .Where(name => name is not null)
-            .Distinct()!;
-
-        foreach (var entityName in entityNames)
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
         {
-            foreach (var entityInvocation in FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName!))
-            {
-                var calls = FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasOne")
-                    .Concat(FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasMany"))
-                    .ToList();
+            var calls = FluentSyntaxHelpers.FindCallsNamed(scope, "HasOne")
+                .Concat(FluentSyntaxHelpers.FindCallsNamed(scope, "HasMany"))
+                .ToList();
 
+            // The bare-chained style (`modelBuilder.Entity<Order>().HasOne(...)...`, with
+            // no lambda block) only exists when the scope itself is the `Entity<T>()`
+            // invocation. A `Configure` method declaration has nothing chained onto it.
+            if (scope is InvocationExpressionSyntax entityInvocation)
+            {
                 if (FluentSyntaxHelpers.FindChainedCall(entityInvocation, "HasOne") is { } chainedHasOne)
                 {
                     calls.Add(chainedHasOne);
@@ -471,11 +468,11 @@ public sealed class FluentConfigParser
                 {
                     calls.Add(chainedHasMany);
                 }
+            }
 
-                foreach (var call in calls)
-                {
-                    ParseRelationshipChain(call, entityName!, entities, results, diagnostics);
-                }
+            foreach (var call in calls)
+            {
+                ParseRelationshipChain(call, entityName, entities, results, diagnostics);
             }
         }
 

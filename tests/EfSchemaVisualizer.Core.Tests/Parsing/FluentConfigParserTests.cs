@@ -1671,6 +1671,78 @@ public class FluentConfigParserTests
     }
 
     [Fact]
+    public void ParseRelationships_EntityTypeConfigurationStyle_ResolvesOneToMany()
+    {
+        const string source = """
+            public class OrderConfiguration : IEntityTypeConfiguration<Order>
+            {
+                public void Configure(EntityTypeBuilder<Order> builder)
+                {
+                    builder.HasOne(d => d.Customer)
+                        .WithMany(p => p.Orders);
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
+        Assert.Equal("Customer", relationship.PrincipalEntity);
+        Assert.Equal("Order", relationship.DependentEntity);
+    }
+
+    [Fact]
+    public void ParseRelationships_BareChainedStyleInsideConfigureMethod_NotMatched_MalformedChainSkippedSilently()
+    {
+        const string source = """
+            public class OrderConfiguration : IEntityTypeConfiguration<Order>
+            {
+                public void Configure(EntityTypeBuilder<Order> builder)
+                {
+                    builder.HasOne(d => d.Customer);
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Empty(result.Value);
+    }
+
+    [Fact]
+    public void ParseRelationships_MixedStyles_ParsesEntityGenericStyleRelationship()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts);
+                    });
+                }
+            }
+
+            public class TagConfiguration : IEntityTypeConfiguration<Tag>
+            {
+                public void Configure(EntityTypeBuilder<Tag> builder)
+                {
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.ManyToMany, relationship.Kind);
+    }
+
+    [Fact]
     public void ParsePrecisions_EntityTypeConfigurationStyle_ReadsConfiguredProperty()
     {
         const string source = """
