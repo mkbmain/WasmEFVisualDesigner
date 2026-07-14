@@ -424,6 +424,60 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetColumnName(string entityName, string propertyName, string? columnName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var normalizedColumnName = string.IsNullOrWhiteSpace(columnName) ? null : columnName.Trim();
+        if (normalizedColumnName == property.ColumnName)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = normalizedColumnName is null
+            ? _configRewriter.RemoveColumnName(ConfigSource, entityName, propertyName)
+            : _configRewriter.SetColumnName(ConfigSource, entityName, propertyName, normalizedColumnName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetColumnType(string entityName, string propertyName, string? columnType)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var normalizedColumnType = string.IsNullOrWhiteSpace(columnType) ? null : columnType.Trim();
+        if (normalizedColumnType == property.ColumnType)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = normalizedColumnType is null
+            ? _configRewriter.RemoveColumnType(ConfigSource, entityName, propertyName)
+            : _configRewriter.SetColumnType(ConfigSource, entityName, propertyName, normalizedColumnType);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static string GenerateUniquePropertyName(EntityModel entity)
     {
         if (!entity.Properties.Any(p => p.Name == "NewProperty"))
