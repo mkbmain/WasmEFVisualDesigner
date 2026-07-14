@@ -95,6 +95,41 @@
                                    @onmousedown:stopPropagation="true" />
                             primary key
                         </label>
+                        <div style="font-size: 0.8em; margin-top: 4px;">
+                            <div>Indexes:</div>
+                            @foreach (var index in Node.Entity.Indexes)
+                            {
+                                <div style="display: flex; align-items: center; gap: 4px; margin: 2px 0;">
+                                    <input type="checkbox" checked="@index.PropertyNames.Contains(property.Name)"
+                                           @onchange="e => ToggleIndexMembership(property, index, (bool)(e.Value ?? false))"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                    <span>[@string.Join(", ", index.PropertyNames)]</span>
+                                    <label>
+                                        <input type="checkbox" checked="@index.IsUnique"
+                                               @onchange="e => SetIndexUnique(index, (bool)(e.Value ?? false))"
+                                               @onpointerdown:stopPropagation="true"
+                                               @onmousedown:stopPropagation="true" />
+                                        unique
+                                    </label>
+                                    <input value="@index.Name" placeholder="(auto name)" style="width: 90px;"
+                                           @onchange="e => RenameIndex(index, e.Value?.ToString())"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                    <button type="button" title="Remove index" style="border: none; background: transparent; cursor: pointer;"
+                                            @onclick="() => RemoveIndex(index)"
+                                            @onpointerdown:stopPropagation="true"
+                                            @onmousedown:stopPropagation="true">×</button>
+                                </div>
+                            }
+                            <button type="button" @onclick="() => AddIndex(property)"
+                                    @onpointerdown:stopPropagation="true"
+                                    @onmousedown:stopPropagation="true">+ New index on this property</button>
+                            @if (_indexError is not null)
+                            {
+                                <div style="color: red;">@_indexError</div>
+                            }
+                        </div>
                     </div>
                 }
             </li>
@@ -201,6 +236,78 @@
         else
         {
             _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private string? _indexError;
+
+    private async Task AddIndex(PropertyModel property)
+    {
+        var result = EditContext.Editor.AddIndex(Node.Entity.Name, property.Name);
+        if (result.Success)
+        {
+            _indexError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _indexError = result.Error;
+        }
+    }
+
+    private async Task ToggleIndexMembership(PropertyModel property, IndexModel index, bool include)
+    {
+        var result = EditContext.Editor.ToggleIndexMembership(Node.Entity.Name, index.PropertyNames, property.Name, include);
+        if (result.Success)
+        {
+            _indexError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _indexError = result.Error;
+        }
+    }
+
+    private async Task SetIndexUnique(IndexModel index, bool isUnique)
+    {
+        var result = EditContext.Editor.SetIndexUnique(Node.Entity.Name, index.PropertyNames, isUnique);
+        if (result.Success)
+        {
+            _indexError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _indexError = result.Error;
+        }
+    }
+
+    private async Task RenameIndex(IndexModel index, string? newName)
+    {
+        var result = EditContext.Editor.RenameIndex(Node.Entity.Name, index.PropertyNames, newName);
+        if (result.Success)
+        {
+            _indexError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _indexError = result.Error;
+        }
+    }
+
+    private async Task RemoveIndex(IndexModel index)
+    {
+        var result = EditContext.Editor.RemoveIndex(Node.Entity.Name, index.PropertyNames);
+        if (result.Success)
+        {
+            _indexError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _indexError = result.Error;
         }
     }
 
