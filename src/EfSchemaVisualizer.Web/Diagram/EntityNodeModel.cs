@@ -11,6 +11,8 @@ public sealed class EntityNodeModel : NodeModel
         Entity = entity;
         EntityId = entityId;
         Title = entity.Name;
+        AddPort(PortAlignment.Left);
+        AddPort(PortAlignment.Right);
     }
 
     public EntityModel Entity { get; }

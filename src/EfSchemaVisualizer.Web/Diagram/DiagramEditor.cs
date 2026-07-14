@@ -556,6 +556,81 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult AddRelationship(string dependentEntityName, string principalEntityName)
+    {
+        var dependent = Current.Entities.FirstOrDefault(e => e.Name == dependentEntityName);
+        if (dependent is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{dependentEntityName}' not found.");
+        }
+
+        var principal = Current.Entities.FirstOrDefault(e => e.Name == principalEntityName);
+        if (principal is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{principalEntityName}' not found.");
+        }
+
+        var relationship = new RelationshipModel(principalEntityName, dependentEntityName, RelationshipKind.OneToMany, null, null);
+
+        var newConfigSource = _configRewriter.SetRelationship(ConfigSource, relationship);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetRelationshipShape(RelationshipModel relationship, RelationshipKind newKind, IReadOnlyList<string> newForeignKeyProperties)
+    {
+        if (!Current.Relationships.Contains(relationship))
+        {
+            return DiagramEditResult.Fail("Relationship no longer exists.");
+        }
+
+        if (newKind == relationship.Kind && newForeignKeyProperties.SequenceEqual(relationship.ForeignKeyProperties))
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (newKind == RelationshipKind.ManyToMany && newForeignKeyProperties.Count > 0)
+        {
+            return DiagramEditResult.Fail("Many-to-many relationships cannot have a foreign key.");
+        }
+
+        var dependent = Current.Entities.First(e => e.Name == relationship.DependentEntity);
+        var missingProperty = newForeignKeyProperties.FirstOrDefault(name => !dependent.Properties.Any(p => p.Name == name));
+        if (missingProperty is not null)
+        {
+            return DiagramEditResult.Fail($"'{missingProperty}' is not a property of '{relationship.DependentEntity}'.");
+        }
+
+        var updated = relationship with { Kind = newKind, ForeignKeyProperties = newForeignKeyProperties };
+
+        var withoutOld = _configRewriter.RemoveRelationship(ConfigSource, relationship);
+        if (withoutOld == ConfigSource)
+        {
+            return DiagramEditResult.Fail("Could not locate this relationship's existing configuration to update.");
+        }
+
+        var withNew = _configRewriter.SetRelationship(withoutOld, updated);
+        Apply(ClassSource, withNew);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveRelationship(RelationshipModel relationship)
+    {
+        if (!Current.Relationships.Contains(relationship))
+        {
+            return DiagramEditResult.Fail("Relationship no longer exists.");
+        }
+
+        var newConfigSource = _configRewriter.RemoveRelationship(ConfigSource, relationship);
+        if (newConfigSource == ConfigSource)
+        {
+            return DiagramEditResult.Fail("Could not locate this relationship in the source to remove.");
+        }
+
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static string GenerateUniquePropertyName(EntityModel entity)
     {
         if (!entity.Properties.Any(p => p.Name == "NewProperty"))

@@ -410,3 +410,84 @@ new Core methods before any relationship-editing UX.
 5. **Relationships.** Builds `SetRelationship`/`RemoveRelationship` in
    Core first, then wires drag-to-connect (default one-to-many) and
    click-to-expand link-label editing (kind, FK property) in the diagram.
+
+   **Update:** Phase 5 is built. `Core` gained
+   `OnModelCreatingRewriter.SetRelationship` (emitting/rewriting the
+   `HasOne`/`HasMany`/`WithOne`/`WithMany`/`HasForeignKey` chain for a
+   given `RelationshipModel`) and `RemoveRelationship` (deleting that
+   chain entirely), with unit tests following the existing rewriter
+   conventions. The Web project's `Diagram/DiagramEditor.cs` gained
+   `AddRelationship` (always creating a new `RelationshipKind.OneToMany`
+   relationship between a dependent and principal entity, per this
+   design's drag-from-child-to-parent convention),
+   `SetRelationshipShape` (changing an existing relationship's kind and/or
+   foreign-key properties), and `RemoveRelationship`. The diagram UI
+   gained drag-to-connect ports on `Diagram/EntityNode.razor` (a
+   `PortRenderer` on each side of the node) plus `Pages/Home.razor` wiring
+   (`OnLinkAdded`/`OnRelationshipLinkAttached`, resolving the dragged
+   link's source/target nodes to entity names and calling
+   `AddRelationship`, discarding the in-progress link with no error if
+   either end can't be resolved to an entity), and a new
+   `Diagram/RelationshipLinkLabel.razor` click-to-expand panel (showing
+   the "1—1"/"1—*"/"*—*" label via a new `RelationshipLabels` helper,
+   expanding on click into a Kind dropdown, a foreign-key property
+   dropdown, and a "Remove relationship" button).
+
+   Verification (recorded 2026-07-14): `dotnet test
+   tests/EfSchemaVisualizer.Core.Tests` — 289 passed, 0 failed. `dotnet
+   build` (whole solution) — `Build succeeded.`, 0 warnings, 0 errors for
+   both `EfSchemaVisualizer.Core` and `EfSchemaVisualizer.Web`. `dotnet
+   publish src/EfSchemaVisualizer.Web/EfSchemaVisualizer.Web.csproj -c
+   Release` also succeeded, producing a working `wwwroot` output (with the
+   same wasm-tools optimization advisory as Phase 4, not an error).
+
+   Interactive browser verification (render the sample `Blog`/`Post`
+   diagram and confirm the existing relationship renders with a clickable
+   "1—*" label; click the label, change Kind to "One-to-one", and confirm
+   the source regenerates with `HasOne<Blog>().WithOne().HasForeignKey<Post>(...)`;
+   click "Remove relationship" and confirm the `HasOne`/`HasForeignKey`
+   chain disappears entirely; add a new entity, drag from one entity's
+   port to another's, and confirm a new `HasOne<X>().WithMany()`
+   relationship and "1—*" label appear; and drop a drag gesture on empty
+   canvas and confirm the in-progress link disappears with no relationship
+   created and no error) was **not performed** — same situation as Phases
+   1 through 4: this sandbox has no browser, no Node.js, and no Playwright
+   available (`which chromium chromium-browser google-chrome firefox node
+   npx playwright` all reported not found), so there is no way to drive a
+   browser and observe actual rendering/interaction here. This remains an
+   open item carried forward: a future session (or the user, manually)
+   needs to serve the published `wwwroot` locally, open it in a real
+   browser, and run through the five scenarios listed under Step 4 of the
+   Task 6 brief before Phase 5's relationship-editing flows are considered
+   fully verified end to end.
+
+   **Whole-branch review caught and fixed a real bug** after this entry was
+   first recorded: `OnModelCreatingRewriter.RemoveRelationship` only matched
+   relationship chains written with an explicit generic type argument
+   (`HasOne<Blog>()`), but `FluentConfigParser.ParseRelationships` (the read
+   side) also accepts — and this app's own shipped default sample uses — the
+   idiomatic navigation-lambda style (`HasOne(e => e.Blog)`). This meant
+   removing or reshaping such a relationship silently no-op'd on the remove
+   step while still reporting success, and `SetRelationshipShape` would then
+   append a duplicate relationship on top. Fixed by matching on navigation
+   property name (via a new `TryGetNavigationPropertyName` helper, using the
+   `RelationshipModel.DependentNavigation`/`PrincipalNavigation` fields
+   already carried on the model) in addition to the generic-argument check,
+   and by making `DiagramEditor.RemoveRelationship`/`SetRelationshipShape`
+   return `Fail` instead of `Ok` whenever the rewriter made no change — see
+   commits `e7a21d8`/`59d336b`. `dotnet test` (291 passed, including two new
+   regression tests against the navigation-lambda style) and a full
+   whole-branch re-review both confirm the fix; this was exactly the shape
+   of relationship the not-yet-performed browser verification's scenarios 2
+   and 3 would have exercised, so it remains important that a future browser
+   pass exercises them directly.
+
+   **This completes all five phases of the editable-diagram spec.** Every
+   phase described in this document (rename/type/nullable editing;
+   add/remove entities and properties; keys and indexes; column/table
+   mapping, precision, and default values; and relationships) has now been
+   built, unit-tested at the `Core` level, and verified to build and
+   publish cleanly. Interactive in-browser verification remains
+   unperformed for all five phases, carried forward as the one open item
+   across the whole slice — see the "Known gap" note in
+   `docs/backlog.md`'s editable-diagram entry.
