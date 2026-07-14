@@ -342,6 +342,57 @@ new Core methods before any relationship-editing UX.
 4. **Column/table mapping, precision, default values.** Remaining
    expand-on-click fields, plus entity-level table/schema in the node
    header.
+
+   **Update:** Phase 4 is built. The Web project's `Diagram/DiagramEditor.cs`
+   gained `SetTableMapping` (entity-level table name/schema, emitting or
+   removing `.ToTable(...)`), `SetColumnName`/`SetColumnType` (property-level
+   `.HasColumnName(...)`/`.HasColumnType(...)`), and `SetPrecision`/
+   `SetDefaultValue` (`.HasPrecision(N)`/`.HasPrecision(N, M)` and
+   `.HasDefaultValue(...)`, the latter guarded by a new `IsValidExpressionText`
+   helper mirroring the existing `IsValidTypeToken` pattern). `Diagram/
+   EntityNode.razor` gained an always-visible "Table:"/"Schema:" row in the
+   node header (each field committing independently via `@onchange`, no
+   shared edit-mode toggle, avoiding the stale-value bug that would cause),
+   plus column name, column type, precision, scale, and default-value fields
+   inside the Phase-3 expand-on-click panel, each with its own inline-error
+   slot reusing the existing `_propertyErrors`/`_tableError` conventions. No
+   new `Core` methods were needed — this phase only wired the diagram to the
+   rewriter surface `Core` already exposed.
+
+   Verification (recorded 2026-07-14): `dotnet test
+   tests/EfSchemaVisualizer.Core.Tests` — 277 passed, 0 failed (no new
+   `Core` tests this phase, since no new `Core` methods were added — all new
+   logic lives in the Web project's `DiagramEditor`, consistent with Phases
+   2 and 3). `dotnet build` (whole solution) — `Build succeeded.`, 0
+   warnings, 0 errors for both `EfSchemaVisualizer.Core` and
+   `EfSchemaVisualizer.Web`. `dotnet publish
+   src/EfSchemaVisualizer.Web/EfSchemaVisualizer.Web.csproj -c Release` also
+   succeeded, producing a working `wwwroot` output (with a wasm-tools
+   optimization advisory, not an error).
+
+   Interactive browser verification (render a sample entity, set its table
+   name and schema via the new header fields and confirm `.ToTable("Name",
+   "schema")` appears, then clear the table name field and confirm the whole
+   `.ToTable(...)` call disappears; expand a property, set its column name
+   and column type and confirm `.HasColumnName(...)`/`.HasColumnType(...)`
+   appear, then clear each back to blank and confirm they disappear; set
+   precision only on a decimal property and confirm `.HasPrecision(N)` with
+   one argument, add a scale and confirm it becomes `.HasPrecision(N, M)`,
+   then clear precision and confirm the whole call disappears including
+   scale; and set a quoted-literal default on a string property and confirm
+   `.HasDefaultValue("active")` appears unchanged, set a numeric default on
+   an int property and confirm `.HasDefaultValue(5)` appears, then try an
+   invalid expression and confirm an inline error appears instead of
+   corrupting the source) was **not performed** — same situation as Phases 1
+   through 3: this sandbox has no browser, no Node.js, and no Playwright
+   available (`which chromium chromium-browser google-chrome firefox node
+   npx playwright` all reported not found), so there is no way to drive a
+   browser and observe actual rendering/interaction here. This remains an
+   open item carried forward: a future session (or the user, manually) needs
+   to serve the published `wwwroot` locally, open it in a real browser, and
+   run through the four scenarios listed under Step 4 of the Task 6 brief
+   before Phase 4's column/table mapping editing flows are considered fully
+   verified end to end.
 5. **Relationships.** Builds `SetRelationship`/`RemoveRelationship` in
    Core first, then wires drag-to-connect (default one-to-many) and
    click-to-expand link-label editing (kind, FK property) in the diagram.
