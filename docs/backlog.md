@@ -239,7 +239,7 @@ these matter before any new surface is added.
       interactive in-browser verification (drag, live render) was not
       possible in the implementation sandbox (no browser available) and
       remains an open follow-up before the next diagram slice builds on top.
-- [ ] **`[spec]` Editable diagram** wired to the rewriter (depends on Priority 1).
+- [x] **`[spec]` Editable diagram** wired to the rewriter (depends on Priority 1).
       Interaction model is WYSIWYG drag-and-drop (drag entities, draw
       relationships), similar to SSMS's table designer — not a form-based
       editor. See the Goal section of `2026-07-07-ef-schema-visualizer-design.md`
@@ -275,8 +275,31 @@ these matter before any new surface is added.
         diagram gesture reparsed the model threw an uncaught
         `KeyNotFoundException`) and a placement bug (new entities spawned
         on top of existing ones instead of grid-placing past them).
-      - **Phases 3-5 (keys/indexes, column/table mapping + precision +
-        default values, relationships) — not started.**
+      - **Phase 3 (keys and indexes) — done.** Primary-key toggle and
+        single-/composite-index add/remove/rename/unique-toggle wired to
+        the existing `ToggleKey`/`AddIndex`/`ToggleIndexMembership`/
+        `SetIndexUnique`/`RenameIndex`/`RemoveIndex` `DiagramEditor`
+        methods, via a new expand-on-click panel per property row on
+        `Diagram/EntityNode.razor`.
+      - **Phase 4 (column/table mapping, precision, default values) —
+        done.** Entity-level table/schema fields in the node header, plus
+        column name/type/precision/scale/default-value fields in the
+        Phase 3 expand-on-click panel, wired to new `DiagramEditor`
+        methods (`SetTableMapping`, `SetColumnName`/`SetColumnType`,
+        `SetPrecision`/`SetDefaultValue`). Whole-phase review caught and
+        fixed a real bug: `SetPrecision` spuriously rejected clearing
+        precision on a property that also had a scale set; fixed to always
+        clear the whole `.HasPrecision(...)` mapping when precision is
+        blanked.
+      - **Phase 5 (relationships) — done.** Built `SetRelationship`/
+        `RemoveRelationship` in `Core` first, then `DiagramEditor.
+        AddRelationship`/`SetRelationshipShape`/`RemoveRelationship`, then
+        wired drag-to-connect ports on entity nodes (always creating a
+        default one-to-many relationship) and a click-to-expand
+        `RelationshipLinkLabel.razor` panel (Kind dropdown, foreign-key
+        dropdown, "Remove relationship" button) in `Pages/Home.razor`.
+        This was the last phase of the editable-diagram slice — see
+        `2026-07-14-editable-diagram-phase5-relationships.md`.
       - **Known gap across all merged phases:** interactive in-browser
         verification (drag, click-through the actual editing flows) has
         not been possible in the implementation sandbox (no browser
