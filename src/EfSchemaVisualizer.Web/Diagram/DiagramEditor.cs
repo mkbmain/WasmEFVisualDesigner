@@ -478,6 +478,79 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetPrecision(string entityName, string propertyName, int? precision, int? scale)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (precision is null && scale is not null)
+        {
+            return DiagramEditResult.Fail("Scale cannot be set without precision.");
+        }
+
+        if (precision is not null && precision <= 0)
+        {
+            return DiagramEditResult.Fail("Precision must be a positive number.");
+        }
+
+        if (scale is not null && scale < 0)
+        {
+            return DiagramEditResult.Fail("Scale cannot be negative.");
+        }
+
+        if (precision == property.Precision && scale == property.Scale)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = precision is null
+            ? _configRewriter.RemovePrecision(ConfigSource, entityName, propertyName)
+            : _configRewriter.RewritePrecision(ConfigSource, entityName, propertyName, precision.Value, scale);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetDefaultValue(string entityName, string propertyName, string? literalText)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var normalizedLiteral = string.IsNullOrWhiteSpace(literalText) ? null : literalText.Trim();
+        if (normalizedLiteral == property.DefaultValueLiteral)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (normalizedLiteral is not null && !IsValidExpressionText(normalizedLiteral))
+        {
+            return DiagramEditResult.Fail($"'{normalizedLiteral}' is not a valid default value expression.");
+        }
+
+        var newConfigSource = normalizedLiteral is null
+            ? _configRewriter.RemoveDefaultValue(ConfigSource, entityName, propertyName)
+            : _configRewriter.SetDefaultValue(ConfigSource, entityName, propertyName, normalizedLiteral);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static string GenerateUniquePropertyName(EntityModel entity)
     {
         if (!entity.Properties.Any(p => p.Name == "NewProperty"))
@@ -551,5 +624,11 @@ public sealed class DiagramEditor
 
         var typeSyntax = SyntaxFactory.ParseTypeName(trimmed);
         return typeSyntax.ToFullString() == trimmed && !typeSyntax.ContainsDiagnostics;
+    }
+
+    private static bool IsValidExpressionText(string text)
+    {
+        var expression = SyntaxFactory.ParseExpression(text);
+        return expression.ToFullString() == text && !expression.ContainsDiagnostics;
     }
 }
