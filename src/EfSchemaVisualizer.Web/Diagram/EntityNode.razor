@@ -67,12 +67,22 @@
                            @onmousedown:stopPropagation="true" />
                     nullable
                 </label>
+                <button type="button" title="Remove property" style="border: none; background: transparent; cursor: pointer;"
+                        @onclick="() => RemoveProperty(property.Name)"
+                        @onpointerdown:stopPropagation="true"
+                        @onmousedown:stopPropagation="true">×</button>
                 @if (_propertyErrors.TryGetValue(property.Name, out var propertyError))
                 {
                     <div style="color: red; font-size: 0.8em;">@propertyError</div>
                 }
             </li>
         }
+        <li style="padding: 2px 8px;">
+            <button type="button" style="font-size: 0.8em;"
+                    @onclick="AddProperty"
+                    @onpointerdown:stopPropagation="true"
+                    @onmousedown:stopPropagation="true">+ Add property</button>
+        </li>
     </ul>
 </div>
 
@@ -241,6 +251,29 @@
         else
         {
             _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task AddProperty()
+    {
+        var result = EditContext.Editor.AddProperty(Node.Entity.Name);
+        if (result.Success)
+        {
+            await EditContext.NotifyChangedAsync();
+        }
+    }
+
+    private async Task RemoveProperty(string propertyName)
+    {
+        var result = EditContext.Editor.RemoveProperty(Node.Entity.Name, propertyName);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(propertyName);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[propertyName] = result.Error!;
         }
     }
 }
