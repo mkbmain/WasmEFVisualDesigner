@@ -28,7 +28,28 @@
         {
             var isKey = Node.Entity.KeyPropertyNames.Contains(property.Name);
             <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "")">
-                @(isKey ? "🔑 " : "")@property.Name: @property.ClrType@(property.IsNullable ? "?" : "")
+                @if (isKey)
+                {
+                    <text>🔑 </text>
+                }
+                @if (_editingPropertyName == property.Name)
+                {
+                    <input value="@_editingPropertyValue"
+                           @oninput="e => _editingPropertyValue = e.Value?.ToString() ?? string.Empty"
+                           @onblur="() => CommitPropertyRename(property.Name)"
+                           @onkeydown="e => OnPropertyRenameKeyDown(e, property.Name)"
+                           @onpointerdown:stopPropagation="true"
+                           @onmousedown:stopPropagation="true" />
+                }
+                else
+                {
+                    <span @ondblclick="() => BeginPropertyRename(property.Name)">@property.Name</span>
+                }
+                : @property.ClrType@(property.IsNullable ? "?" : "")
+                @if (_propertyErrors.TryGetValue(property.Name, out var propertyError))
+                {
+                    <div style="color: red; font-size: 0.8em;">@propertyError</div>
+                }
             </li>
         }
     </ul>
@@ -88,6 +109,55 @@
         {
             _isEditingName = false;
             _nameError = null;
+        }
+    }
+
+    private string? _editingPropertyName;
+    private string _editingPropertyValue = string.Empty;
+    private readonly Dictionary<string, string> _propertyErrors = new();
+
+    private void BeginPropertyRename(string propertyName)
+    {
+        _editingPropertyName = propertyName;
+        _editingPropertyValue = propertyName;
+        _propertyErrors.Remove(propertyName);
+    }
+
+    private async Task CommitPropertyRename(string originalPropertyName)
+    {
+        if (_editingPropertyName != originalPropertyName)
+        {
+            return;
+        }
+
+        _editingPropertyName = null;
+
+        if (_editingPropertyValue == originalPropertyName)
+        {
+            return;
+        }
+
+        var result = EditContext.Editor.RenameProperty(Node.Entity.Name, originalPropertyName, _editingPropertyValue);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(originalPropertyName);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[originalPropertyName] = result.Error!;
+        }
+    }
+
+    private async Task OnPropertyRenameKeyDown(KeyboardEventArgs e, string propertyName)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitPropertyRename(propertyName);
+        }
+        else if (e.Key == "Escape")
+        {
+            _editingPropertyName = null;
         }
     }
 }
