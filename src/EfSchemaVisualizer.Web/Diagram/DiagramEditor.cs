@@ -22,17 +22,24 @@ public sealed class DiagramEditor
 {
     private readonly EntityClassRewriter _classRewriter = new();
     private readonly OnModelCreatingRewriter _configRewriter = new();
+    private readonly Dictionary<string, Guid> _entityIds = new();
 
     public DiagramEditor(string classSource, string configSource)
     {
         ClassSource = classSource;
         ConfigSource = configSource;
         Current = DiagramModelBuilder.Build(classSource, configSource);
+
+        foreach (var entity in Current.Entities)
+        {
+            _entityIds[entity.Name] = Guid.NewGuid();
+        }
     }
 
     public string ClassSource { get; private set; }
     public string ConfigSource { get; private set; }
     public DiagramModelResult Current { get; private set; }
+    public IReadOnlyDictionary<string, Guid> EntityIds => _entityIds;
 
     public DiagramEditResult RenameEntity(string oldName, string newName)
     {
@@ -60,6 +67,16 @@ public sealed class DiagramEditor
         newClassSource = _classRewriter.RenamePropertyTypeReferences(newClassSource, oldName, newName);
         var newConfigSource = _configRewriter.RenameEntityReferences(ConfigSource, oldName, newName);
         Apply(newClassSource, newConfigSource);
+
+        if (_entityIds.Remove(oldName, out var entityId))
+        {
+            _entityIds[newName] = entityId;
+        }
+        else
+        {
+            _entityIds[newName] = Guid.NewGuid();
+        }
+
         return DiagramEditResult.Ok();
     }
 

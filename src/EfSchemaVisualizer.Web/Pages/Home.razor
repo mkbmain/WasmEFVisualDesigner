@@ -108,7 +108,7 @@
             });
             diagram.RegisterComponent<EntityNodeModel, EntityNode>();
 
-            DiagramSync.Rebuild(diagram, _editor.Current);
+            DiagramSync.Rebuild(diagram, _editor.Current, _editor.EntityIds);
 
             _diagram = diagram;
             _editContext = new DiagramEditContext
@@ -138,7 +138,7 @@
         _classSource = _editor.ClassSource;
         _configSource = _editor.ConfigSource;
         _diagnostics = _editor.Current.Diagnostics;
-        DiagramSync.Rebuild(_diagram, _editor.Current);
+        DiagramSync.Rebuild(_diagram, _editor.Current, _editor.EntityIds);
         StateHasChanged();
 
         return Task.CompletedTask;

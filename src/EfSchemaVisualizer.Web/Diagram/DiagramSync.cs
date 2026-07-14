@@ -11,30 +11,34 @@ public static class DiagramSync
     private const double XSpacing = 320;
     private const double YSpacing = 260;
 
-    public static void Rebuild(BlazorDiagram diagram, DiagramModelResult result)
+    public static void Rebuild(BlazorDiagram diagram, DiagramModelResult result, IReadOnlyDictionary<string, Guid> entityIds)
     {
-        var previousPositions = diagram.Nodes
+        var previousPositionsById = diagram.Nodes
             .OfType<EntityNodeModel>()
-            .Select(node => node.Position)
-            .ToList();
+            .ToDictionary(node => node.EntityId, node => node.Position);
 
         diagram.Nodes.Clear();
         diagram.Links.Clear();
 
         var nodesByEntityName = new Dictionary<string, EntityNodeModel>();
+        var newEntityIndex = 0;
 
-        for (var i = 0; i < result.Entities.Count; i++)
+        foreach (var entity in result.Entities)
         {
-            var entity = result.Entities[i];
+            var entityId = entityIds[entity.Name];
 
-            // Ordinal matching: safe while entity count/order can't change (Phase 1 is
-            // rename/type-change only). Phase 2 (add/remove) will need identity-based
-            // matching once the count and order can diverge from the previous render.
-            var position = i < previousPositions.Count
-                ? previousPositions[i]
-                : new Point((i % Columns) * XSpacing, (i / Columns) * YSpacing);
+            Point position;
+            if (previousPositionsById.TryGetValue(entityId, out var existingPosition))
+            {
+                position = existingPosition;
+            }
+            else
+            {
+                position = new Point((newEntityIndex % Columns) * XSpacing, (newEntityIndex / Columns) * YSpacing);
+                newEntityIndex++;
+            }
 
-            var node = new EntityNodeModel(entity, position);
+            var node = new EntityNodeModel(entity, entityId, position);
             diagram.Nodes.Add(node);
             nodesByEntityName[entity.Name] = node;
         }
