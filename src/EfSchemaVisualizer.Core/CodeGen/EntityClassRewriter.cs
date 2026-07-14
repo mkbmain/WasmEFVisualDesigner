@@ -81,6 +81,30 @@ public sealed class EntityClassRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string RenamePropertyTypeReferences(string sourceCode, string oldTypeName, string newTypeName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targets = root.DescendantNodes()
+            .OfType<PropertyDeclarationSyntax>()
+            .SelectMany(p => p.Type.DescendantNodesAndSelf())
+            .OfType<IdentifierNameSyntax>()
+            .Where(id => id.Identifier.Text == oldTypeName)
+            .ToList();
+
+        if (targets.Count == 0)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.ReplaceNodes(
+            targets,
+            (original, _) => original.WithIdentifier(SyntaxFactory.Identifier(newTypeName)));
+
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string RenameProperty(string sourceCode, string className, string oldPropertyName, string newPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

@@ -57,6 +57,7 @@ public sealed class DiagramEditor
         }
 
         var newClassSource = _classRewriter.RenameClass(ClassSource, oldName, newName);
+        newClassSource = _classRewriter.RenamePropertyTypeReferences(newClassSource, oldName, newName);
         var newConfigSource = _configRewriter.RenameEntityReferences(ConfigSource, oldName, newName);
         Apply(newClassSource, newConfigSource);
         return DiagramEditResult.Ok();

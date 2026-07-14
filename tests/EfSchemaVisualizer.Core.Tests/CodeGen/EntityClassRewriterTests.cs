@@ -357,6 +357,113 @@ public class EntityClassRewriterTests
         Assert.DoesNotContain("public string Name {", result);
     }
 
+    private const string SourceWithBareNavigationProperty = """
+        public class Blog
+        {
+            public int Id { get; set; }
+        }
+
+        public class Post
+        {
+            public int Id { get; set; }
+            public Blog Blog { get; set; } = null!;
+        }
+        """;
+
+    [Fact]
+    public void RenamePropertyTypeReferences_BarePropertyType_RenamesIdentifier()
+    {
+        var result = new EntityClassRewriter().RenamePropertyTypeReferences(
+            SourceWithBareNavigationProperty, oldTypeName: "Blog", newTypeName: "Weblog");
+
+        Assert.Contains("public Weblog Blog { get; set; }", result);
+        Assert.DoesNotContain("public Blog Blog", result);
+    }
+
+    private const string SourceWithNullableNavigationProperty = """
+        public class Blog
+        {
+            public int Id { get; set; }
+        }
+
+        public class Post
+        {
+            public int Id { get; set; }
+            public Blog? Blog { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void RenamePropertyTypeReferences_NullablePropertyType_RenamesIdentifier()
+    {
+        var result = new EntityClassRewriter().RenamePropertyTypeReferences(
+            SourceWithNullableNavigationProperty, oldTypeName: "Blog", newTypeName: "Weblog");
+
+        Assert.Contains("public Weblog? Blog { get; set; }", result);
+        Assert.DoesNotContain("public Blog? Blog", result);
+    }
+
+    private const string SourceWithGenericCollectionNavigationProperty = """
+        public class Blog
+        {
+            public int Id { get; set; }
+        }
+
+        public class Author
+        {
+            public int Id { get; set; }
+            public List<Blog> Posts { get; set; } = new();
+        }
+        """;
+
+    [Fact]
+    public void RenamePropertyTypeReferences_GenericCollectionTypeArgument_RenamesIdentifier()
+    {
+        var result = new EntityClassRewriter().RenamePropertyTypeReferences(
+            SourceWithGenericCollectionNavigationProperty, oldTypeName: "Blog", newTypeName: "Weblog");
+
+        Assert.Contains("public List<Weblog> Posts { get; set; }", result);
+        Assert.DoesNotContain("List<Blog>", result);
+    }
+
+    [Fact]
+    public void RenamePropertyTypeReferences_NoMatchingReferences_ReturnsSourceUnchanged()
+    {
+        var result = new EntityClassRewriter().RenamePropertyTypeReferences(
+            SourceWithThreeProperties, oldTypeName: "Blog", newTypeName: "Weblog");
+
+        Assert.Equal(SourceWithThreeProperties, result);
+    }
+
+    private const string SourceWithMultipleNavigationPropertyTypes = """
+        public class Blog
+        {
+            public int Id { get; set; }
+        }
+
+        public class Author
+        {
+            public int Id { get; set; }
+        }
+
+        public class Post
+        {
+            public int Id { get; set; }
+            public Blog Blog { get; set; } = null!;
+            public Author Author { get; set; } = null!;
+        }
+        """;
+
+    [Fact]
+    public void RenamePropertyTypeReferences_MultipleTypesInFile_OnlyRenamesMatchingType()
+    {
+        var result = new EntityClassRewriter().RenamePropertyTypeReferences(
+            SourceWithMultipleNavigationPropertyTypes, oldTypeName: "Blog", newTypeName: "Weblog");
+
+        Assert.Contains("public Weblog Blog { get; set; }", result);
+        Assert.Contains("public Author Author { get; set; }", result);
+    }
+
     [Fact]
     public void AddClass_FileWithExistingClasses_AppendsNewClassAsLastMember()
     {
