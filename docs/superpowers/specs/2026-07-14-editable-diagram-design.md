@@ -295,6 +295,50 @@ new Core methods before any relationship-editing UX.
    fully verified end to end.
 3. **Keys and indexes.** Key-toggle on a property row; index add/remove in
    the row's expand-on-click area.
+
+   **Update:** Phase 3 is built. The Web project's `Diagram/DiagramEditor.cs`
+   gained `ToggleKey` (flips a property's primary-key membership, refusing to
+   remove the last remaining key property) and five index-management
+   methods — `AddIndex`, `ToggleIndexMembership`, `SetIndexUnique`,
+   `RenameIndex`, and `RemoveIndex` — covering single- and composite-index
+   authoring end to end. `Diagram/EntityNode.razor` gained an
+   expand-on-click panel per property row (new to this codebase, introduced
+   in this phase) exposing a primary-key checkbox and a full index-management
+   UI: an "+ New index on this property" affordance, per-index membership
+   checkboxes, a unique-toggle checkbox, an editable name field, and a
+   remove ("×") button.
+
+   Verification (recorded 2026-07-14): `dotnet test
+   tests/EfSchemaVisualizer.Core.Tests` — 277 passed, 0 failed (no new
+   `Core` tests this phase, since no new `Core` methods were added — all
+   new logic lives in the Web project's `DiagramEditor`, consistent with
+   Phase 2). `dotnet build` (whole solution) — `Build succeeded.`, 0
+   warnings, 0 errors for both `EfSchemaVisualizer.Core` and
+   `EfSchemaVisualizer.Web`. `dotnet publish
+   src/EfSchemaVisualizer.Web/EfSchemaVisualizer.Web.csproj -c Release`
+   also succeeded, producing a working `wwwroot` output.
+
+   Interactive browser verification (expand a single-property key's row,
+   confirm its "primary key" checkbox is checked, uncheck it and confirm
+   the inline error and revert; add a second property, expand it, check
+   "primary key" and confirm a composite `HasKey(e => new { e.X, e.Y })`
+   appears with both checkboxes checked; expand a property and add a new
+   index, confirming a single-property `HasIndex` call appears and the new
+   row shows in every property's expanded index list; check a second
+   property into that index and confirm it becomes composite
+   (`HasIndex(e => new { e.A, e.B })`) then uncheck it back; toggle an
+   index's unique checkbox and rename it, confirming `.IsUnique()` and the
+   new name in the regenerated source; and remove an index via its "×"
+   button, confirming the `HasIndex` statement is fully gone) was **not
+   performed** — same situation as Phases 1 and 2: this sandbox has no
+   browser, no Node.js, and no Playwright available (`which chromium
+   chromium-browser google-chrome firefox node npx playwright` all
+   reported not found), so there is no way to drive a browser and observe
+   actual rendering/interaction here. This remains an open item carried
+   forward: a future session (or the user, manually) needs to serve the
+   published `wwwroot` locally, open it in a real browser, and run through
+   the six scenarios listed under Step 4 of the Task 5 brief before Phase
+   3's key/index editing flows are considered fully verified end to end.
 4. **Column/table mapping, precision, default values.** Remaining
    expand-on-click fields, plus entity-level table/schema in the node
    header.
