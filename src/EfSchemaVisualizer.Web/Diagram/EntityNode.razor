@@ -73,6 +73,10 @@
                            @onmousedown:stopPropagation="true" />
                     nullable
                 </label>
+                <button type="button" title="More options" style="border: none; background: transparent; cursor: pointer;"
+                        @onclick="() => ToggleExpand(property.Name)"
+                        @onpointerdown:stopPropagation="true"
+                        @onmousedown:stopPropagation="true">@(_expandedPropertyName == property.Name ? "▾" : "▸")</button>
                 <button type="button" title="Remove property" style="border: none; background: transparent; cursor: pointer;"
                         @onclick="() => RemoveProperty(property.Name)"
                         @onpointerdown:stopPropagation="true"
@@ -80,6 +84,18 @@
                 @if (_propertyErrors.TryGetValue(property.Name, out var propertyError))
                 {
                     <div style="color: red; font-size: 0.8em;">@propertyError</div>
+                }
+                @if (_expandedPropertyName == property.Name)
+                {
+                    <div style="margin: 4px 0 4px 16px; padding: 4px 8px; background: #f7f7f7; border-left: 2px solid #ccc;">
+                        <label style="font-size: 0.8em; display: block;">
+                            <input type="checkbox" checked="@Node.Entity.KeyPropertyNames.Contains(property.Name)"
+                                   @onchange="e => ToggleKey(property, (bool)(e.Value ?? false))"
+                                   @onpointerdown:stopPropagation="true"
+                                   @onmousedown:stopPropagation="true" />
+                            primary key
+                        </label>
+                    </div>
                 }
             </li>
         }
@@ -166,6 +182,27 @@
     private string? _editingPropertyName;
     private string _editingPropertyValue = string.Empty;
     private readonly Dictionary<string, string> _propertyErrors = new();
+
+    private string? _expandedPropertyName;
+
+    private void ToggleExpand(string propertyName)
+    {
+        _expandedPropertyName = _expandedPropertyName == propertyName ? null : propertyName;
+    }
+
+    private async Task ToggleKey(PropertyModel property, bool isKey)
+    {
+        var result = EditContext.Editor.ToggleKey(Node.Entity.Name, property.Name, isKey);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
 
     private void BeginPropertyRename(string propertyName)
     {
