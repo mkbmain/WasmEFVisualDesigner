@@ -1735,4 +1735,65 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(SourceWithOneToManyRelationship, result);
     }
+
+    private const string SourceWithOneToManyRelationshipViaNavigation = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasOne(d => d.Blog).WithMany().HasForeignKey(d => d.BlogId);
+                });
+            }
+        }
+        """;
+
+    private const string SourceWithManyToManyRelationshipViaNavigation = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasMany(p => p.Tags).WithMany();
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RemoveRelationship_OneToManyViaNavigationProperty_RemovesWholeStatementFromDependentScope()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, "Blog",
+            ForeignKeyProperties: new List<string> { "BlogId" });
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveRelationship(SourceWithOneToManyRelationshipViaNavigation, relationship);
+
+        Assert.DoesNotContain("HasOne(d => d.Blog)", result);
+        Assert.Contains("entity.HasKey(e => e.Id)", result);
+    }
+
+    [Fact]
+    public void RemoveRelationship_ManyToManyViaNavigationProperty_RemovesWholeStatementFromPrincipalScope()
+    {
+        var relationship = new RelationshipModel("Post", "Tag", RelationshipKind.ManyToMany, "Tags", null);
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveRelationship(SourceWithManyToManyRelationshipViaNavigation, relationship);
+
+        Assert.DoesNotContain("HasMany(p => p.Tags)", result);
+    }
 }

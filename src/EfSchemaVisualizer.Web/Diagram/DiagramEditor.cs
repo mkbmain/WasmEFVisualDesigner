@@ -604,6 +604,11 @@ public sealed class DiagramEditor
         var updated = relationship with { Kind = newKind, ForeignKeyProperties = newForeignKeyProperties };
 
         var withoutOld = _configRewriter.RemoveRelationship(ConfigSource, relationship);
+        if (withoutOld == ConfigSource)
+        {
+            return DiagramEditResult.Fail("Could not locate this relationship's existing configuration to update.");
+        }
+
         var withNew = _configRewriter.SetRelationship(withoutOld, updated);
         Apply(ClassSource, withNew);
         return DiagramEditResult.Ok();
@@ -617,6 +622,11 @@ public sealed class DiagramEditor
         }
 
         var newConfigSource = _configRewriter.RemoveRelationship(ConfigSource, relationship);
+        if (newConfigSource == ConfigSource)
+        {
+            return DiagramEditResult.Fail("Could not locate this relationship in the source to remove.");
+        }
+
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }

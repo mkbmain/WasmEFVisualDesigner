@@ -1136,12 +1136,17 @@ public sealed class OnModelCreatingRewriter
             ? relationship.DependentEntity
             : relationship.PrincipalEntity;
         var methodName = relationship.Kind == RelationshipKind.ManyToMany ? "HasMany" : "HasOne";
+        var expectedNavigation = relationship.Kind == RelationshipKind.ManyToMany
+            ? relationship.PrincipalNavigation
+            : relationship.DependentNavigation;
 
         var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, scopeEntityName).ToList();
 
         var matchingCall = entityInvocations
             .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, methodName))
-            .FirstOrDefault(call => HasGenericTypeArgument(call, otherEntityName));
+            .FirstOrDefault(call =>
+                HasGenericTypeArgument(call, otherEntityName)
+                || (expectedNavigation is not null && TryGetNavigationPropertyName(call) == expectedNavigation));
 
         if (matchingCall is null
             || matchingCall.Ancestors().OfType<ExpressionStatementSyntax>().FirstOrDefault() is not { } statement)
@@ -1159,6 +1164,17 @@ public sealed class OnModelCreatingRewriter
             && generic.TypeArgumentList.Arguments.Count == 1
             && generic.TypeArgumentList.Arguments[0] is IdentifierNameSyntax { Identifier.Text: var text }
             && text == typeName;
+    }
+
+    private static string? TryGetNavigationPropertyName(InvocationExpressionSyntax call)
+    {
+        var lambdaArgument = call.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+        return lambdaArgument switch
+        {
+            SimpleLambdaExpressionSyntax { Body: MemberAccessExpressionSyntax memberAccess } => memberAccess.Name.Identifier.Text,
+            ParenthesizedLambdaExpressionSyntax { Body: MemberAccessExpressionSyntax memberAccess } => memberAccess.Name.Identifier.Text,
+            _ => null,
+        };
     }
 
     private static MethodDeclarationSyntax FindOnModelCreatingMethod(CompilationUnitSyntax root)
