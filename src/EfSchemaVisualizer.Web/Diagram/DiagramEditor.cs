@@ -120,6 +120,12 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public void SyncSource(string classSource, string configSource)
+    {
+        ClassSource = classSource;
+        ConfigSource = configSource;
+    }
+
     private void Apply(string newClassSource, string newConfigSource)
     {
         ClassSource = newClassSource;

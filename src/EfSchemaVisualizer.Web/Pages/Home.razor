@@ -17,11 +17,11 @@
 <div style="display: flex; gap: 16px;">
     <div style="flex: 1;">
         <label>Entity classes</label>
-        <textarea @bind="_classSource" @bind:event="oninput" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+        <textarea @bind="_classSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
     </div>
     <div style="flex: 1;">
         <label>DbContext / OnModelCreating</label>
-        <textarea @bind="_configSource" @bind:event="oninput" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+        <textarea @bind="_configSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
     </div>
 </div>
 
@@ -121,6 +121,11 @@
         {
             _error = ex.ToString();
         }
+    }
+
+    private void SyncEditorSource()
+    {
+        _editor?.SyncSource(_classSource, _configSource);
     }
 
     private Task OnDiagramEditedAsync()
