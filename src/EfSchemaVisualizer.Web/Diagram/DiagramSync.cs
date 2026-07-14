@@ -21,7 +21,7 @@ public static class DiagramSync
         diagram.Links.Clear();
 
         var nodesByEntityName = new Dictionary<string, EntityNodeModel>();
-        var newEntityIndex = 0;
+        var newEntityIndex = previousPositionsById.Count;
 
         foreach (var entity in result.Entities)
         {
