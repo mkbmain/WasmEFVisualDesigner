@@ -112,6 +112,41 @@
                             primary key
                         </label>
                         <div style="font-size: 0.8em; margin-top: 4px;">
+                            <label style="display: block;">
+                                Column name:
+                                <input style="width: 100px;" value="@property.ColumnName" placeholder="(same as property)"
+                                       @onchange="e => CommitColumnName(property, e.Value?.ToString())"
+                                       @onpointerdown:stopPropagation="true"
+                                       @onmousedown:stopPropagation="true" />
+                            </label>
+                            <label style="display: block;">
+                                Column type:
+                                <input style="width: 100px;" value="@property.ColumnType" placeholder="(default)"
+                                       @onchange="e => CommitColumnType(property, e.Value?.ToString())"
+                                       @onpointerdown:stopPropagation="true"
+                                       @onmousedown:stopPropagation="true" />
+                            </label>
+                            <label style="display: block;">
+                                Precision:
+                                <input type="number" style="width: 50px;" value="@property.Precision"
+                                       @onchange="e => CommitPrecision(property, ParseNullableInt(e.Value?.ToString()))"
+                                       @onpointerdown:stopPropagation="true"
+                                       @onmousedown:stopPropagation="true" />
+                                Scale:
+                                <input type="number" style="width: 50px;" value="@property.Scale"
+                                       @onchange="e => CommitScale(property, ParseNullableInt(e.Value?.ToString()))"
+                                       @onpointerdown:stopPropagation="true"
+                                       @onmousedown:stopPropagation="true" />
+                            </label>
+                            <label style="display: block;">
+                                Default value:
+                                <input style="width: 100px;" value="@property.DefaultValueLiteral" placeholder="(none)"
+                                       @onchange="e => CommitDefaultValue(property, e.Value?.ToString())"
+                                       @onpointerdown:stopPropagation="true"
+                                       @onmousedown:stopPropagation="true" />
+                            </label>
+                        </div>
+                        <div style="font-size: 0.8em; margin-top: 4px;">
                             <div>Indexes:</div>
                             @foreach (var index in Node.Entity.Indexes)
                             {
@@ -462,6 +497,86 @@
         {
             _propertyErrors[property.Name] = result.Error!;
         }
+    }
+
+    private async Task CommitColumnName(PropertyModel property, string? newColumnName)
+    {
+        var result = EditContext.Editor.SetColumnName(Node.Entity.Name, property.Name, newColumnName);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitColumnType(PropertyModel property, string? newColumnType)
+    {
+        var result = EditContext.Editor.SetColumnType(Node.Entity.Name, property.Name, newColumnType);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitPrecision(PropertyModel property, int? newPrecision)
+    {
+        var result = EditContext.Editor.SetPrecision(Node.Entity.Name, property.Name, newPrecision, property.Scale);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitScale(PropertyModel property, int? newScale)
+    {
+        var result = EditContext.Editor.SetPrecision(Node.Entity.Name, property.Name, property.Precision, newScale);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitDefaultValue(PropertyModel property, string? newLiteralText)
+    {
+        var result = EditContext.Editor.SetDefaultValue(Node.Entity.Name, property.Name, newLiteralText);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private static int? ParseNullableInt(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return int.TryParse(text, out var value) ? value : null;
     }
 
     private async Task AddProperty()
