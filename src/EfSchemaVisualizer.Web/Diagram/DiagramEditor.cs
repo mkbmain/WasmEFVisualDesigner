@@ -263,6 +263,139 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult AddIndex(string entityName, string propertyName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (!entity.Properties.Any(p => p.Name == propertyName))
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (entity.Indexes.Any(i => i.PropertyNames.SequenceEqual(new[] { propertyName })))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' already has an index on '{propertyName}'.");
+        }
+
+        var newConfigSource = _configRewriter.SetIndex(ConfigSource, entityName, new List<string> { propertyName }, isUnique: false);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult ToggleIndexMembership(string entityName, IReadOnlyList<string> indexPropertyNames, string propertyName, bool include)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var index = entity.Indexes.FirstOrDefault(i => i.PropertyNames.SequenceEqual(indexPropertyNames));
+        if (index is null)
+        {
+            return DiagramEditResult.Fail($"Index not found on '{entityName}'.");
+        }
+
+        var alreadyIncluded = index.PropertyNames.Contains(propertyName);
+        if (include == alreadyIncluded)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newPropertyNames = include
+            ? index.PropertyNames.Append(propertyName).ToList()
+            : index.PropertyNames.Where(name => name != propertyName).ToList();
+
+        if (newPropertyNames.Count == 0)
+        {
+            var configAfterRemove = _configRewriter.RemoveIndex(ConfigSource, entityName, index.PropertyNames);
+            Apply(ClassSource, configAfterRemove);
+            return DiagramEditResult.Ok();
+        }
+
+        if (entity.Indexes.Any(i => !ReferenceEquals(i, index) && i.PropertyNames.SequenceEqual(newPropertyNames)))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' already has an index on [{string.Join(", ", newPropertyNames)}].");
+        }
+
+        var withoutOldIndex = _configRewriter.RemoveIndex(ConfigSource, entityName, index.PropertyNames);
+        var withNewIndex = _configRewriter.SetIndex(withoutOldIndex, entityName, newPropertyNames, index.IsUnique, index.Name);
+        Apply(ClassSource, withNewIndex);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetIndexUnique(string entityName, IReadOnlyList<string> propertyNames, bool isUnique)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var index = entity.Indexes.FirstOrDefault(i => i.PropertyNames.SequenceEqual(propertyNames));
+        if (index is null)
+        {
+            return DiagramEditResult.Fail($"Index not found on '{entityName}'.");
+        }
+
+        if (index.IsUnique == isUnique)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetIndex(ConfigSource, entityName, propertyNames, isUnique, index.Name);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RenameIndex(string entityName, IReadOnlyList<string> propertyNames, string? newName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var index = entity.Indexes.FirstOrDefault(i => i.PropertyNames.SequenceEqual(propertyNames));
+        if (index is null)
+        {
+            return DiagramEditResult.Fail($"Index not found on '{entityName}'.");
+        }
+
+        var normalizedName = string.IsNullOrWhiteSpace(newName) ? null : newName.Trim();
+        if (normalizedName == index.Name)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetIndex(ConfigSource, entityName, propertyNames, index.IsUnique, normalizedName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveIndex(string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var index = entity.Indexes.FirstOrDefault(i => i.PropertyNames.SequenceEqual(propertyNames));
+        if (index is null)
+        {
+            return DiagramEditResult.Fail($"Index not found on '{entityName}'.");
+        }
+
+        var newConfigSource = _configRewriter.RemoveIndex(ConfigSource, entityName, propertyNames);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static string GenerateUniquePropertyName(EntityModel entity)
     {
         if (!entity.Properties.Any(p => p.Name == "NewProperty"))
