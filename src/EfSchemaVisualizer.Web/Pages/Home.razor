@@ -103,33 +103,7 @@
             });
             diagram.RegisterComponent<EntityNodeModel, EntityNode>();
 
-            var nodesByEntityName = new Dictionary<string, EntityNodeModel>();
-            const int columns = 4;
-            const double xSpacing = 320;
-            const double ySpacing = 260;
-
-            for (var i = 0; i < result.Entities.Count; i++)
-            {
-                var entity = result.Entities[i];
-                var column = i % columns;
-                var row = i / columns;
-                var node = new EntityNodeModel(entity, new Point(column * xSpacing, row * ySpacing));
-                diagram.Nodes.Add(node);
-                nodesByEntityName[entity.Name] = node;
-            }
-
-            foreach (var relationship in result.Relationships)
-            {
-                if (!nodesByEntityName.TryGetValue(relationship.PrincipalEntity, out var principalNode) ||
-                    !nodesByEntityName.TryGetValue(relationship.DependentEntity, out var dependentNode))
-                {
-                    continue;
-                }
-
-                var link = new LinkModel(dependentNode, principalNode);
-                link.AddLabel(RelationshipLabels.For(relationship.Kind));
-                diagram.Links.Add(link);
-            }
+            DiagramSync.Rebuild(diagram, result);
 
             _diagram = diagram;
         }
