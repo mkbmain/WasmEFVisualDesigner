@@ -99,6 +99,30 @@ public sealed class EntityClassRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string ChangePropertyType(string sourceCode, string className, string propertyName, string newClrType, bool newIsNullable)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targetType = FindTopLevelType(root, className);
+
+        var targetProperty = targetType.Members
+            .OfType<PropertyDeclarationSyntax>()
+            .FirstOrDefault(p => p.Identifier.Text == propertyName)
+            ?? throw new InvalidOperationException($"No property named '{propertyName}' found on type '{className}'.");
+
+        TypeSyntax newTypeSyntax = SyntaxFactory.ParseTypeName(newClrType);
+        if (newIsNullable)
+        {
+            newTypeSyntax = SyntaxFactory.NullableType(newTypeSyntax);
+        }
+
+        var newProperty = targetProperty.WithType(newTypeSyntax);
+
+        var newRoot = root.ReplaceNode(targetProperty, newProperty);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     private static TypeDeclarationSyntax FindTopLevelType(CompilationUnitSyntax root, string className)
     {
         return root.DescendantNodes()

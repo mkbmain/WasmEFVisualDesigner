@@ -407,4 +407,92 @@ public class EntityClassRewriterTests
         Assert.DoesNotContain("class Person", result);
         Assert.Equal(string.Empty, result.Trim());
     }
+
+    private const string SourceForTypeChange = """
+        public class Person
+        {
+            // unrelated comment that must survive
+            public int Id { get; set; }
+            public string Name { get; set; }
+        }
+        """;
+
+    [Fact]
+    public void ChangePropertyType_NonNullableToNonNullable_ChangesTypeOnly()
+    {
+        var result = new EntityClassRewriter().ChangePropertyType(
+            SourceForTypeChange, className: "Person", propertyName: "Id",
+            newClrType: "long", newIsNullable: false);
+
+        Assert.Contains("public long Id { get; set; }", result);
+        Assert.Contains("public string Name { get; set; }", result);
+        Assert.Contains("// unrelated comment that must survive", result);
+    }
+
+    [Fact]
+    public void ChangePropertyType_NonNullableToNullable_AddsQuestionMarkSuffix()
+    {
+        var result = new EntityClassRewriter().ChangePropertyType(
+            SourceForTypeChange, className: "Person", propertyName: "Name",
+            newClrType: "string", newIsNullable: true);
+
+        Assert.Contains("public string? Name { get; set; }", result);
+    }
+
+    [Fact]
+    public void ChangePropertyType_NullableToNonNullable_RemovesQuestionMarkSuffix()
+    {
+        const string sourceWithNullableProperty = """
+            public class Person
+            {
+                public string? MiddleName { get; set; }
+            }
+            """;
+
+        var result = new EntityClassRewriter().ChangePropertyType(
+            sourceWithNullableProperty, className: "Person", propertyName: "MiddleName",
+            newClrType: "string", newIsNullable: false);
+
+        Assert.Contains("public string MiddleName { get; set; }", result);
+        Assert.DoesNotContain("string?", result);
+    }
+
+    [Fact]
+    public void ChangePropertyType_PropertyNotFound_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.ChangePropertyType(
+                SourceForTypeChange, className: "Person", propertyName: "DoesNotExist",
+                newClrType: "int", newIsNullable: false));
+    }
+
+    [Fact]
+    public void ChangePropertyType_MultipleProperties_OnlyTargetChanges()
+    {
+        var result = new EntityClassRewriter().ChangePropertyType(
+            SourceForTypeChange, className: "Person", propertyName: "Id",
+            newClrType: "Guid", newIsNullable: false);
+
+        Assert.Contains("public Guid Id { get; set; }", result);
+        Assert.Contains("public string Name { get; set; }", result);
+    }
+
+    [Fact]
+    public void ChangePropertyType_RecordBodyProperty_ChangesType()
+    {
+        const string recordSource = """
+            public record Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassRewriter().ChangePropertyType(
+            recordSource, className: "Person", propertyName: "Id",
+            newClrType: "long", newIsNullable: false);
+
+        Assert.Contains("public long Id { get; set; }", result);
+    }
 }
