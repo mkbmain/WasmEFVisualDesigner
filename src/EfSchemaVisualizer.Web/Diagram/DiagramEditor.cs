@@ -230,6 +230,39 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult ToggleKey(string entityName, string propertyName, bool isKey)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (!entity.Properties.Any(p => p.Name == propertyName))
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var alreadyKey = entity.KeyPropertyNames.Contains(propertyName);
+        if (isKey == alreadyKey)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newKeyPropertyNames = isKey
+            ? entity.KeyPropertyNames.Append(propertyName).ToList()
+            : entity.KeyPropertyNames.Where(name => name != propertyName).ToList();
+
+        if (newKeyPropertyNames.Count == 0)
+        {
+            return DiagramEditResult.Fail($"'{entityName}' must have at least one key property.");
+        }
+
+        var newConfigSource = _configRewriter.SetKey(ConfigSource, entityName, newKeyPropertyNames);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static string GenerateUniquePropertyName(EntityModel entity)
     {
         if (!entity.Properties.Any(p => p.Name == "NewProperty"))
