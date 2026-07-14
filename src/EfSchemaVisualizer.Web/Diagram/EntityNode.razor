@@ -1,11 +1,28 @@
 @namespace EfSchemaVisualizer.Web.Diagram
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
 @using System.Linq
 
 <div class="card" style="width: 260px; border: 1px solid #444;">
     <div class="card-header" style="font-weight: bold; padding: 4px 8px; background: #eee;">
-        @Node.Entity.Name
+        @if (_isEditingName)
+        {
+            <input value="@_editingName"
+                   @oninput="e => _editingName = e.Value?.ToString() ?? string.Empty"
+                   @onblur="CommitNameEdit"
+                   @onkeydown="OnNameKeyDown"
+                   @onpointerdown:stopPropagation="true"
+                   @onmousedown:stopPropagation="true" />
+        }
+        else
+        {
+            <span @ondblclick="BeginNameEdit">@Node.Entity.Name</span>
+        }
     </div>
+    @if (_nameError is not null)
+    {
+        <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_nameError</div>
+    }
     <ul style="list-style: none; margin: 0; padding: 0;">
         @foreach (var property in Node.Entity.Properties)
         {
@@ -18,6 +35,59 @@
 </div>
 
 @code {
+    [CascadingParameter]
+    public DiagramEditContext EditContext { get; set; } = null!;
+
     [Parameter]
     public EntityNodeModel Node { get; set; } = null!;
+
+    private bool _isEditingName;
+    private string _editingName = string.Empty;
+    private string? _nameError;
+
+    private void BeginNameEdit()
+    {
+        _isEditingName = true;
+        _editingName = Node.Entity.Name;
+        _nameError = null;
+    }
+
+    private async Task CommitNameEdit()
+    {
+        if (!_isEditingName)
+        {
+            return;
+        }
+
+        _isEditingName = false;
+
+        if (_editingName == Node.Entity.Name)
+        {
+            return;
+        }
+
+        var result = EditContext.Editor.RenameEntity(Node.Entity.Name, _editingName);
+        if (result.Success)
+        {
+            _nameError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _nameError = result.Error;
+        }
+    }
+
+    private async Task OnNameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitNameEdit();
+        }
+        else if (e.Key == "Escape")
+        {
+            _isEditingName = false;
+            _nameError = null;
+        }
+    }
 }
