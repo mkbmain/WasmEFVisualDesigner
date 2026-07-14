@@ -222,6 +222,36 @@ new Core methods before any relationship-editing UX.
    the validate → rewrite → rebuild → reposition loop works at all, before
    building anything riskier on top of it. Builds `ChangePropertyType` and
    `DiagramSync.RebuildPreservingPositions`.
+
+   **Update:** Phase 1 is built. `Core` gained
+   `EntityClassRewriter.ChangePropertyType` (with unit tests following the
+   existing rewriter conventions). The Web project gained
+   `Diagram/DiagramSync.cs` (`RebuildPreservingPositions`, the
+   position-preserving diagram rebuild helper), `Diagram/DiagramEditor.cs`
+   and `Diagram/DiagramEditContext.cs` (the validate → rewrite → rebuild
+   orchestration), and inline rename/type/nullable editing UX added to
+   `Diagram/EntityNode.razor`.
+
+   Verification (recorded 2026-07-14): `dotnet test
+   tests/EfSchemaVisualizer.Core.Tests` — 272 passed, 0 failed. `dotnet
+   build` (whole solution) — `Build succeeded.`, 0 warnings, 0 errors for
+   both `EfSchemaVisualizer.Core` and `EfSchemaVisualizer.Web`. `dotnet
+   publish src/EfSchemaVisualizer.Web/EfSchemaVisualizer.Web.csproj -c
+   Release` also succeeded, producing a working `wwwroot` output.
+
+   Interactive browser verification (drag "Post" node, rename it to
+   "Article" and confirm position/relationship-label preservation, rename a
+   property, change a type, toggle nullable, and trigger the three inline
+   error cases) was **not performed** — same as the read-only slice
+   (`2026-07-13-er-diagram-render-design.md`), this sandbox environment has
+   no browser, no Node.js, and no Playwright available (`which chromium
+   chromium-browser google-chrome firefox node npx playwright` all reported
+   not found), so there is no way to drive a browser and observe actual
+   rendering/interaction here. This remains an open item carried forward
+   from the prior slice: a future session (or the user, manually) needs to
+   `dotnet publish`, serve `wwwroot` locally, open it in a real browser, and
+   run through the five scenarios listed under Step 3 of the Task 8 brief
+   before Phase 1's editing loop is considered fully verified end to end.
 2. **Add/remove entities and properties.** Toolbar + row-level add,
    selection + Delete / hover-× remove, wired to the existing `AddClass`/
    `RemoveClass`/`AddProperty`/`RemoveProperty`.
