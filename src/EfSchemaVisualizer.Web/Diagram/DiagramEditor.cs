@@ -41,6 +41,16 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"'{newName}' is not a valid entity name.");
         }
 
+        if (newName == oldName)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (!Current.Entities.Any(e => e.Name == oldName))
+        {
+            return DiagramEditResult.Fail($"Entity '{oldName}' not found.");
+        }
+
         if (Current.Entities.Any(e => e.Name == newName))
         {
             return DiagramEditResult.Fail($"An entity named '{newName}' already exists.");
@@ -65,6 +75,16 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
         }
 
+        if (newPropertyName == oldPropertyName)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (!entity.Properties.Any(p => p.Name == oldPropertyName))
+        {
+            return DiagramEditResult.Fail($"Property '{oldPropertyName}' not found on '{entityName}'.");
+        }
+
         if (entity.Properties.Any(p => p.Name == newPropertyName))
         {
             return DiagramEditResult.Fail($"'{entityName}' already has a property named '{newPropertyName}'.");
@@ -81,6 +101,17 @@ public sealed class DiagramEditor
         if (!IsValidTypeToken(newClrType))
         {
             return DiagramEditResult.Fail($"'{newClrType}' is not a valid type.");
+        }
+
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (!entity.Properties.Any(p => p.Name == propertyName))
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
         }
 
         var newClassSource = _classRewriter.ChangePropertyType(ClassSource, entityName, propertyName, newClrType, newIsNullable);
