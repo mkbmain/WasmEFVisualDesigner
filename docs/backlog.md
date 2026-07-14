@@ -300,6 +300,14 @@ these matter before any new surface is added.
         dropdown, "Remove relationship" button) in `Pages/Home.razor`.
         This was the last phase of the editable-diagram slice — see
         `2026-07-14-editable-diagram-phase5-relationships.md`.
+        Whole-branch review caught and fixed a real bug: `RemoveRelationship`
+        only matched the generic-argument (`HasOne<Blog>()`) chain style, so
+        removing/reshaping a relationship written in the idiomatic
+        navigation-lambda style (`HasOne(e => e.Blog)`, including this app's
+        own shipped default sample) silently no-op'd and could produce a
+        duplicate relationship on edit; fixed to also match by navigation
+        property name and to fail explicitly instead of falsely reporting
+        success.
       - **Known gap across all merged phases:** interactive in-browser
         verification (drag, click-through the actual editing flows) has
         not been possible in the implementation sandbox (no browser

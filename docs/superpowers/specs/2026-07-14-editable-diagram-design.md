@@ -461,6 +461,27 @@ new Core methods before any relationship-editing UX.
    Task 6 brief before Phase 5's relationship-editing flows are considered
    fully verified end to end.
 
+   **Whole-branch review caught and fixed a real bug** after this entry was
+   first recorded: `OnModelCreatingRewriter.RemoveRelationship` only matched
+   relationship chains written with an explicit generic type argument
+   (`HasOne<Blog>()`), but `FluentConfigParser.ParseRelationships` (the read
+   side) also accepts — and this app's own shipped default sample uses — the
+   idiomatic navigation-lambda style (`HasOne(e => e.Blog)`). This meant
+   removing or reshaping such a relationship silently no-op'd on the remove
+   step while still reporting success, and `SetRelationshipShape` would then
+   append a duplicate relationship on top. Fixed by matching on navigation
+   property name (via a new `TryGetNavigationPropertyName` helper, using the
+   `RelationshipModel.DependentNavigation`/`PrincipalNavigation` fields
+   already carried on the model) in addition to the generic-argument check,
+   and by making `DiagramEditor.RemoveRelationship`/`SetRelationshipShape`
+   return `Fail` instead of `Ok` whenever the rewriter made no change — see
+   commits `e7a21d8`/`59d336b`. `dotnet test` (291 passed, including two new
+   regression tests against the navigation-lambda style) and a full
+   whole-branch re-review both confirm the fix; this was exactly the shape
+   of relationship the not-yet-performed browser verification's scenarios 2
+   and 3 would have exercised, so it remains important that a future browser
+   pass exercises them directly.
+
    **This completes all five phases of the editable-diagram spec.** Every
    phase described in this document (rename/type/nullable editing;
    add/remove entities and properties; keys and indexes; column/table
