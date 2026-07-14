@@ -137,6 +137,59 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult AddEntity()
+    {
+        var name = GenerateUniqueEntityName();
+        var dbSetPropertyName = name + "s";
+
+        var newClassSource = _classRewriter.AddClass(ClassSource, name);
+        var newConfigSource = _configRewriter.AddEntity(ConfigSource, name, dbSetPropertyName);
+        Apply(newClassSource, newConfigSource);
+        _entityIds[name] = Guid.NewGuid();
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveEntity(string entityName)
+    {
+        if (!Current.Entities.Any(e => e.Name == entityName))
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var blockingRelationship = Current.Relationships.FirstOrDefault(r =>
+            r.PrincipalEntity == entityName || r.DependentEntity == entityName);
+        if (blockingRelationship is not null)
+        {
+            var otherEntity = blockingRelationship.PrincipalEntity == entityName
+                ? blockingRelationship.DependentEntity
+                : blockingRelationship.PrincipalEntity;
+            return DiagramEditResult.Fail(
+                $"Cannot remove '{entityName}': it has a relationship with '{otherEntity}'. Remove the relationship first.");
+        }
+
+        var newClassSource = _classRewriter.RemoveClass(ClassSource, entityName);
+        var newConfigSource = _configRewriter.RemoveEntity(ConfigSource, entityName);
+        Apply(newClassSource, newConfigSource);
+        _entityIds.Remove(entityName);
+        return DiagramEditResult.Ok();
+    }
+
+    private string GenerateUniqueEntityName()
+    {
+        if (!Current.Entities.Any(e => e.Name == "NewEntity"))
+        {
+            return "NewEntity";
+        }
+
+        var suffix = 2;
+        while (Current.Entities.Any(e => e.Name == $"NewEntity{suffix}"))
+        {
+            suffix++;
+        }
+
+        return $"NewEntity{suffix}";
+    }
+
     public void SyncSource(string classSource, string configSource)
     {
         ClassSource = classSource;
