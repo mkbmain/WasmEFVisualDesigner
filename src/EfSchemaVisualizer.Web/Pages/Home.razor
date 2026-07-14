@@ -163,7 +163,7 @@
             return;
         }
 
-        InvokeAsync(async () => await OnDiagramEditedAsync());
+        InvokeAsync(OnDiagramEditedAsync);
     }
 
     private static string? ResolveEntityName(Anchor anchor) => anchor.Model switch

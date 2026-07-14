@@ -111,6 +111,7 @@
         var result = EditContext.Editor.RemoveRelationship(Label.Relationship);
         if (result.Success)
         {
+            _error = null;
             await EditContext.NotifyChangedAsync();
         }
         else
