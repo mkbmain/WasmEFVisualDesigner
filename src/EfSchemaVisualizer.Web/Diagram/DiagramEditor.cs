@@ -67,8 +67,10 @@ public sealed class DiagramEditor
         var newClassSource = _classRewriter.RenameClass(ClassSource, oldName, newName);
         newClassSource = _classRewriter.RenamePropertyTypeReferences(newClassSource, oldName, newName);
         var newConfigSource = _configRewriter.RenameEntityReferences(ConfigSource, oldName, newName);
-        Apply(newClassSource, newConfigSource);
 
+        // Re-key before Apply so its entity-id reconciliation (which only fills in
+        // missing names and drops stale ones) sees the rename as already accounted
+        // for, instead of dropping oldName and minting a fresh Guid for newName.
         if (_entityIds.Remove(oldName, out var entityId))
         {
             _entityIds[newName] = entityId;
@@ -77,6 +79,8 @@ public sealed class DiagramEditor
         {
             _entityIds[newName] = Guid.NewGuid();
         }
+
+        Apply(newClassSource, newConfigSource);
 
         return DiagramEditResult.Ok();
     }
@@ -269,6 +273,24 @@ public sealed class DiagramEditor
         ClassSource = newClassSource;
         ConfigSource = newConfigSource;
         Current = DiagramModelBuilder.Build(ClassSource, ConfigSource);
+
+        // Hand-edited source (via SyncSource) can introduce or delete classes without
+        // going through AddEntity/RemoveEntity, so _entityIds would otherwise drift out
+        // of sync with Current.Entities. Reconcile here, the one place every mutation
+        // (rename, add, remove, type change, hand-edit reparse) funnels through.
+        var currentNames = Current.Entities.Select(e => e.Name).ToHashSet();
+        foreach (var name in currentNames)
+        {
+            if (!_entityIds.ContainsKey(name))
+            {
+                _entityIds[name] = Guid.NewGuid();
+            }
+        }
+
+        foreach (var staleName in _entityIds.Keys.Where(name => !currentNames.Contains(name)).ToList())
+        {
+            _entityIds.Remove(staleName);
+        }
     }
 
     private static bool IsValidTypeToken(string typeText)
