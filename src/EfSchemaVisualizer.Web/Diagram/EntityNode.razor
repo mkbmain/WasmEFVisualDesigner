@@ -26,6 +26,22 @@
                 @onpointerdown:stopPropagation="true"
                 @onmousedown:stopPropagation="true">×</button>
     </div>
+    <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
+        <span>Table:</span>
+        <input style="width: 80px;" value="@Node.Entity.TableName" placeholder="(default)"
+               @onchange="e => CommitTableName(e.Value?.ToString())"
+               @onpointerdown:stopPropagation="true"
+               @onmousedown:stopPropagation="true" />
+        <span>Schema:</span>
+        <input style="width: 60px;" value="@Node.Entity.Schema" placeholder="(none)"
+               @onchange="e => CommitSchema(e.Value?.ToString())"
+               @onpointerdown:stopPropagation="true"
+               @onmousedown:stopPropagation="true" />
+    </div>
+    @if (_tableError is not null)
+    {
+        <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_tableError</div>
+    }
     @if (_nameError is not null)
     {
         <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_nameError</div>
@@ -211,6 +227,36 @@
         else
         {
             _nameError = result.Error;
+        }
+    }
+
+    private string? _tableError;
+
+    private async Task CommitTableName(string? newTableName)
+    {
+        var result = EditContext.Editor.SetTableMapping(Node.Entity.Name, newTableName, Node.Entity.Schema);
+        if (result.Success)
+        {
+            _tableError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _tableError = result.Error;
+        }
+    }
+
+    private async Task CommitSchema(string? newSchema)
+    {
+        var result = EditContext.Editor.SetTableMapping(Node.Entity.Name, Node.Entity.TableName, newSchema);
+        if (result.Success)
+        {
+            _tableError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _tableError = result.Error;
         }
     }
 
