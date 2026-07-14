@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Web
 @using System.Linq
+@using EfSchemaVisualizer.Core.Model
 
 <div class="card" style="width: 260px; border: 1px solid #444;">
     <div class="card-header" style="font-weight: bold; padding: 4px 8px; background: #eee;">
@@ -45,7 +46,27 @@
                 {
                     <span @ondblclick="() => BeginPropertyRename(property.Name)">@property.Name</span>
                 }
-                : @property.ClrType@(property.IsNullable ? "?" : "")
+                :
+                @if (_editingPropertyType == property.Name)
+                {
+                    <input style="width: 90px;" value="@_editingTypeValue"
+                           @oninput="e => _editingTypeValue = e.Value?.ToString() ?? string.Empty"
+                           @onblur="() => CommitTypeEdit(property)"
+                           @onkeydown="e => OnTypeKeyDown(e, property)"
+                           @onpointerdown:stopPropagation="true"
+                           @onmousedown:stopPropagation="true" />
+                }
+                else
+                {
+                    <span @ondblclick="() => BeginTypeEdit(property)">@property.ClrType@(property.IsNullable ? "?" : "")</span>
+                }
+                <label style="font-size: 0.8em; margin-left: 4px;">
+                    <input type="checkbox" checked="@property.IsNullable"
+                           @onchange="e => ToggleNullable(property, (bool)(e.Value ?? false))"
+                           @onpointerdown:stopPropagation="true"
+                           @onmousedown:stopPropagation="true" />
+                    nullable
+                </label>
                 @if (_propertyErrors.TryGetValue(property.Name, out var propertyError))
                 {
                     <div style="color: red; font-size: 0.8em;">@propertyError</div>
@@ -158,6 +179,68 @@
         else if (e.Key == "Escape")
         {
             _editingPropertyName = null;
+        }
+    }
+
+    private string? _editingPropertyType;
+    private string _editingTypeValue = string.Empty;
+
+    private void BeginTypeEdit(PropertyModel property)
+    {
+        _editingPropertyType = property.Name;
+        _editingTypeValue = property.ClrType;
+        _propertyErrors.Remove(property.Name);
+    }
+
+    private async Task CommitTypeEdit(PropertyModel property)
+    {
+        if (_editingPropertyType != property.Name)
+        {
+            return;
+        }
+
+        _editingPropertyType = null;
+
+        if (_editingTypeValue == property.ClrType)
+        {
+            return;
+        }
+
+        var result = EditContext.Editor.ChangePropertyType(Node.Entity.Name, property.Name, _editingTypeValue, property.IsNullable);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task OnTypeKeyDown(KeyboardEventArgs e, PropertyModel property)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitTypeEdit(property);
+        }
+        else if (e.Key == "Escape")
+        {
+            _editingPropertyType = null;
+        }
+    }
+
+    private async Task ToggleNullable(PropertyModel property, bool isNullable)
+    {
+        var result = EditContext.Editor.ChangePropertyType(Node.Entity.Name, property.Name, property.ClrType, isNullable);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
         }
     }
 }
