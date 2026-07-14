@@ -393,6 +393,20 @@ new Core methods before any relationship-editing UX.
    run through the four scenarios listed under Step 4 of the Task 6 brief
    before Phase 4's column/table mapping editing flows are considered fully
    verified end to end.
+
+   **Whole-phase review caught and fixed a real bug** after this entry was
+   first recorded: `SetPrecision` rejected clearing precision on a
+   `decimal(N,M)`-style property (Precision and Scale both set) with a
+   spurious "Scale cannot be set without precision" error, because the
+   Razor `CommitPrecision` handler always passes the property's still-current
+   `Scale` alongside a newly-blanked precision. Fixed by making a null
+   `precision` always clear the whole `.HasPrecision(...)` mapping
+   unconditionally (ignoring the incoming `scale`), rather than rejecting
+   the call — see commit `a5b8f85`. `dotnet build` and the traced-scenario
+   reasoning in this fix's report both confirm the corrected behavior; this
+   was exactly scenario 3 of the not-yet-performed browser verification
+   above, so it remains important that a future browser pass exercises it
+   directly.
 5. **Relationships.** Builds `SetRelationship`/`RemoveRelationship` in
    Core first, then wires drag-to-connect (default one-to-many) and
    click-to-expand link-label editing (kind, FK property) in the diagram.
