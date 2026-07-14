@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.CodeGen;
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 
@@ -1511,5 +1513,226 @@ public class OnModelCreatingRewriterTests
             .RemoveDefaultValue(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity");
 
         Assert.Equal(SourceWithPropertyButNoDefaultValue, result);
+    }
+
+    private const string SourceWithNoRelationshipConfig = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    private const string SourceWithNoEntityConfigAtAll = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetRelationship_OneToMany_ExistingDependentBlock_AppendsChain()
+    {
+        var relationship = new RelationshipModel("Blog", "Post", RelationshipKind.OneToMany, null, null);
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithMany()", result);
+        Assert.Contains("entity.HasKey(e => e.Id)", result);
+
+        var entities = new List<EntityModel>
+        {
+            new("Blog", new List<PropertyModel> { new("Id", "int", false, null) }),
+            new("Post", new List<PropertyModel> { new("Id", "int", false, null), new("BlogId", "int", false, null) }),
+        };
+        var configs = new FluentConfigParser().ParseRelationships(result, entities).Value;
+        Assert.Contains(configs, c => c.PrincipalEntity == "Blog" && c.DependentEntity == "Post" && c.Kind == RelationshipKind.OneToMany);
+    }
+
+    [Fact]
+    public void SetRelationship_OneToMany_WithForeignKey_EmitsHasForeignKey()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogId" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithMany().HasForeignKey(d => d.BlogId)", result);
+    }
+
+    [Fact]
+    public void SetRelationship_OneToMany_WithCompositeForeignKey_EmitsAnonymousObject()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogId", "TenantId" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithMany().HasForeignKey(d => new { d.BlogId, d.TenantId })", result);
+    }
+
+    [Fact]
+    public void SetRelationship_OneToMany_WithNavigationNames_EmitsLambdas()
+    {
+        var relationship = new RelationshipModel("Blog", "Post", RelationshipKind.OneToMany, "Posts", "Blog");
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>(x => x.Blog).WithMany(x => x.Posts)", result);
+    }
+
+    [Fact]
+    public void SetRelationship_OneToOne_EmitsGenericHasForeignKey()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToOne, null, null,
+            ForeignKeyProperties: new List<string> { "BlogId" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithOne().HasForeignKey<Post>(d => d.BlogId)", result);
+    }
+
+    [Fact]
+    public void SetRelationship_ManyToMany_InsertsIntoPrincipalScope()
+    {
+        var relationship = new RelationshipModel("Blog", "Post", RelationshipKind.ManyToMany, null, null);
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        var blogBlockStart = result.IndexOf("modelBuilder.Entity<Blog>", StringComparison.Ordinal);
+        var postBlockStart = result.IndexOf("modelBuilder.Entity<Post>", StringComparison.Ordinal);
+        var hasManyIndex = result.IndexOf("entity.HasMany<Post>().WithMany()", StringComparison.Ordinal);
+
+        Assert.True(hasManyIndex > blogBlockStart && hasManyIndex < postBlockStart);
+    }
+
+    [Fact]
+    public void SetRelationship_ManyToMany_WithJoinEntity_EmitsUsingEntity()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.ManyToMany, null, null,
+            JoinEntityName: "BlogPost");
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasMany<Post>().WithMany().UsingEntity<BlogPost>()", result);
+    }
+
+    [Fact]
+    public void SetRelationship_WithOnDelete_EmitsOnDeleteCall()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            OnDeleteBehavior: "Cascade");
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithMany().OnDelete(DeleteBehavior.Cascade)", result);
+    }
+
+    [Fact]
+    public void SetRelationship_DependentEntityHasNoConfigBlockYet_InsertsWholeEntityBlock()
+    {
+        var relationship = new RelationshipModel("Blog", "Post", RelationshipKind.OneToMany, null, null);
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoEntityConfigAtAll, relationship);
+
+        Assert.Contains("modelBuilder.Entity<Post>(entity =>", result);
+        Assert.Contains("entity.HasOne<Blog>().WithMany()", result);
+    }
+
+    private const string SourceWithOneToManyRelationship = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasOne<Blog>().WithMany().HasForeignKey(d => d.BlogId);
+                });
+            }
+        }
+        """;
+
+    private const string SourceWithManyToManyRelationship = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasMany<Post>().WithMany();
+                });
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RemoveRelationship_OneToMany_RemovesWholeStatementFromDependentScope()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogId" });
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveRelationship(SourceWithOneToManyRelationship, relationship);
+
+        Assert.DoesNotContain("HasOne<Blog>()", result);
+        Assert.Contains("entity.HasKey(e => e.Id)", result);
+    }
+
+    [Fact]
+    public void RemoveRelationship_ManyToMany_RemovesWholeStatementFromPrincipalScope()
+    {
+        var relationship = new RelationshipModel("Blog", "Post", RelationshipKind.ManyToMany, null, null);
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveRelationship(SourceWithManyToManyRelationship, relationship);
+
+        Assert.DoesNotContain("HasMany<Post>()", result);
+    }
+
+    [Fact]
+    public void RemoveRelationship_NoMatch_ReturnsSourceUnchanged()
+    {
+        var relationship = new RelationshipModel("Blog", "Comment", RelationshipKind.OneToMany, null, null);
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveRelationship(SourceWithOneToManyRelationship, relationship);
+
+        Assert.Equal(SourceWithOneToManyRelationship, result);
     }
 }
