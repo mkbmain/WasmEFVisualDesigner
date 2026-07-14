@@ -43,11 +43,13 @@
 }</pre>
 }
 
-@if (_diagram is not null)
+@if (_diagram is not null && _editContext is not null)
 {
     <div style="height: 600px; width: 100%; border: 1px solid #ccc;">
         <CascadingValue Value="_diagram">
-            <DiagramCanvas />
+            <CascadingValue Value="_editContext">
+                <DiagramCanvas />
+            </CascadingValue>
         </CascadingValue>
     </div>
 }
@@ -82,6 +84,8 @@
         });
         """;
 
+    private DiagramEditor? _editor;
+    private DiagramEditContext? _editContext;
     private BlazorDiagram? _diagram;
     private IReadOnlyList<Diagnostic>? _diagnostics;
     private string? _error;
@@ -91,11 +95,12 @@
         _error = null;
         _diagnostics = null;
         _diagram = null;
+        _editContext = null;
 
         try
         {
-            var result = DiagramModelBuilder.Build(_classSource, _configSource);
-            _diagnostics = result.Diagnostics;
+            _editor = new DiagramEditor(_classSource, _configSource);
+            _diagnostics = _editor.Current.Diagnostics;
 
             var diagram = new BlazorDiagram(new BlazorDiagramOptions
             {
@@ -103,13 +108,34 @@
             });
             diagram.RegisterComponent<EntityNodeModel, EntityNode>();
 
-            DiagramSync.Rebuild(diagram, result);
+            DiagramSync.Rebuild(diagram, _editor.Current);
 
             _diagram = diagram;
+            _editContext = new DiagramEditContext
+            {
+                Editor = _editor,
+                NotifyChangedAsync = OnDiagramEditedAsync,
+            };
         }
         catch (Exception ex)
         {
             _error = ex.ToString();
         }
+    }
+
+    private Task OnDiagramEditedAsync()
+    {
+        if (_diagram is null || _editor is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _classSource = _editor.ClassSource;
+        _configSource = _editor.ConfigSource;
+        _diagnostics = _editor.Current.Diagnostics;
+        DiagramSync.Rebuild(_diagram, _editor.Current);
+        StateHasChanged();
+
+        return Task.CompletedTask;
     }
 }
