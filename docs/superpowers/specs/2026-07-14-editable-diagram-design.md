@@ -255,6 +255,44 @@ new Core methods before any relationship-editing UX.
 2. **Add/remove entities and properties.** Toolbar + row-level add,
    selection + Delete / hover-× remove, wired to the existing `AddClass`/
    `RemoveClass`/`AddProperty`/`RemoveProperty`.
+
+   **Update:** Phase 2 is built. Position tracking was reworked from
+   Phase 1's ordinal-matching scheme to Guid-based entity-identity
+   tracking, so add/remove/rename/reorder operations can no longer
+   scramble which diagram position belongs to which entity. The Web
+   project's `Diagram/DiagramEditor.cs` gained `AddEntity`, `RemoveEntity`,
+   `AddProperty`, and `RemoveProperty`, each guarding against unsafe
+   removals (relationships, primary/foreign keys, indexes) with inline
+   errors rather than silently corrupting the model. The diagram UI
+   gained a "+ Entity" toolbar button (grid-placing new entities without
+   overlapping existing ones) and per-node/per-property add/remove
+   affordances on `Diagram/EntityNode.razor`.
+
+   Verification (recorded 2026-07-14): `dotnet test
+   tests/EfSchemaVisualizer.Core.Tests` — 277 passed, 0 failed (no new
+   `Core` tests this phase, since no new `Core` methods were added — all
+   new logic lives in the Web project's `DiagramEditor`). `dotnet build`
+   (whole solution) — `Build succeeded.`, 0 warnings, 0 errors for both
+   `EfSchemaVisualizer.Core` and `EfSchemaVisualizer.Web`. `dotnet publish
+   src/EfSchemaVisualizer.Web/EfSchemaVisualizer.Web.csproj -c Release`
+   also succeeded, producing a working `wwwroot` output.
+
+   Interactive browser verification (render the sample, drag "Post", add
+   two new entities and confirm non-overlapping placement and that "Post"
+   keeps its dragged position, rename a new entity and confirm its
+   position survives, add/remove a property, attempt to remove "Blog" and
+   "Post"'s "Id"/"BlogId"/"Blog" and confirm all four are refused, and
+   remove an unrelated new entity and confirm it and its `DbSet`/
+   `Entity<T>()` block are fully gone) was **not performed** — same
+   situation as Phase 1: this sandbox has no browser, no Node.js, and no
+   Playwright available (`which chromium chromium-browser google-chrome
+   firefox node npx playwright` all reported not found), so there is no
+   way to drive a browser and observe actual rendering/interaction here.
+   This remains an open item carried forward: a future session (or the
+   user, manually) needs to serve the published `wwwroot` locally, open it
+   in a real browser, and run through the six scenarios listed under Step
+   3 of the Task 7 brief before Phase 2's add/remove flows are considered
+   fully verified end to end.
 3. **Keys and indexes.** Key-toggle on a property row; index add/remove in
    the row's expand-on-click area.
 4. **Column/table mapping, precision, default values.** Remaining
