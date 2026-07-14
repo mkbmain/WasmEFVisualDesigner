@@ -52,7 +52,7 @@ public static class DiagramSync
             }
 
             var link = new LinkModel(dependentNode, principalNode);
-            link.AddLabel(RelationshipLabels.For(relationship.Kind));
+            link.Labels.Add(new RelationshipLinkLabelModel(link, relationship));
             diagram.Links.Add(link);
         }
     }

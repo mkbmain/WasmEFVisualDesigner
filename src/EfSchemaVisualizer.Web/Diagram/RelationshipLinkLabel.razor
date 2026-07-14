@@ -1,0 +1,121 @@
+@namespace EfSchemaVisualizer.Web.Diagram
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using System.Linq
+@using EfSchemaVisualizer.Core.Model
+
+<div style="background: white; border: 1px solid #999; border-radius: 3px; padding: 1px 5px; font-size: 0.75em; cursor: pointer; white-space: nowrap;"
+     @onclick="ToggleExpand"
+     @onpointerdown:stopPropagation="true"
+     @onmousedown:stopPropagation="true">
+    @RelationshipLabels.For(Label.Relationship.Kind)
+</div>
+@if (_expanded)
+{
+    <div style="position: absolute; background: white; border: 1px solid #999; border-radius: 3px; padding: 6px; font-size: 0.75em; white-space: nowrap; z-index: 1000;"
+         @onpointerdown:stopPropagation="true"
+         @onmousedown:stopPropagation="true">
+        <label style="display: block;">
+            Kind:
+            <select value="@_kind" @onchange="e => CommitKind(e.Value?.ToString())">
+                <option value="OneToMany">One-to-many</option>
+                <option value="OneToOne">One-to-one</option>
+                <option value="ManyToMany">Many-to-many</option>
+            </select>
+        </label>
+        @if (_kind != RelationshipKind.ManyToMany)
+        {
+            <label style="display: block;">
+                Foreign key:
+                <select value="@_foreignKeyProperty" @onchange="e => CommitForeignKey(e.Value?.ToString())">
+                    <option value="">(none — shadow FK)</option>
+                    @foreach (var property in DependentProperties)
+                    {
+                        <option value="@property.Name">@property.Name</option>
+                    }
+                </select>
+            </label>
+        }
+        @if (_error is not null)
+        {
+            <div style="color: red;">@_error</div>
+        }
+        <button type="button" @onclick="Remove">Remove relationship</button>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public RelationshipLinkLabelModel Label { get; set; } = null!;
+
+    [CascadingParameter]
+    public DiagramEditContext EditContext { get; set; } = null!;
+
+    private bool _expanded;
+    private RelationshipKind _kind;
+    private string _foreignKeyProperty = string.Empty;
+    private string? _error;
+
+    private IEnumerable<PropertyModel> DependentProperties =>
+        EditContext.Editor.Current.Entities.FirstOrDefault(e => e.Name == Label.Relationship.DependentEntity)?.Properties
+            ?? Enumerable.Empty<PropertyModel>();
+
+    private void ToggleExpand()
+    {
+        _expanded = !_expanded;
+        if (_expanded)
+        {
+            _kind = Label.Relationship.Kind;
+            _foreignKeyProperty = Label.Relationship.ForeignKeyProperties.FirstOrDefault() ?? string.Empty;
+            _error = null;
+        }
+    }
+
+    private async Task CommitKind(string? newKind)
+    {
+        if (newKind is null || !Enum.TryParse<RelationshipKind>(newKind, out var kind))
+        {
+            return;
+        }
+
+        _kind = kind;
+        await Commit();
+    }
+
+    private async Task CommitForeignKey(string? propertyName)
+    {
+        _foreignKeyProperty = propertyName ?? string.Empty;
+        await Commit();
+    }
+
+    private async Task Commit()
+    {
+        var foreignKeyProperties = _kind == RelationshipKind.ManyToMany || string.IsNullOrEmpty(_foreignKeyProperty)
+            ? Array.Empty<string>()
+            : new[] { _foreignKeyProperty };
+
+        var result = EditContext.Editor.SetRelationshipShape(Label.Relationship, _kind, foreignKeyProperties);
+        if (result.Success)
+        {
+            _error = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+
+    private async Task Remove()
+    {
+        var result = EditContext.Editor.RemoveRelationship(Label.Relationship);
+        if (result.Success)
+        {
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _error = result.Error;
+        }
+    }
+}
