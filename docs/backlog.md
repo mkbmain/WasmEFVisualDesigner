@@ -245,6 +245,46 @@ these matter before any new surface is added.
       editor. See the Goal section of `2026-07-07-ef-schema-visualizer-design.md`
       and `2026-07-13-er-diagram-render-design.md`'s library-choice rationale,
       which already picked `Z.Blazor.Diagrams` with this in mind.
+      **Update:** Specced as one grand design covering all five phases —
+      `2026-07-14-editable-diagram-design.md` — implemented as separate
+      phased plans/branches, merged to `main` as each completes.
+      - **Phase 1 (rename + type/nullable editing) — done.** Double-click
+        rename for entities/properties, inline property type + nullable
+        editing, all wired through a new `DiagramEditor`
+        (validate → `Core` rewriter call(s) → reparse → rebuild diagram)
+        and a new `EntityClassRewriter.ChangePropertyType`. See
+        `2026-07-14-editable-diagram-phase1-rename-type.md`. Whole-branch
+        review caught and fixed a real bug in the process: renaming an
+        entity left dangling navigation-property type references
+        elsewhere in the file (silently dropping relationships and
+        breaking compilation) — fixed via a new
+        `EntityClassRewriter.RenamePropertyTypeReferences`.
+      - **Phase 2 (add/remove entities and properties) — done.** Toolbar
+        "+ Entity" button, per-node "+ Add property" row, and "×" remove
+        buttons on entities/properties, wired to the existing
+        `AddClass`/`RemoveClass`/`AddProperty`/`RemoveProperty`/`AddEntity`/
+        `RemoveEntity` rewriter methods via new `DiagramEditor` methods.
+        Removal is refused (not cascaded) when a key/index/relationship
+        still depends on the target, since relationship removal doesn't
+        exist yet. See
+        `2026-07-14-editable-diagram-phase2-add-remove.md`. Required
+        reworking diagram position-preservation from ordinal-index
+        matching (only safe while entity count/order couldn't change) to
+        stable per-entity `Guid` matching. Whole-branch review caught and
+        fixed a crash (hand-editing a new class into a textarea before any
+        diagram gesture reparsed the model threw an uncaught
+        `KeyNotFoundException`) and a placement bug (new entities spawned
+        on top of existing ones instead of grid-placing past them).
+      - **Phases 3-5 (keys/indexes, column/table mapping + precision +
+        default values, relationships) — not started.**
+      - **Known gap across all merged phases:** interactive in-browser
+        verification (drag, click-through the actual editing flows) has
+        not been possible in the implementation sandbox (no browser
+        available) for any phase so far — every phase's manual-verification
+        steps are recorded as unperformed in
+        `2026-07-14-editable-diagram-design.md`'s Sequencing section. This
+        remains open before the editable-diagram slice as a whole is
+        considered verified end to end in a real browser.
 - [ ] **`[spec]` `.zip` upload / download**, fully client-side, stateless.
 - [ ] **`[spec]` GitHub Actions → GitHub Pages** deploy on push to `main`.
 - [ ] **`[spec]` Roslyn WASM payload size / first-load time** — measure early, flagged as an open risk.
