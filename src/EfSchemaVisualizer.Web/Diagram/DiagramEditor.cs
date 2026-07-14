@@ -396,6 +396,34 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetTableMapping(string entityName, string? tableName, string? schema)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var normalizedTableName = string.IsNullOrWhiteSpace(tableName) ? null : tableName.Trim();
+        var normalizedSchema = string.IsNullOrWhiteSpace(schema) ? null : schema.Trim();
+
+        if (normalizedTableName == entity.TableName && normalizedSchema == entity.Schema)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (normalizedTableName is null)
+        {
+            var clearedConfigSource = _configRewriter.RemoveTable(ConfigSource, entityName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetTable(ConfigSource, entityName, normalizedTableName, normalizedSchema);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static string GenerateUniquePropertyName(EntityModel entity)
     {
         if (!entity.Properties.Any(p => p.Name == "NewProperty"))
