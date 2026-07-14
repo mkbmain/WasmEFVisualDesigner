@@ -5,20 +5,26 @@
 @using EfSchemaVisualizer.Core.Model
 
 <div class="card" style="width: 260px; border: 1px solid #444;">
-    <div class="card-header" style="font-weight: bold; padding: 4px 8px; background: #eee;">
-        @if (_isEditingName)
-        {
-            <input value="@_editingName"
-                   @oninput="e => _editingName = e.Value?.ToString() ?? string.Empty"
-                   @onblur="CommitNameEdit"
-                   @onkeydown="OnNameKeyDown"
-                   @onpointerdown:stopPropagation="true"
-                   @onmousedown:stopPropagation="true" />
-        }
-        else
-        {
-            <span @ondblclick="BeginNameEdit">@Node.Entity.Name</span>
-        }
+    <div class="card-header" style="font-weight: bold; padding: 4px 8px; background: #eee; display: flex; justify-content: space-between; align-items: center;">
+        <span style="flex: 1;">
+            @if (_isEditingName)
+            {
+                <input value="@_editingName"
+                       @oninput="e => _editingName = e.Value?.ToString() ?? string.Empty"
+                       @onblur="CommitNameEdit"
+                       @onkeydown="OnNameKeyDown"
+                       @onpointerdown:stopPropagation="true"
+                       @onmousedown:stopPropagation="true" />
+            }
+            else
+            {
+                <span @ondblclick="BeginNameEdit">@Node.Entity.Name</span>
+            }
+        </span>
+        <button type="button" title="Remove entity" style="border: none; background: transparent; cursor: pointer; font-weight: bold;"
+                @onclick="RemoveEntity"
+                @onpointerdown:stopPropagation="true"
+                @onmousedown:stopPropagation="true">×</button>
     </div>
     @if (_nameError is not null)
     {
@@ -140,6 +146,20 @@
         {
             _isEditingName = false;
             _nameError = null;
+        }
+    }
+
+    private async Task RemoveEntity()
+    {
+        var result = EditContext.Editor.RemoveEntity(Node.Entity.Name);
+        if (result.Success)
+        {
+            _nameError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _nameError = result.Error;
         }
     }
 
