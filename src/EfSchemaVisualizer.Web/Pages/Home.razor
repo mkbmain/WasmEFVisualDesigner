@@ -7,6 +7,8 @@
 @using Blazor.Diagrams.Core.Geometry
 @using Blazor.Diagrams.Core.Models
 @using Blazor.Diagrams.Options
+@using Blazor.Diagrams.Core.Anchors
+@using Blazor.Diagrams.Core.Models.Base
 
 <PageTitle>EF Schema Visualizer</PageTitle>
 
@@ -111,6 +113,8 @@
                 AllowMultiSelection = true,
             });
             diagram.RegisterComponent<EntityNodeModel, EntityNode>();
+            diagram.RegisterComponent<RelationshipLinkLabelModel, RelationshipLinkLabel>();
+            diagram.Links.Added += OnLinkAdded;
 
             DiagramSync.Rebuild(diagram, _editor.Current, _editor.EntityIds);
 
@@ -126,6 +130,48 @@
             _error = ex.ToString();
         }
     }
+
+    private void OnLinkAdded(BaseLinkModel link)
+    {
+        link.TargetAttached += OnRelationshipLinkAttached;
+    }
+
+    private void OnRelationshipLinkAttached(BaseLinkModel link)
+    {
+        link.TargetAttached -= OnRelationshipLinkAttached;
+
+        if (_editor is null || _diagram is null)
+        {
+            return;
+        }
+
+        var dependentEntityName = ResolveEntityName(link.Source);
+        var principalEntityName = ResolveEntityName(link.Target);
+
+        if (dependentEntityName is null || principalEntityName is null)
+        {
+            _diagram.Links.Remove(link);
+            return;
+        }
+
+        var result = _editor.AddRelationship(dependentEntityName, principalEntityName);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            _diagram.Links.Remove(link);
+            InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        InvokeAsync(async () => await OnDiagramEditedAsync());
+    }
+
+    private static string? ResolveEntityName(Anchor anchor) => anchor.Model switch
+    {
+        EntityNodeModel node => node.Entity.Name,
+        Blazor.Diagrams.Core.Models.PortModel { Parent: EntityNodeModel node } => node.Entity.Name,
+        _ => null,
+    };
 
     private void SyncEditorSource()
     {
