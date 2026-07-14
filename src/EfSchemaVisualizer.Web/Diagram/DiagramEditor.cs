@@ -492,12 +492,19 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
         }
 
-        if (precision is null && scale is not null)
+        if (precision is null)
         {
-            return DiagramEditResult.Fail("Scale cannot be set without precision.");
+            if (property.Precision is null && property.Scale is null)
+            {
+                return DiagramEditResult.Ok();
+            }
+
+            var clearedConfigSource = _configRewriter.RemovePrecision(ConfigSource, entityName, propertyName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
         }
 
-        if (precision is not null && precision <= 0)
+        if (precision <= 0)
         {
             return DiagramEditResult.Fail("Precision must be a positive number.");
         }
@@ -512,9 +519,7 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = precision is null
-            ? _configRewriter.RemovePrecision(ConfigSource, entityName, propertyName)
-            : _configRewriter.RewritePrecision(ConfigSource, entityName, propertyName, precision.Value, scale);
+        var newConfigSource = _configRewriter.RewritePrecision(ConfigSource, entityName, propertyName, precision.Value, scale);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
