@@ -27,6 +27,10 @@
 
 <p>
     <button class="btn btn-primary" @onclick="RenderDiagram">Render Diagram</button>
+    @if (_editContext is not null)
+    {
+        <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
+    }
 </p>
 
 @if (_error is not null)
@@ -126,6 +130,17 @@
     private void SyncEditorSource()
     {
         _editor?.SyncSource(_classSource, _configSource);
+    }
+
+    private async Task AddEntity()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        _editor.AddEntity();
+        await OnDiagramEditedAsync();
     }
 
     private Task OnDiagramEditedAsync()
