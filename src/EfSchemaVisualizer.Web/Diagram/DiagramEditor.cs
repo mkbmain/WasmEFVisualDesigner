@@ -1,4 +1,5 @@
 using EfSchemaVisualizer.Core.CodeGen;
+using EfSchemaVisualizer.Core.Model;
 using Microsoft.CodeAnalysis.CSharp;
 
 namespace EfSchemaVisualizer.Web.Diagram;
@@ -172,6 +173,73 @@ public sealed class DiagramEditor
         Apply(newClassSource, newConfigSource);
         _entityIds.Remove(entityName);
         return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult AddProperty(string entityName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var propertyName = GenerateUniquePropertyName(entity);
+        var newClassSource = _classRewriter.AddProperty(
+            ClassSource, entityName, new PropertyModel(propertyName, "string", IsNullable: false, MaxLength: null));
+        Apply(newClassSource, ConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveProperty(string entityName, string propertyName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (!entity.Properties.Any(p => p.Name == propertyName))
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (entity.KeyPropertyNames.Contains(propertyName))
+        {
+            return DiagramEditResult.Fail($"Cannot remove '{propertyName}': it is part of '{entityName}''s key.");
+        }
+
+        if (entity.Indexes.Any(i => i.PropertyNames.Contains(propertyName)))
+        {
+            return DiagramEditResult.Fail($"Cannot remove '{propertyName}': it is used in an index.");
+        }
+
+        var blockingRelationship = Current.Relationships.FirstOrDefault(r =>
+            (r.DependentEntity == entityName && (r.ForeignKeyProperties.Contains(propertyName) || r.DependentNavigation == propertyName)) ||
+            (r.PrincipalEntity == entityName && r.PrincipalNavigation == propertyName));
+        if (blockingRelationship is not null)
+        {
+            return DiagramEditResult.Fail($"Cannot remove '{propertyName}': it is used by a relationship.");
+        }
+
+        var newClassSource = _classRewriter.RemoveProperty(ClassSource, entityName, propertyName);
+        Apply(newClassSource, ConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    private static string GenerateUniquePropertyName(EntityModel entity)
+    {
+        if (!entity.Properties.Any(p => p.Name == "NewProperty"))
+        {
+            return "NewProperty";
+        }
+
+        var suffix = 2;
+        while (entity.Properties.Any(p => p.Name == $"NewProperty{suffix}"))
+        {
+            suffix++;
+        }
+
+        return $"NewProperty{suffix}";
     }
 
     private string GenerateUniqueEntityName()
