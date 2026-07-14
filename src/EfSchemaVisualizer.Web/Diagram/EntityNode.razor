@@ -3,8 +3,17 @@
 @using Microsoft.AspNetCore.Components.Web
 @using System.Linq
 @using EfSchemaVisualizer.Core.Model
+@using Blazor.Diagrams.Core.Models
+@using Blazor.Diagrams.Components.Renderers
 
-<div class="card" style="width: 260px; border: 1px solid #444;">
+<div class="card" style="width: 260px; border: 1px solid #444; position: relative;">
+    <PortRenderer Port="@(Node.GetPort(PortAlignment.Left))" Class="entity-port"
+                  Style="position: absolute; left: -6px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: #666; cursor: crosshair;">
+    </PortRenderer>
+    <PortRenderer Port="@(Node.GetPort(PortAlignment.Right))" Class="entity-port"
+                  Style="position: absolute; right: -6px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: #666; cursor: crosshair;">
+    </PortRenderer>
+    <div style="font-size: 0.65em; color: #888; padding: 2px 8px 0;">Drag a dot to another entity's dot to create a relationship.</div>
     <div class="card-header" style="font-weight: bold; padding: 4px 8px; background: #eee; display: flex; justify-content: space-between; align-items: center;">
         <span style="flex: 1;">
             @if (_isEditingName)
