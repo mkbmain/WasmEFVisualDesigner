@@ -8,9 +8,9 @@ representative gesture per editable-diagram phase was exercised against the
 app's shipped default sample data (Blog/Post), reading back the regenerated
 class/config source after each gesture to confirm correctness — not just
 that the UI didn't crash. Full script: see
-`2026-07-15-pages-deploy-and-browser-verification.md` Task 3 for the source
-(not committed to the repo; ad hoc for this session, lived under a scratchpad
-directory).
+`docs/superpowers/plans/2026-07-15-pages-deploy-and-browser-verification.md`
+Task 3 for the source (not committed to the repo; ad hoc for this session,
+lived under a scratchpad directory).
 
 No screenshots from the session are committed to the repo or otherwise
 retained anywhere durable — any screenshots taken during the run lived only
