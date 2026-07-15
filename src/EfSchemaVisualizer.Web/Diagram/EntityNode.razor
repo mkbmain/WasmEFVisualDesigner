@@ -30,7 +30,7 @@
                 <span @ondblclick="BeginNameEdit">@Node.Entity.Name</span>
             }
         </span>
-        <button type="button" title="Remove entity" style="border: none; background: transparent; cursor: pointer; font-weight: bold;"
+        <button type="button" title="Remove entity" aria-label="Remove entity" style="border: none; background: transparent; cursor: pointer; font-weight: bold;"
                 @onclick="RemoveEntity"
                 @onpointerdown:stopPropagation="true"
                 @onmousedown:stopPropagation="true">×</button>
@@ -98,11 +98,11 @@
                            @onmousedown:stopPropagation="true" />
                     nullable
                 </label>
-                <button type="button" title="More options" style="border: none; background: transparent; cursor: pointer;"
+                <button type="button" title="More options" aria-label="More options" style="border: none; background: transparent; cursor: pointer;"
                         @onclick="() => ToggleExpand(property.Name)"
                         @onpointerdown:stopPropagation="true"
                         @onmousedown:stopPropagation="true">@(_expandedPropertyName == property.Name ? "▾" : "▸")</button>
-                <button type="button" title="Remove property" style="border: none; background: transparent; cursor: pointer;"
+                <button type="button" title="Remove property" aria-label="Remove property" style="border: none; background: transparent; cursor: pointer;"
                         @onclick="() => RemoveProperty(property.Name)"
                         @onpointerdown:stopPropagation="true"
                         @onmousedown:stopPropagation="true">×</button>
@@ -176,7 +176,7 @@
                                            @onchange="e => RenameIndex(index, e.Value?.ToString())"
                                            @onpointerdown:stopPropagation="true"
                                            @onmousedown:stopPropagation="true" />
-                                    <button type="button" title="Remove index" style="border: none; background: transparent; cursor: pointer;"
+                                    <button type="button" title="Remove index" aria-label="Remove index" style="border: none; background: transparent; cursor: pointer;"
                                             @onclick="() => RemoveIndex(index)"
                                             @onpointerdown:stopPropagation="true"
                                             @onmousedown:stopPropagation="true">×</button>
