@@ -1,6 +1,8 @@
 @page "/"
+@inject IJSRuntime JS
 @using EfSchemaVisualizer.Core.Model
 @using EfSchemaVisualizer.Core.Parsing
+@using EfSchemaVisualizer.Core.Archive
 @using EfSchemaVisualizer.Web.Diagram
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Components
@@ -33,6 +35,8 @@
     {
         <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
     }
+    <InputFile OnChange="OnZipSelected" accept=".zip" />
+    <button class="btn btn-secondary" disabled="@(_editor is null)" @onclick="DownloadZip">Download .zip</button>
 </p>
 
 @if (_error is not null)
@@ -176,6 +180,50 @@
     private void SyncEditorSource()
     {
         _editor?.SyncSource(_classSource, _configSource);
+    }
+
+    private async Task OnZipSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var memory = new MemoryStream();
+            await using (var stream = e.File.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024))
+            {
+                await stream.CopyToAsync(memory);
+            }
+
+            memory.Position = 0;
+
+            var archiveResult = ProjectArchiveReader.Read(memory);
+            _classSource = archiveResult.ClassSource;
+            _configSource = archiveResult.ConfigSource;
+
+            RenderDiagram();
+
+            if (archiveResult.Diagnostics.Count > 0)
+            {
+                _diagnostics = (_diagnostics ?? new List<Diagnostic>())
+                    .Concat(archiveResult.Diagnostics)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.ToString();
+        }
+    }
+
+    private async Task DownloadZip()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var bytes = ProjectArchiveWriter.Write(_editor.ClassSource, _editor.ConfigSource);
+        using var stream = new MemoryStream(bytes);
+        using var streamRef = new DotNetStreamReference(stream);
+        await JS.InvokeVoidAsync("downloadFileFromStream", "ef-schema-visualizer-export.zip", streamRef);
     }
 
     private async Task AddEntity()
