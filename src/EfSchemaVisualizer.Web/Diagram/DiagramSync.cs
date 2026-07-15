@@ -13,34 +13,48 @@ public static class DiagramSync
 
     public static void Rebuild(BlazorDiagram diagram, DiagramModelResult result, IReadOnlyDictionary<string, Guid> entityIds)
     {
-        var previousPositionsById = diagram.Nodes
+        // Reuse existing EntityNodeModel instances for entities that persist across this rebuild
+        // (matched by their stable EntityId) instead of always creating fresh objects. Blazor.Diagrams
+        // keys its per-node component by the NodeModel instance itself, so replacing the instance on
+        // every single edit destroys and recreates the EntityNode component for every card, wiping any
+        // in-progress local UI state (expanded "more options" panels, in-place renames) each time -
+        // even for entities unrelated to the edit that just happened.
+        var previousNodesById = diagram.Nodes
             .OfType<EntityNodeModel>()
-            .ToDictionary(node => node.EntityId, node => node.Position);
+            .ToDictionary(node => node.EntityId);
 
-        diagram.Nodes.Clear();
         diagram.Links.Clear();
 
         var nodesByEntityName = new Dictionary<string, EntityNodeModel>();
-        var newEntityIndex = previousPositionsById.Count;
+        var keptEntityIds = new HashSet<Guid>();
+        var newEntityIndex = previousNodesById.Count;
 
         foreach (var entity in result.Entities)
         {
             var entityId = entityIds[entity.Name];
+            keptEntityIds.Add(entityId);
 
-            Point position;
-            if (previousPositionsById.TryGetValue(entityId, out var existingPosition))
+            if (previousNodesById.TryGetValue(entityId, out var existingNode))
             {
-                position = existingPosition;
+                existingNode.Entity = entity;
+                existingNode.Title = entity.Name;
+                existingNode.Refresh();
+                nodesByEntityName[entity.Name] = existingNode;
+                continue;
             }
-            else
-            {
-                position = new Point((newEntityIndex % Columns) * XSpacing, (newEntityIndex / Columns) * YSpacing);
-                newEntityIndex++;
-            }
+
+            var position = new Point((newEntityIndex % Columns) * XSpacing, (newEntityIndex / Columns) * YSpacing);
+            newEntityIndex++;
 
             var node = new EntityNodeModel(entity, entityId, position);
             diagram.Nodes.Add(node);
             nodesByEntityName[entity.Name] = node;
+        }
+
+        var staleNodes = previousNodesById.Values.Where(node => !keptEntityIds.Contains(node.EntityId)).ToList();
+        foreach (var staleNode in staleNodes)
+        {
+            diagram.Nodes.Remove(staleNode);
         }
 
         foreach (var relationship in result.Relationships)

@@ -15,6 +15,6 @@ public sealed class EntityNodeModel : NodeModel
         AddPort(PortAlignment.Right);
     }
 
-    public EntityModel Entity { get; }
+    public EntityModel Entity { get; internal set; }
     public Guid EntityId { get; }
 }
