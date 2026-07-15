@@ -316,7 +316,24 @@ these matter before any new surface is added.
         `2026-07-14-editable-diagram-design.md`'s Sequencing section. This
         remains open before the editable-diagram slice as a whole is
         considered verified end to end in a real browser.
-- [ ] **`[spec]` `.zip` upload / download**, fully client-side, stateless.
+- [x] **`[spec]` `.zip` upload / download**, fully client-side, stateless.
+      **Update:** `ProjectArchiveReader`/`ProjectArchiveWriter` (new
+      `EfSchemaVisualizer.Core/Archive/` classes) classify a zip's `.cs`
+      entries into the existing two-blob model (entity classes / EF config)
+      and rebuild a zip from it on download, wired into `Home.razor` via a
+      new `<InputFile>` and a "Download .zip" button — see
+      `2026-07-15-zip-upload-download-design.md`. Deliberately scoped down
+      from the original per-file round-trip spec: original file
+      names/boundaries and non-`.cs` project files are not preserved; a
+      download always produces exactly `Entities.cs` + `DbContext.cs`. Final
+      whole-branch review caught and fixed a real bug: the classifier only
+      recognized config files wrapped in an `OnModelCreating` method or an
+      `IEntityTypeConfiguration` class, so a downloaded zip's bare
+      fluent-statement `DbContext.cs` (the app's own `ConfigSource` shape)
+      silently failed to reclassify as config on re-upload, dropping all EF
+      configuration; fixed by reusing the existing
+      `FluentSyntaxHelpers.FindConfigurationScopes` helper instead of ad hoc
+      checks.
 - [ ] **`[spec]` GitHub Actions → GitHub Pages** deploy on push to `main`.
 - [ ] **`[spec]` Roslyn WASM payload size / first-load time** — measure early, flagged as an open risk.
 
