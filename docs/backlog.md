@@ -308,14 +308,10 @@ these matter before any new surface is added.
         duplicate relationship on edit; fixed to also match by navigation
         property name and to fail explicitly instead of falsely reporting
         success.
-      - **Known gap across all merged phases:** interactive in-browser
-        verification (drag, click-through the actual editing flows) has
-        not been possible in the implementation sandbox (no browser
-        available) for any phase so far — every phase's manual-verification
-        steps are recorded as unperformed in
-        `2026-07-14-editable-diagram-design.md`'s Sequencing section. This
-        remains open before the editable-diagram slice as a whole is
-        considered verified end to end in a real browser.
+      - **Browser verification — done.** One representative gesture per
+        phase was scripted and run against a real Chromium instance,
+        confirming each produces correct regenerated source — see
+        `2026-07-15-editable-diagram-browser-verification.md`.
 - [x] **`[spec]` `.zip` upload / download**, fully client-side, stateless.
       **Update:** `ProjectArchiveReader`/`ProjectArchiveWriter` (new
       `EfSchemaVisualizer.Core/Archive/` classes) classify a zip's `.cs`
@@ -334,7 +330,11 @@ these matter before any new surface is added.
       configuration; fixed by reusing the existing
       `FluentSyntaxHelpers.FindConfigurationScopes` helper instead of ad hoc
       checks.
-- [ ] **`[spec]` GitHub Actions → GitHub Pages** deploy on push to `main`.
+- [x] **`[spec]` GitHub Actions → GitHub Pages** deploy on push to `main`.
+      **Update:** workflow added at `.github/workflows/deploy.yml`. The
+      repo's Settings → Pages → Source still needs to be switched to
+      "GitHub Actions" manually before the `deploy` job will succeed — not
+      something a workflow file can do on its own.
 - [x] **`[spec]` Roslyn WASM payload size / first-load time** — measure early, flagged as an open risk.
       **Update:** Re-measured 2026-07-15 against the current full-featured
       app (see `2026-07-13-blazor-wasm-shell-design.md`'s "Re-measurement"
