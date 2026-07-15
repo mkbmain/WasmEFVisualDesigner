@@ -72,15 +72,7 @@ public static class ProjectArchiveReader
         var tree = CSharpSyntaxTree.ParseText(sourceText);
         var root = tree.GetCompilationUnitRoot();
 
-        var hasOnModelCreating = root.DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .Any(m => m.Identifier.Text == "OnModelCreating");
-
-        var hasEntityTypeConfigurationBase = root.DescendantNodes()
-            .OfType<BaseListSyntax>()
-            .Any(baseList => baseList.Types.Any(t => t.Type.ToString().Contains("IEntityTypeConfiguration")));
-
-        if (hasOnModelCreating || hasEntityTypeConfigurationBase)
+        if (FluentSyntaxHelpers.FindConfigurationScopes(root).Any())
         {
             return FileKind.Config;
         }

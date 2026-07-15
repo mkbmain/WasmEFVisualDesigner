@@ -81,6 +81,25 @@ public class ProjectArchiveReaderTests
     }
 
     [Fact]
+    public void Read_BucketsBareFluentStatements_AsConfig_NoOnModelCreatingWrapperNeeded()
+    {
+        const string bareConfigFile = """
+            modelBuilder.Entity<Blog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+            });
+            """;
+
+        using var zip = CreateZip(("DbContext.cs", bareConfigFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.Contains("modelBuilder.Entity<Blog>", result.ConfigSource);
+        Assert.Equal("", result.ClassSource);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
     public void Read_ConcatenatesMultipleClassFiles_InEntryOrder()
     {
         const string blogFile = "public class Blog { public int Id { get; set; } }";
