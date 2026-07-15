@@ -335,7 +335,22 @@ these matter before any new surface is added.
       `FluentSyntaxHelpers.FindConfigurationScopes` helper instead of ad hoc
       checks.
 - [ ] **`[spec]` GitHub Actions → GitHub Pages** deploy on push to `main`.
-- [ ] **`[spec]` Roslyn WASM payload size / first-load time** — measure early, flagged as an open risk.
+- [x] **`[spec]` Roslyn WASM payload size / first-load time** — measure early, flagged as an open risk.
+      **Update:** Re-measured 2026-07-15 against the current full-featured
+      app (see `2026-07-13-blazor-wasm-shell-design.md`'s "Re-measurement"
+      addendum). Published `_framework` raw size (47.5 MB) is essentially
+      unchanged from the original 2026-07-13 spike (46 MB) despite the app
+      growing substantially — the fixed Roslyn/Mono-runtime cost dominates,
+      app code is a small fraction. Excluding lazy-loaded locale satellite
+      resources, a first load needs ~22.6 MB raw / ~6.6 MB with the
+      Brotli/gzip compression Blazor's publish step already emits — real
+      size depends on whether the eventual GitHub Pages host serves the
+      precompressed `.br` variant, unconfirmed until that deploy slice
+      exists. No real in-browser first-load *timing* was measured (still no
+      browser available in this environment); only a rough transfer-time
+      estimate. Not prohibitively large — no re-plan needed — but the
+      `wasm-tools` SDK workload (not installed here) could shrink it further
+      and real in-browser timing remains a follow-up once possible.
 
 ## Priority 5 — Repo hygiene & smaller cleanups
 
