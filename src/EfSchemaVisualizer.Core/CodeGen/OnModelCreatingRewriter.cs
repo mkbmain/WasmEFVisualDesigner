@@ -944,7 +944,7 @@ public sealed class OnModelCreatingRewriter
             // from "a real DbContext class exists but its OnModelCreating override is missing",
             // which is still an error (see AddEntity_NoOnModelCreatingMethod_Throws) - there we
             // can't tell whether adding a synthesized method is the right fix.
-            const string bareModelBuilderParamName = "modelBuilder";
+            var bareModelBuilderParamName = FindBareReceiverName(root) ?? "modelBuilder";
             var bareEntityStatement = BuildEntityInvocationStatement(bareModelBuilderParamName, entityName, SyntaxFactory.Block());
             var newBareRoot = root.AddMembers(SyntaxFactory.GlobalStatement(bareEntityStatement));
             return newBareRoot.NormalizeWhitespace().ToFullString();
@@ -1204,6 +1204,21 @@ public sealed class OnModelCreatingRewriter
         return root.DescendantNodes()
             .OfType<MethodDeclarationSyntax>()
             .FirstOrDefault(m => m.Identifier.Text == "OnModelCreating");
+    }
+
+    /// Finds the receiver identifier (e.g. "modelBuilder", "builder") used by any existing
+    /// top-level `receiver.Entity&lt;T&gt;(...)` invocation in a bare fluent-config source, so a
+    /// newly appended entity statement can match it instead of assuming a hardcoded name.
+    /// Returns null when the source has no such invocation at all (e.g. a genuinely empty file).
+    private static string? FindBareReceiverName(CompilationUnitSyntax root)
+    {
+        return root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(invocation => FluentSyntaxHelpers.GetConfiguredEntityName(invocation) is not null)
+            .Select(invocation => ((MemberAccessExpressionSyntax)invocation.Expression).Expression)
+            .OfType<IdentifierNameSyntax>()
+            .Select(receiver => receiver.Identifier.Text)
+            .FirstOrDefault();
     }
 
     private static ExpressionStatementSyntax BuildEntityInvocationStatement(string modelBuilderParamName, string entityName, BlockSyntax block)

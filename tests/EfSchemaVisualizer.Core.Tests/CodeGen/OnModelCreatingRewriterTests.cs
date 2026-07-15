@@ -748,6 +748,26 @@ public class OnModelCreatingRewriterTests
             rewriter.AddEntity(SourceWithDbSetOnly, entityName: "Address", dbSetPropertyName: "Addresses"));
     }
 
+    private const string BareFluentConfigSourceWithNonDefaultReceiver = """
+        builder.Entity<Blog>(entity =>
+        {
+            entity.Property(e => e.Title).HasMaxLength(100);
+        });
+        """;
+
+    [Fact]
+    public void AddEntity_BareFluentConfigSourceWithNonDefaultReceiverName_UsesExistingReceiverNotModelBuilder()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddEntity(BareFluentConfigSourceWithNonDefaultReceiver, entityName: "Address", dbSetPropertyName: "Addresses");
+
+        Assert.Contains("builder.Entity<Address>(entity =>", result);
+        Assert.DoesNotContain("modelBuilder.Entity<Address>", result);
+
+        // Existing statement untouched.
+        Assert.Contains("builder.Entity<Blog>(entity =>", result);
+    }
+
     [Fact]
     public void RemoveEntity_DbSetOnly_RemovesProperty()
     {
