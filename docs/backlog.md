@@ -371,3 +371,16 @@ these matter before any new surface is added.
       file, record entity, `Property("Name")` string overload, non-literal
       `HasMaxLength` arg, renamed builder param, multiple classes per file, and
       the not-yet-built add/remove/rename paths.
+- [ ] **`[found]` No test project for `EfSchemaVisualizer.Web`.** Only
+      `EfSchemaVisualizer.Core` has automated test coverage; the Web project
+      (Razor components, `DiagramEditor`, `DiagramSync`) has none. Surfaced by
+      the 2026-07-15 browser-verification pass
+      (`2026-07-15-editable-diagram-browser-verification.md`): two of the
+      three real bugs it found and fixed — `EntityNode.razor` missing
+      `aria-label`s, and `DiagramSync.Rebuild`'s node-identity/reuse logic
+      (the fix that stops an edit from wiping an expanded property panel's
+      state) — have no regression coverage as a result, guarded only by an
+      ad hoc, uncommitted Playwright script that isn't re-run in CI.
+      `DiagramSync.Rebuild` in particular is pure and DI-free, so it's
+      readily unit-testable against a `BlazorDiagram` once a
+      `EfSchemaVisualizer.Web.Tests` project exists.
