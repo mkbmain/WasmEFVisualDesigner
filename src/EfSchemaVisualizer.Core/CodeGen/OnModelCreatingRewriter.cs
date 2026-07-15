@@ -934,6 +934,22 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
+        if (!root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any())
+        {
+            // Bare fluent-config source: just top-level `modelBuilder.Entity<T>(...)` statements,
+            // with no wrapping OnModelCreating method or DbContext class at all - the form the
+            // app's own sample data and pasted-snippet workflow both use. There's no class to add
+            // a DbSet<T> property to, so just append the new entity's config block as another
+            // top-level statement, matching the existing bare statements' shape. This is distinct
+            // from "a real DbContext class exists but its OnModelCreating override is missing",
+            // which is still an error (see AddEntity_NoOnModelCreatingMethod_Throws) - there we
+            // can't tell whether adding a synthesized method is the right fix.
+            const string bareModelBuilderParamName = "modelBuilder";
+            var bareEntityStatement = BuildEntityInvocationStatement(bareModelBuilderParamName, entityName, SyntaxFactory.Block());
+            var newBareRoot = root.AddMembers(SyntaxFactory.GlobalStatement(bareEntityStatement));
+            return newBareRoot.NormalizeWhitespace().ToFullString();
+        }
+
         var method = FindOnModelCreatingMethod(root);
 
         var methodBody = method.Body
@@ -1179,10 +1195,15 @@ public sealed class OnModelCreatingRewriter
 
     private static MethodDeclarationSyntax FindOnModelCreatingMethod(CompilationUnitSyntax root)
     {
+        return TryFindOnModelCreatingMethod(root)
+            ?? throw new InvalidOperationException("No OnModelCreating method found in source.");
+    }
+
+    private static MethodDeclarationSyntax? TryFindOnModelCreatingMethod(CompilationUnitSyntax root)
+    {
         return root.DescendantNodes()
             .OfType<MethodDeclarationSyntax>()
-            .FirstOrDefault(m => m.Identifier.Text == "OnModelCreating")
-            ?? throw new InvalidOperationException("No OnModelCreating method found in source.");
+            .FirstOrDefault(m => m.Identifier.Text == "OnModelCreating");
     }
 
     private static ExpressionStatementSyntax BuildEntityInvocationStatement(string modelBuilderParamName, string entityName, BlockSyntax block)
