@@ -21,16 +21,16 @@
 <div style="display: flex; gap: 16px;">
     <div style="flex: 1;">
         <label>Entity classes</label>
-        <textarea @bind="_classSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+        <textarea id="class-source" @bind="_classSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
     </div>
     <div style="flex: 1;">
         <label>DbContext / OnModelCreating</label>
-        <textarea @bind="_configSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+        <textarea id="config-source" @bind="_configSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
     </div>
 </div>
 
 <p>
-    <button class="btn btn-primary" @onclick="RenderDiagram">Render Diagram</button>
+    <button id="render-diagram" class="btn btn-primary" @onclick="RenderDiagram">Render Diagram</button>
     @if (_editContext is not null)
     {
         <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
