@@ -429,3 +429,131 @@ these matter before any new surface is added.
       button with a `title` has a matching `aria-label`; verified it fails
       when an `aria-label` is stripped. 311/311 tests green across both
       projects.
+
+---
+
+# Round 2 review — 2026-07-16
+
+> Everything above is `[x]` complete (311/311 tests green at `6a98131`). This
+> section is a fresh pass over the built code looking for gaps the original
+> backlog didn't anticipate. None of the below is started. Ordered by how
+> directly it undercuts the tool's core "read your real project and trust the
+> output" promise.
+
+## Priority 0 — Silent data loss on real-world input
+
+- [ ] **`[found]` Data-annotation configuration is completely unread.**
+      `EntityClassParser` only inspects attributes to *exclude* `[NotMapped]`
+      properties (`EntityClassParser.cs:86,102`). `[Key]`, `[Required]`,
+      `[MaxLength]`/`[StringLength]`, `[Column]`, `[Table]`, `[Precision]`,
+      `[ForeignKey]`, `[DatabaseGenerated]` etc. are all ignored. A huge share
+      of real EF projects configure the model this way instead of (or alongside)
+      the fluent API, so those models render with missing keys, missing
+      constraints, and wrong nullability — with **no diagnostic**. This is the
+      biggest single "your real project renders wrong" gap. At minimum emit a
+      diagnostic when annotation attributes are present; ideally parse them into
+      the same model the fluent path feeds.
+
+- [ ] **`[found]` Duplicate entity (class) names collide silently.**
+      `DiagramEditor` keys entities by bare `Name` in a
+      `Dictionary<string, Guid>` (`DiagramEditor.cs:26,36`), and
+      `DiagramSync.Rebuild` indexes `entityIds[entity.Name]`
+      (`DiagramSync.cs:34`). Two classes with the same short name (same name in
+      two namespaces, a partial class split unusually, or an entity plus a
+      same-named type) overwrite each other in the id map and merge/render as
+      one. Detect duplicate names during parse and surface a diagnostic rather
+      than dropping one.
+
+- [ ] **`[found]` Nested type declarations are dropped without a diagnostic.**
+      `EntityClassParser.Parse` filters to top-level types
+      (`!t.Ancestors().OfType<TypeDeclarationSyntax>().Any()`,
+      `EntityClassParser.cs:20`). An entity declared as a nested class is
+      silently invisible. Namespaces are fine; nested types are not. Emit a
+      diagnostic at least.
+
+## Priority 1 — Read/write capability mismatches (renders, can't save back)
+
+- [ ] **`[found]` `IEntityTypeConfiguration<T>` is parse-only — edits can't be
+      written back.** Per Priority 3 above, the parser reads config classes but
+      the rewriter (`OnModelCreatingRewriter`) only writes into
+      `modelBuilder.Entity<T>(...)` blocks. So a project whose config lives in
+      `IEntityTypeConfiguration` classes (which the README advertises as
+      supported) renders correctly but every diagram edit silently no-ops or
+      targets the wrong place. Either build the config-class rewriter path or
+      disable/flag editing when the source uses that style.
+
+- [ ] **`[found]` Record positional parameters render but aren't editable.**
+      `EntityClassParser.ParseParameterProperty` reads record primary-constructor
+      params as properties, but the rewriter explicitly doesn't touch positional
+      params (documented in the add/drop/rename items above). Result: rename /
+      change-type / remove on a positional property silently fails or no-ops.
+      Support them in the rewriter, or mark those rows read-only in the UI so the
+      failure isn't silent.
+
+## Priority 2 — App shell robustness & UX
+
+- [ ] **`[found]` Raw exception dumps are shown to the user.** `Home.razor`
+      sets `_error = ex.ToString()` (full stack trace) on both the render path
+      (`Home.razor:134`) and the zip-upload path (`Home.razor:211`), rendered in
+      a red `<pre>`. Show a friendly message; log the detail to the browser
+      console instead.
+
+- [ ] **`[found]` Textarea `<label>`s aren't associated with their inputs.**
+      `Home.razor:23,27` use bare `<label>Entity classes</label>` with no
+      `for`/`id` linkage, so screen readers don't announce them. (The in-diagram
+      controls already got `aria-label`s in the last round — this is the one
+      spot that was missed.)
+
+- [ ] **`[found]` No undo/redo.** For a visual editor every gesture rewrites the
+      source irreversibly; the only "undo" is Ctrl-Z inside a textarea, which
+      then desyncs from the diagram. A source-snapshot undo stack in
+      `DiagramEditor` would be cheap (it already funnels every mutation through
+      `Apply`).
+
+- [ ] **`[found]` Drag-to-connect / key-toggle gestures are undiscoverable.**
+      Nothing on the page explains the interaction model (drag between ports to
+      draw a relationship, click a property to expand options). A short legend or
+      first-run hint would help; at least document the gestures in the README.
+
+## Priority 3 — Deploy & CI hardening
+
+- [ ] **`[found]` GitHub Pages base-href rewrite is a brittle `sed`.**
+      `deploy.yml:36` string-replaces the exact literal `<base href="/" />`. If
+      the Blazor template ever emits that tag differently (spacing, self-close,
+      an added attribute), the `sed` becomes a silent no-op and **every asset
+      404s on Pages** with a green build. Prefer
+      `dotnet publish -p:StaticWebAssetBasePath=WasmEFVisualDesigner` (the
+      csproj already sets `OverrideHtmlAssetPlaceholders`), or fail the step if
+      the replacement count is zero.
+
+- [ ] **`[found]` No warnings-as-errors / analyzer gate.** Neither csproj sets
+      `TreatWarningsAsErrors`, and CI has no `dotnet format --verify-no-changes`
+      step, so warnings and style drift accumulate invisibly.
+
+- [ ] **`[found]` No CI smoke test that the published WASM app actually boots.**
+      The one-off browser verification was an uncommitted Playwright script
+      (noted above) that never runs in CI, and `Home.razor`'s `@code` (zip
+      upload, relationship drag wiring, error handling, `OnDiagramEditedAsync`)
+      has zero automated coverage. A headless-Chromium smoke test in the deploy
+      workflow, plus extracting `Home.razor` logic into a testable class, would
+      close both.
+
+- [ ] **`[found]` No round-trip / idempotency fuzz test.** The trust story rests
+      on parse→edit→regenerate not losing data, but there's no test that feeds a
+      corpus of realistic DbContext files through the pipeline and asserts the
+      unsupported constructs are *preserved verbatim* (not dropped) and that a
+      no-op edit is byte-stable. Add one over a small corpus of real-world
+      shapes.
+
+## Priority 4 — Documentation
+
+- [ ] **`[found]` README project-layout section is stale.** It lists only
+      `tests/EfSchemaVisualizer.Core.Tests` (README:52) but
+      `tests/EfSchemaVisualizer.Web.Tests` now also exists. Update it.
+
+- [ ] **`[found]` No single "what EF features are unsupported" list.** Known
+      gaps are scattered across specs: `HasDefaultValueSql`, `HasPrincipalKey`,
+      `UsingEntity` join config, owned/complex types, value converters,
+      inheritance (TPH/TPT), enums, non-literal argument values. Collect them in
+      one README/docs section so users know before they upload what will be
+      dropped (and whether a diagnostic fires for each).
