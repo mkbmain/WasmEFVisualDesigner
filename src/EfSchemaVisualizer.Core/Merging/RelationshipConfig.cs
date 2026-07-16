@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using EfSchemaVisualizer.Core.Model;
 
-namespace EfSchemaVisualizer.Core.Parsing;
+namespace EfSchemaVisualizer.Core.Merging;
 
 public sealed record RelationshipConfig(
     string PrincipalEntity,

@@ -1,5 +1,6 @@
 using System.Linq;
 using EfSchemaVisualizer.Core.CodeGen;
+using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 

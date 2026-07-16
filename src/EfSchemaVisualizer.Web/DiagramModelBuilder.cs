@@ -1,3 +1,4 @@
+using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace EfSchemaVisualizer.Core.Parsing;
+namespace EfSchemaVisualizer.Core.Merging;
 
 public sealed record IndexConfig(
     string EntityName,

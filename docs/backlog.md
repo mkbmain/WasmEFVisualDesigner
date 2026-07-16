@@ -374,10 +374,23 @@ these matter before any new surface is added.
       `ApplyColumnTypes`, `ApplyDefaultValues`) now build a property-keyed
       dictionary once per call via a shared `IndexByProperty` helper instead
       of calling `FirstOrDefault` per property. 303/303 tests still green.
-- [ ] **`[found]` Namespacing:** `ModelMerger` and `MaxLengthConfig` live under
+- [x] **`[found]` Namespacing:** `ModelMerger` and `MaxLengthConfig` live under
       `Parsing` but are merge/DTO concerns, not parsing.
-- [ ] **`[found]` Null-forgiving noise** (`.Distinct()!`, `entityName!`) in
+      **Update:** `ModelMerger` and all ten `*Config` DTOs it and
+      `FluentConfigParser` produce/consume (`MaxLengthConfig`,
+      `IsRequiredConfig`, `PrecisionConfig`, `KeyConfig`, `IndexConfig`,
+      `TableConfig`, `ColumnNameConfig`, `ColumnTypeConfig`,
+      `DefaultValueConfig`, `RelationshipConfig`) moved to a new
+      `EfSchemaVisualizer.Core.Merging` namespace/folder, mirrored by moving
+      `ModelMergerTests` to a `Merging` test folder. `Parsing` now only
+      contains parser/diagnostics/syntax-helper types.
+- [x] **`[found]` Null-forgiving noise** (`.Distinct()!`, `entityName!`) in
       `FluentConfigParser` — project to a non-null `List<string>` once instead.
+      **Update:** Resolved as a side effect of the perf fix above:
+      `FindConfigurationScopes`'s single-pass rewrite groups invocations into
+      a dictionary keyed only when `GetConfiguredEntityName` is non-null, so
+      the `.Distinct()!`/`entityName!` forgiving operators this item was
+      about no longer exist anywhere in the codebase.
 - [ ] **`[found]` Widen test surface** with the P0 edge cases: empty/class-less
       file, record entity, `Property("Name")` string overload, non-literal
       `HasMaxLength` arg, renamed builder param, multiple classes per file, and

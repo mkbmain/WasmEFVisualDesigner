@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
+using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
-using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 
-namespace EfSchemaVisualizer.Core.Tests.Parsing;
+namespace EfSchemaVisualizer.Core.Tests.Merging;
 
 public class ModelMergerTests
 {

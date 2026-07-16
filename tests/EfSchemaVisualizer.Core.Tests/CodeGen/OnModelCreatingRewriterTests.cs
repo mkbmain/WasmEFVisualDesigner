@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.CodeGen;
+using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;

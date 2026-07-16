@@ -1,5 +1,5 @@
 using System.Collections.Generic;
 
-namespace EfSchemaVisualizer.Core.Parsing;
+namespace EfSchemaVisualizer.Core.Merging;
 
 public sealed record KeyConfig(string EntityName, IReadOnlyList<string> PropertyNames);

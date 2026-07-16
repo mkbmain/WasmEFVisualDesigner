@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.Model;
 
-namespace EfSchemaVisualizer.Core.Parsing;
+namespace EfSchemaVisualizer.Core.Merging;
 
 public static class ModelMerger
 {
