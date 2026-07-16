@@ -1949,4 +1949,69 @@ public class OnModelCreatingRewriterTests
 
         Assert.Contains("builder.Property(e => e.Balance).HasPrecision(12)", result);
     }
+
+    private const string SourceUsingEntityTypeConfigurationForKeyAndTable = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.HasKey(e => e.Id);
+                builder.ToTable("People");
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetKey_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceUsingEntityTypeConfigurationForKeyAndTable, entityName: "Person", propertyNames: new[] { "PersonId" });
+
+        Assert.Contains("builder.HasKey(e => e.PersonId)", result);
+    }
+
+    [Fact]
+    public void RemoveKey_EntityTypeConfigurationStyle_RemovesStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveKey(SourceUsingEntityTypeConfigurationForKeyAndTable, entityName: "Person");
+
+        Assert.DoesNotContain("HasKey", result);
+    }
+
+    [Fact]
+    public void SetTable_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetTable(SourceUsingEntityTypeConfigurationForKeyAndTable, entityName: "Person", tableName: "Persons", schema: null);
+
+        Assert.Contains("builder.ToTable(\"Persons\")", result);
+    }
+
+    [Fact]
+    public void RemoveTable_EntityTypeConfigurationStyle_RemovesStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveTable(SourceUsingEntityTypeConfigurationForKeyAndTable, entityName: "Person");
+
+        Assert.DoesNotContain("ToTable", result);
+    }
+
+    private const string SourceUsingEntityTypeConfigurationEmptyForKeyAndTable = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetKey_EntityTypeConfigurationStyle_InsertsNewStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceUsingEntityTypeConfigurationEmptyForKeyAndTable, entityName: "Person", propertyNames: new[] { "Id" });
+
+        Assert.Contains("builder.HasKey(e => e.Id)", result);
+    }
 }

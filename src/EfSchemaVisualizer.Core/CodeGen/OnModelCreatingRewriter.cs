@@ -359,10 +359,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingHasKeyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasKey"))
+        var existingHasKeyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasKey"))
             .FirstOrDefault();
 
         if (existingHasKeyCall is not null)
@@ -370,11 +370,11 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingKey(root, existingHasKeyCall, propertyNames);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertKeyStatement(root, existingEntityInvocation, propertyNames);
+            return InsertKeyStatement(root, existingScope, propertyNames);
         }
 
         return InsertKeyEntityBlock(root, entityName, propertyNames);
@@ -388,11 +388,9 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertKeyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, IReadOnlyList<string> propertyNames)
+    private static string InsertKeyStatement(CompilationUnitSyntax root, SyntaxNode scope, IReadOnlyList<string> propertyNames)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
 
         var newStatement = BuildHasKeyStatement(blockReceiverName, propertyNames);
         var newBlock = block.AddStatements(newStatement);
@@ -459,10 +457,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingHasKeyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasKey"))
+        var existingHasKeyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasKey"))
             .FirstOrDefault();
 
         if (existingHasKeyCall is null || existingHasKeyCall.Parent is not ExpressionStatementSyntax statement)
@@ -479,10 +477,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingToTableCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "ToTable"))
+        var existingToTableCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToTable"))
             .FirstOrDefault();
 
         if (existingToTableCall is not null)
@@ -490,11 +488,11 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingTable(root, existingToTableCall, tableName, schema);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertTableStatement(root, existingEntityInvocation, tableName, schema);
+            return InsertTableStatement(root, existingScope, tableName, schema);
         }
 
         return InsertTableEntityBlock(root, entityName, tableName, schema);
@@ -508,11 +506,9 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertTableStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string tableName, string? schema)
+    private static string InsertTableStatement(CompilationUnitSyntax root, SyntaxNode scope, string tableName, string? schema)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
 
         var newStatement = BuildToTableStatement(blockReceiverName, tableName, schema);
         var newBlock = block.AddStatements(newStatement);
@@ -908,10 +904,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingToTableCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "ToTable"))
+        var existingToTableCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToTable"))
             .FirstOrDefault();
 
         if (existingToTableCall is null || existingToTableCall.Parent is not ExpressionStatementSyntax statement)
