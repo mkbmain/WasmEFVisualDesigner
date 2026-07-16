@@ -789,27 +789,59 @@ these matter before any new surface is added.
 > Each is a small addition to `EntityNode.razor` / `RelationshipLinkLabel.razor`
 > plus a thin `DiagramEditor` method over existing rewriter calls.
 
-- [ ] **`[found]` Max length isn't editable in the app.** The project's
+- [x] **`[found]` Max length isn't editable in the app.** The project's
       original flagship feature: `PropertyModel.MaxLength` is parsed and
       `OnModelCreatingRewriter.RewriteMaxLength`/`RemoveMaxLength` exist, but
       the property expand panel has no "Max length" field. Add one alongside
       Column name/type.
-- [ ] **`[found]` `IsRequired` override isn't editable in the app.**
+      **Update:** Added a "Max length" number field to `EntityNode.razor`'s
+      property expand panel, wired to a new `DiagramEditor.SetMaxLength`
+      (mirrors the existing `SetColumnName`/`SetPrecision` shape: clears via
+      `RemoveMaxLength` when blanked, rejects non-positive values, calls
+      `RewriteMaxLength` otherwise).
+- [x] **`[found]` `IsRequired` override isn't editable in the app.**
       `PropertyModel.IsRequiredOverride` is parsed and
       `RewriteIsRequired`/`RemoveIsRequired` exist, but the UI's "nullable"
       checkbox only changes the CLR `?` — a distinct concept in EF. Add a
       tri-state control (no override / required / not required) to the expand
       panel.
-- [ ] **`[found]` Delete behavior isn't editable in the app.**
+      **Update:** Added a "Required override" `<select>` (no override /
+      Required / Not required) to the property expand panel, wired to a new
+      `DiagramEditor.SetRequiredOverride` (same shape as `SetMaxLength`,
+      calling `RemoveIsRequired`/`RewriteIsRequired`).
+- [x] **`[found]` Delete behavior isn't editable in the app.**
       `OnDelete(DeleteBehavior.X)` is parsed into
       `RelationshipModel.OnDeleteBehavior` and `SetRelationship` writes it
       back (`OnModelCreatingRewriter.cs:1098`), but the relationship panel
       only offers Kind/FK/Remove. Add a Cascade/Restrict/SetNull/NoAction
       dropdown.
-- [ ] **`[found]` Many-to-many join entity name isn't shown.**
+      **Update:** Added an "On delete" `<select>` (default/Cascade/Restrict/
+      SetNull/NoAction) to `RelationshipLinkLabel.razor`'s expand panel.
+      `DiagramEditor.SetRelationshipShape` gained a fourth
+      `newOnDeleteBehavior` parameter (its no-op/equality check now also
+      compares `OnDeleteBehavior`), committed together with Kind/FK on every
+      change, matching the panel's existing "commit the whole shape at once"
+      pattern. Hidden for many-to-many relationships, since EF has no FK to
+      cascade there.
+- [x] **`[found]` Many-to-many join entity name isn't shown.**
       `RelationshipModel.JoinEntityName` is parsed and written back via
       `UsingEntity`, but the relationship panel never displays it. Show it
       (read-only is fine as a first step) when Kind is many-to-many.
+      **Update:** `RelationshipLinkLabel.razor` now shows a read-only
+      "Join entity: {name}" line in place of the FK/delete-behavior fields
+      when `Kind` is many-to-many and a `JoinEntityName` is present.
+
+      All four verified end-to-end against a real `dotnet publish` build in
+      headless Chromium (not just unit tests): setting max length + required
+      override on a property produced
+      `entity.Property(e => e.Title).IsRequired().HasMaxLength(200);` in the
+      regenerated config source; setting delete behavior on a one-to-many
+      relationship produced `.OnDelete(DeleteBehavior.Cascade)`; a
+      many-to-many relationship configured via `UsingEntity<StudentCourse>()`
+      showed "Join entity: StudentCourse" in the panel. 7 new
+      `DiagramEditorPropertyPanelTests` cover `SetMaxLength`/
+      `SetRequiredOverride`/`SetRelationshipShape`'s new parameter directly.
+      401/401 tests green across all three test projects.
 
 ## Priority 3 — EF features not parsed at all (silently dropped)
 
