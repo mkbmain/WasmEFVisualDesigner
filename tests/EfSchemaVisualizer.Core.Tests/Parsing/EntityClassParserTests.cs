@@ -526,4 +526,97 @@ public class EntityClassParserTests
         Assert.Equal(18, total.Precision);
         Assert.Null(total.Scale);
     }
+
+    [Fact]
+    public void Parse_TableAttribute_SetsTableNameAndSchema()
+    {
+        const string source = """
+            [Table("people", Schema = "dbo")]
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal("people", entity.TableName);
+        Assert.Equal("dbo", entity.Schema);
+    }
+
+    [Fact]
+    public void Parse_KeyAttribute_SetsSinglePropertyKey()
+    {
+        const string source = """
+            public class Person
+            {
+                [Key]
+                public int PersonId { get; set; }
+                public string? Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal(new[] { "PersonId" }, entity.KeyPropertyNames);
+    }
+
+    [Fact]
+    public void Parse_CompositeKeyAttributes_OrderedByColumnOrder()
+    {
+        const string source = """
+            public class OrderLine
+            {
+                [Key]
+                [Column(Order = 2)]
+                public int ProductId { get; set; }
+
+                [Key]
+                [Column(Order = 1)]
+                public int OrderId { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal(new[] { "OrderId", "ProductId" }, entity.KeyPropertyNames);
+    }
+
+    [Fact]
+    public void Parse_CompositeKeyAttributesNoOrder_UsesDeclarationOrder()
+    {
+        const string source = """
+            public class OrderLine
+            {
+                [Key]
+                public int OrderId { get; set; }
+
+                [Key]
+                public int ProductId { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Equal(new[] { "OrderId", "ProductId" }, entity.KeyPropertyNames);
+    }
+
+    [Fact]
+    public void Parse_NoKeyAttribute_KeyPropertyNamesEmpty()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        Assert.Empty(result.Value.Single().KeyPropertyNames);
+    }
 }

@@ -74,14 +74,62 @@ public sealed class EntityClassParser
             ? typeDeclaration.ParameterList?.Parameters.Select(ParseParameterProperty) ?? Enumerable.Empty<PropertyModel>()
             : Enumerable.Empty<PropertyModel>();
 
-        var bodyProperties = typeDeclaration.Members
+        var mappedProperties = typeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>()
             .Where(IsMappedInstanceProperty)
-            .Select(ParseProperty);
+            .ToList();
+
+        var bodyProperties = mappedProperties.Select(ParseProperty);
 
         var properties = positionalProperties.Concat(bodyProperties).ToList();
 
-        return new EntityModel(typeDeclaration.Identifier.Text, properties);
+        var keyPropertyNames = ResolveKeyPropertyNames(mappedProperties);
+        var (tableName, schema) = ParseTableAttribute(typeDeclaration.AttributeLists);
+
+        return new EntityModel(
+            typeDeclaration.Identifier.Text,
+            properties,
+            keyPropertyNames,
+            TableName: tableName,
+            Schema: schema);
+    }
+
+    private static IReadOnlyList<string> ResolveKeyPropertyNames(List<PropertyDeclarationSyntax> mappedProperties)
+    {
+        var keyedProperties = mappedProperties
+            .Where(p => FindAttribute(p.AttributeLists, "Key") is not null)
+            .ToList();
+
+        if (keyedProperties.Count == 0)
+        {
+            return new List<string>();
+        }
+
+        return keyedProperties
+            .Select((p, index) => (Name: p.Identifier.Text, Order: GetColumnOrder(p), DeclarationIndex: index))
+            .OrderBy(k => k.Order ?? int.MaxValue)
+            .ThenBy(k => k.DeclarationIndex)
+            .Select(k => k.Name)
+            .ToList();
+    }
+
+    private static int? GetColumnOrder(PropertyDeclarationSyntax property)
+    {
+        return FindAttribute(property.AttributeLists, "Column") is { } columnAttr
+            ? TryReadIntArg(GetNamedArg(columnAttr, "Order"))
+            : null;
+    }
+
+    private static (string? TableName, string? Schema) ParseTableAttribute(SyntaxList<AttributeListSyntax> attributeLists)
+    {
+        if (FindAttribute(attributeLists, "Table") is not { } tableAttr)
+        {
+            return (null, null);
+        }
+
+        var tableName = TryReadStringArg(GetPositionalArg(tableAttr, 0));
+        var schema = TryReadStringArg(GetNamedArg(tableAttr, "Schema"));
+        return (tableName, schema);
     }
 
     private static PropertyModel ParseParameterProperty(ParameterSyntax parameter)
