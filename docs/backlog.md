@@ -707,3 +707,145 @@ these matter before any new surface is added.
       listing all of the above, noting that none of them raise a diagnostic
       today, and pointing at `DiagnosticCodes.cs` for the current, authoritative
       list of what *does* get flagged (the non-literal-argument cases).
+
+---
+
+# Round 3 review — 2026-07-16
+
+> Everything above is `[x]` complete (386/386 tests green at `9d76cf0`). This
+> section is a fresh audit of the app against EF Core's real surface area:
+> capability that exists in `Core` but has no UI, EF features that are
+> silently dropped, and app-level features that are missing. Ordered by how
+> directly each undercuts the "read your real project and trust the output"
+> promise. None of the below is started.
+
+## Priority 0 — Data loss on the edit path
+
+- [ ] **`[found]` Composite foreign keys are truncated to one property by the
+      relationship panel.** The model carries `ForeignKeyProperties` as a list
+      and `FluentConfigParser` reads composite FKs correctly, but
+      `RelationshipLinkLabel.razor` renders a single-select `<select>` and
+      commits `new[] { _foreignKeyProperty }` (`RelationshipLinkLabel.razor:93-95`).
+      Any edit through the panel — even just toggling Kind — silently rewrites
+      a composite FK down to its first property. This is data loss on edit,
+      not a missing feature. Fix: multi-select (checkbox list, like the index
+      panel's membership toggles) or at minimum refuse to commit when the
+      existing relationship has a composite FK.
+
+## Priority 1 — The unrecognized-call diagnostic (highest-leverage trust fix)
+
+- [ ] **`[found]` Emit a diagnostic for any fluent call the parser doesn't
+      recognize.** The README's "Unsupported EF Core features" section admits
+      that everything unread is dropped with *no signal*. Rather than parsing
+      every remaining EF feature, add one generic diagnostic:
+      `FluentSyntaxHelpers.FindConfigurationScopes` already isolates every
+      invocation inside each entity's config scope, so a single pass can flag
+      any chained call whose method name isn't in the known set
+      (`HasMaxLength`, `HasKey`, `IsRequired`, …) with an
+      `UnrecognizedConfigCall` diagnostic naming the call and entity. One
+      change turns every silently-dropped feature in Priority 3 below into a
+      warned-about feature, and the README's "no diagnostic fires" caveat
+      largely disappears. Care needed to not flag chain-links that are part
+      of recognized patterns (e.g. `WithMany` inside a parsed relationship
+      chain, `IsUnique` after `HasIndex`).
+
+## Priority 2 — Parsed and rewritable in Core, but no UI
+
+> These are fully round-trippable today — the diagram just never shows them.
+> Each is a small addition to `EntityNode.razor` / `RelationshipLinkLabel.razor`
+> plus a thin `DiagramEditor` method over existing rewriter calls.
+
+- [ ] **`[found]` Max length isn't editable in the app.** The project's
+      original flagship feature: `PropertyModel.MaxLength` is parsed and
+      `OnModelCreatingRewriter.RewriteMaxLength`/`RemoveMaxLength` exist, but
+      the property expand panel has no "Max length" field. Add one alongside
+      Column name/type.
+- [ ] **`[found]` `IsRequired` override isn't editable in the app.**
+      `PropertyModel.IsRequiredOverride` is parsed and
+      `RewriteIsRequired`/`RemoveIsRequired` exist, but the UI's "nullable"
+      checkbox only changes the CLR `?` — a distinct concept in EF. Add a
+      tri-state control (no override / required / not required) to the expand
+      panel.
+- [ ] **`[found]` Delete behavior isn't editable in the app.**
+      `OnDelete(DeleteBehavior.X)` is parsed into
+      `RelationshipModel.OnDeleteBehavior` and `SetRelationship` writes it
+      back (`OnModelCreatingRewriter.cs:1098`), but the relationship panel
+      only offers Kind/FK/Remove. Add a Cascade/Restrict/SetNull/NoAction
+      dropdown.
+- [ ] **`[found]` Many-to-many join entity name isn't shown.**
+      `RelationshipModel.JoinEntityName` is parsed and written back via
+      `UsingEntity`, but the relationship panel never displays it. Show it
+      (read-only is fine as a first step) when Kind is many-to-many.
+
+## Priority 3 — EF features not parsed at all (silently dropped)
+
+> Beyond the README's existing unsupported list (owned/complex types,
+> `HasConversion`, TPH/TPT/TPC, `HasDefaultValueSql`, `HasPrincipalKey`,
+> `UsingEntity` internals, enums). All of the below are also unread today,
+> most are common in real projects, and none fire a diagnostic (the Priority 1
+> item above is the cheap mitigation for all of them; parsing is the real fix,
+> roughly in this order of real-world frequency):
+
+- [ ] **`[found]` `Ignore` is unread — ignored members render as mapped.**
+      `entity.Ignore(e => e.X)` and `modelBuilder.Ignore<T>()` are dropped, so
+      properties/entities the user explicitly excluded from the model show up
+      in the diagram as real columns/tables. Arguably a P0-class wrongness;
+      listed here because the fix is a parser addition.
+- [ ] **`[found]` `[Index]` class-level attribute unread.** Very common since
+      EF Core 5 (scaffold emits it). Should fold into `EntityModel.Indexes`
+      exactly like fluent `HasIndex`, fluent-wins on conflict.
+- [ ] **`[found]` Value generation unread.** `ValueGeneratedOnAdd`/`OnUpdate`/
+      `Never`, `UseIdentityColumn`. Identity columns are near-universal;
+      at minimum surface as a property badge.
+- [ ] **`[found]` Shadow properties dropped.** `entity.Property<string>("CreatedBy")`
+      configures a property with no CLR member; merge finds no match and the
+      config vanishes. Model them as properties flagged `IsShadow` (read-only
+      rows in the UI until the rewriter learns to create them).
+- [ ] **`[found]` Keyless/view entities unread.** `HasNoKey()`, `ToView(...)`,
+      `ToSqlQuery(...)`, `[Keyless]`. A scaffolded database-first project with
+      views renders these as ordinary tables missing a key.
+- [ ] **`[found]` Concurrency tokens unread.** `IsRowVersion()`,
+      `IsConcurrencyToken()`, `[Timestamp]`, `[ConcurrencyCheck]`.
+- [ ] **`[found]` Alternate keys unread.** `HasAlternateKey(...)` — also a
+      valid `HasForeignKey` principal target, so its absence can make parsed
+      relationships subtly wrong.
+- [ ] **`[found]` Index extras unread.** `HasFilter(...)`, `IsDescending(...)`,
+      `IncludeProperties(...)` chained after a parsed `HasIndex` are dropped
+      on index rewrite (the rewriter re-emits the canonical chain without
+      them) — meaning an index *edit* can silently strip them. The parse gap
+      doubles as an edit-path data-loss risk.
+- [ ] **`[found]` Data seeding (`HasData`) unread.** Harmless to the diagram,
+      but an entity remove/rename leaves orphaned seed data behind; at minimum
+      warn.
+- [ ] **`[found]` Smaller unread config:** `HasQueryFilter`, `HasComment`,
+      `IsUnicode`/`IsFixedLength`, `UseCollation`, `ToJson`, temporal tables
+      (`ToTable(b => b.IsTemporal())`), table/entity splitting
+      (`SplitToTable`), `[InverseProperty]`, `[DeleteBehavior]`. Individually
+      niche; the Priority 1 diagnostic covers them collectively until any
+      earns a parser.
+
+## Priority 4 — App-level features
+
+- [ ] **`[found]` Keyboard shortcuts for undo/redo.** Ctrl+Z/Ctrl+Y (outside
+      the textareas) should drive the `DiagramEditor` undo stack; buttons only
+      today. Needs a small JS keydown interop that ignores events targeting
+      inputs/textareas.
+- [ ] **`[spec]` Auto-layout.** Entities land on a fixed grid; no
+      layered/force-directed layout, no zoom-to-fit, no minimap. Biggest
+      quality-of-life gap for models above ~10 entities.
+- [ ] **`[found]` Diagram layout isn't persisted.** Node positions are lost on
+      reload/re-render from scratch. Persist to localStorage keyed by source
+      hash, and/or a sidecar JSON in the downloaded zip that re-upload reads.
+- [ ] **`[found]` No diagram export.** No PNG/SVG/Mermaid export — the obvious
+      "share with the team" feature for a *visualizer*. Mermaid `erDiagram`
+      text output is the cheapest first step (pure string generation from
+      `DiagramModelResult`, trivially testable).
+- [ ] **`[spec]` Zip round-trip loses file boundaries.** Documented trade-off
+      from the original slice: everything collapses to `Entities.cs` +
+      `DbContext.cs` and non-`.cs` files are dropped. The real fix — preserve
+      per-file boundaries and pass through unrecognized files verbatim — is
+      the biggest remaining barrier to "upload your real project".
+- [ ] **`[found]` Add-property type picker.** `DiagramEditor.AddProperty`
+      hardcodes `string`. A small dropdown (string/int/long/decimal/DateTime/
+      Guid/bool) on the "+ Add property" row would cover most cases, and the
+      double-click type edit already handles the rest.
