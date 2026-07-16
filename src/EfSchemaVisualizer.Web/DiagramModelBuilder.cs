@@ -28,7 +28,8 @@ public static class DiagramModelBuilder
         var columnTypes = configParser.ParseColumnTypes(configSource);
         var defaultValues = configParser.ParseDefaultValues(configSource);
         var indexes = configParser.ParseIndexes(configSource);
-        var relationships = configParser.ParseRelationships(configSource, entityResult.Value);
+        var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
+        var annotationRelationships = entityParser.ParseRelationships(classSource, entityResult.Value);
 
         diagnostics.AddRange(maxLengths.Diagnostics);
         diagnostics.AddRange(precisions.Diagnostics);
@@ -39,7 +40,8 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(columnTypes.Diagnostics);
         diagnostics.AddRange(defaultValues.Diagnostics);
         diagnostics.AddRange(indexes.Diagnostics);
-        diagnostics.AddRange(relationships.Diagnostics);
+        diagnostics.AddRange(fluentRelationships.Diagnostics);
+        diagnostics.AddRange(annotationRelationships.Diagnostics);
 
         var entities = entityResult.Value
             .Select(entity => ModelMerger.ApplyMaxLengths(entity, maxLengths.Value))
@@ -53,8 +55,22 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyIndexes(entity, indexes.Value))
             .ToList();
 
-        var relationshipModels = ModelMerger.ApplyRelationships(relationships.Value);
+        var fluentRelationshipKeys = fluentRelationships.Value
+            .Select(RelationshipDedupeKey)
+            .ToHashSet();
+
+        var mergedRelationshipConfigs = fluentRelationships.Value
+            .Concat(annotationRelationships.Value.Where(r => !fluentRelationshipKeys.Contains(RelationshipDedupeKey(r))))
+            .ToList();
+
+        var relationshipModels = ModelMerger.ApplyRelationships(mergedRelationshipConfigs);
 
         return new DiagramModelResult(entities, relationshipModels, diagnostics);
+    }
+
+    private static (string PrincipalEntity, string DependentEntity, string ForeignKeyProperties) RelationshipDedupeKey(
+        RelationshipConfig config)
+    {
+        return (config.PrincipalEntity, config.DependentEntity, string.Join(",", config.ForeignKeyProperties));
     }
 }

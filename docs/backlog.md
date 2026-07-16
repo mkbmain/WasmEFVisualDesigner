@@ -442,7 +442,7 @@ these matter before any new surface is added.
 
 ## Priority 0 — Silent data loss on real-world input
 
-- [ ] **`[found]` Data-annotation configuration is completely unread.**
+- [x] **`[found]` Data-annotation configuration is completely unread.**
       `EntityClassParser` only inspects attributes to *exclude* `[NotMapped]`
       properties (`EntityClassParser.cs:86,102`). `[Key]`, `[Required]`,
       `[MaxLength]`/`[StringLength]`, `[Column]`, `[Table]`, `[Precision]`,
@@ -453,8 +453,20 @@ these matter before any new surface is added.
       biggest single "your real project renders wrong" gap. At minimum emit a
       diagnostic when annotation attributes are present; ideally parse them into
       the same model the fluent path feeds.
+      **Update:** `EntityClassParser` now parses `[Required]`, `[MaxLength]`/
+      `[StringLength]`, `[Column]`, `[Table]`, `[Precision]`, `[Key]`, and
+      `[ForeignKey]` directly into `EntityModel`/`PropertyModel`/
+      `RelationshipConfig`, and `DiagramModelBuilder.Build` unions
+      annotation-derived relationships with fluent-derived ones (fluent wins
+      on conflict, keyed by `(PrincipalEntity, DependentEntity,
+      ForeignKeyProperties)`) — see
+      `docs/superpowers/plans/2026-07-16-annotation-parsing-and-p0-diagnostics.md`.
+      Scalar fields (max length, required, column, precision, table, key)
+      get fluent-wins precedence for free via `ModelMerger.Apply*`, which
+      only overwrites a field when a matching fluent config exists. 338/338
+      tests green.
 
-- [ ] **`[found]` Duplicate entity (class) names collide silently.**
+- [x] **`[found]` Duplicate entity (class) names collide silently.**
       `DiagramEditor` keys entities by bare `Name` in a
       `Dictionary<string, Guid>` (`DiagramEditor.cs:26,36`), and
       `DiagramSync.Rebuild` indexes `entityIds[entity.Name]`
@@ -463,13 +475,21 @@ these matter before any new surface is added.
       same-named type) overwrite each other in the id map and merge/render as
       one. Detect duplicate names during parse and surface a diagnostic rather
       than dropping one.
+      **Update:** `EntityClassParser.Parse` now detects duplicate class names
+      and emits a diagnostic instead of silently colliding — see
+      `docs/superpowers/plans/2026-07-16-annotation-parsing-and-p0-diagnostics.md`.
+      338/338 tests green.
 
-- [ ] **`[found]` Nested type declarations are dropped without a diagnostic.**
+- [x] **`[found]` Nested type declarations are dropped without a diagnostic.**
       `EntityClassParser.Parse` filters to top-level types
       (`!t.Ancestors().OfType<TypeDeclarationSyntax>().Any()`,
       `EntityClassParser.cs:20`). An entity declared as a nested class is
       silently invisible. Namespaces are fine; nested types are not. Emit a
       diagnostic at least.
+      **Update:** `EntityClassParser.Parse` now emits a diagnostic when a
+      nested type declaration is skipped — see
+      `docs/superpowers/plans/2026-07-16-annotation-parsing-and-p0-diagnostics.md`.
+      338/338 tests green.
 
 ## Priority 1 — Read/write capability mismatches (renders, can't save back)
 
