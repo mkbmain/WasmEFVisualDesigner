@@ -1401,6 +1401,22 @@ public sealed class OnModelCreatingRewriter
             }
         }
 
+        foreach (var classDeclaration in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+        {
+            if (FluentSyntaxHelpers.TryGetEntityTypeConfigurationTypeArgument(classDeclaration, oldEntityName) is { } baseListTypeArgument)
+            {
+                targets.Add(baseListTypeArgument);
+            }
+        }
+
+        foreach (var configureMethod in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
+        {
+            if (FluentSyntaxHelpers.TryGetConfigureParameterEntityTypeArgument(configureMethod, oldEntityName) is { } parameterTypeArgument)
+            {
+                targets.Add(parameterTypeArgument);
+            }
+        }
+
         if (targets.Count == 0)
         {
             return sourceCode;

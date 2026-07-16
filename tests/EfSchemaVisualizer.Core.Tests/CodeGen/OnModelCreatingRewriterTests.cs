@@ -634,6 +634,28 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(200)", result);
     }
 
+    private const string SourceUsingEntityTypeConfigurationForRename = """
+        public class BlogConfiguration : IEntityTypeConfiguration<Blog>
+        {
+            public void Configure(EntityTypeBuilder<Blog> builder)
+            {
+                builder.Property(e => e.Title).HasMaxLength(100);
+            }
+        }
+        """;
+
+    [Fact]
+    public void RenameEntityReferences_EntityTypeConfigurationStyle_PatchesBaseListAndConfigureParameter()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenameEntityReferences(SourceUsingEntityTypeConfigurationForRename, oldEntityName: "Blog", newEntityName: "Journal");
+
+        Assert.Contains("IEntityTypeConfiguration<Journal>", result);
+        Assert.Contains("Configure(EntityTypeBuilder<Journal> builder)", result);
+        Assert.DoesNotContain("IEntityTypeConfiguration<Blog>", result);
+        Assert.DoesNotContain("EntityTypeBuilder<Blog>", result);
+    }
+
     [Fact]
     public void RenamePropertyReferences_ExpressionBodiedLambda_RenamesMemberAccess()
     {

@@ -293,7 +293,7 @@ internal static class FluentSyntaxHelpers
     /// Returns the `T` type argument text if `classDeclaration`'s base list includes
     /// `IEntityTypeConfiguration&lt;T&gt;`, bare or namespace-qualified (e.g.
     /// `Microsoft.EntityFrameworkCore.IEntityTypeConfiguration&lt;T&gt;`); otherwise null.
-    private static string? TryGetEntityTypeConfigurationEntityName(ClassDeclarationSyntax classDeclaration)
+    internal static string? TryGetEntityTypeConfigurationEntityName(ClassDeclarationSyntax classDeclaration)
     {
         if (classDeclaration.BaseList is null)
         {
@@ -316,6 +316,54 @@ internal static class FluentSyntaxHelpers
         }
 
         return null;
+    }
+
+    /// If `classDeclaration` implements `IEntityTypeConfiguration&lt;entityName&gt;`, returns the
+    /// `IdentifierNameSyntax` node for `entityName` in that base-list type argument (so a caller
+    /// can rename it via `ReplaceNodes`); otherwise null.
+    internal static IdentifierNameSyntax? TryGetEntityTypeConfigurationTypeArgument(
+        ClassDeclarationSyntax classDeclaration, string entityName)
+    {
+        if (classDeclaration.BaseList is null)
+        {
+            return null;
+        }
+
+        foreach (var baseType in classDeclaration.BaseList.Types)
+        {
+            var generic = baseType.Type switch
+            {
+                GenericNameSyntax g => g,
+                QualifiedNameSyntax { Right: GenericNameSyntax g } => g,
+                _ => null,
+            };
+
+            if (generic is { Identifier.Text: "IEntityTypeConfiguration", TypeArgumentList.Arguments: [IdentifierNameSyntax typeArg] }
+                && typeArg.Identifier.Text == entityName)
+            {
+                return typeArg;
+            }
+        }
+
+        return null;
+    }
+
+    /// If `configureMethod` is `Configure(EntityTypeBuilder&lt;entityName&gt; builder)`, returns the
+    /// `IdentifierNameSyntax` node for `entityName` in the parameter's type argument; otherwise null.
+    internal static IdentifierNameSyntax? TryGetConfigureParameterEntityTypeArgument(
+        MethodDeclarationSyntax configureMethod, string entityName)
+    {
+        if (configureMethod.Identifier.Text != "Configure")
+        {
+            return null;
+        }
+
+        var parameter = configureMethod.ParameterList.Parameters.SingleOrDefault();
+
+        return parameter?.Type is GenericNameSyntax { Identifier.Text: "EntityTypeBuilder", TypeArgumentList.Arguments: [IdentifierNameSyntax typeArg] }
+            && typeArg.Identifier.Text == entityName
+                ? typeArg
+                : null;
     }
 
     /// Given a `public DbSet&lt;T&gt; Name { get; set; }` property declaration, returns the `T` type
