@@ -1817,4 +1817,71 @@ public class OnModelCreatingRewriterTests
 
         Assert.DoesNotContain("HasMany(p => p.Tags)", result);
     }
+
+    private const string SourceUsingEntityTypeConfiguration = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.Property(e => e.Name).HasMaxLength(100);
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceUsingEntityTypeConfiguration, entityName: "Person", propertyName: "Name", newMaxLength: 150);
+
+        Assert.Contains("builder.Property(e => e.Name).HasMaxLength(150)", result);
+        Assert.DoesNotContain("HasMaxLength(100)", result);
+    }
+
+    private const string SourceUsingEntityTypeConfigurationNoMaxLengthYet = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.Property(e => e.Name);
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_EntityTypeConfigurationStyle_AppendsOntoExistingPropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceUsingEntityTypeConfigurationNoMaxLengthYet, entityName: "Person", propertyName: "Name", newMaxLength: 50);
+
+        Assert.Contains("builder.Property(e => e.Name).HasMaxLength(50)", result);
+    }
+
+    private const string SourceUsingEntityTypeConfigurationEmptyConfigure = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_EntityTypeConfigurationStyle_InsertsNewStatementIntoConfigureBody()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceUsingEntityTypeConfigurationEmptyConfigure, entityName: "Person", propertyName: "Email", newMaxLength: 255);
+
+        Assert.Contains("builder.Property(e => e.Email).HasMaxLength(255)", result);
+    }
+
+    [Fact]
+    public void RemoveMaxLength_EntityTypeConfigurationStyle_RemovesCallButKeepsPropertyCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveMaxLength(SourceUsingEntityTypeConfiguration, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("builder.Property(e => e.Name);", result);
+        Assert.DoesNotContain("HasMaxLength", result);
+    }
 }

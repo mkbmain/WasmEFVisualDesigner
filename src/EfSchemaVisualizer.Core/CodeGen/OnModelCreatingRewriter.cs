@@ -16,10 +16,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingMaxLengthCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasMaxLength"))
+        var existingMaxLengthCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasMaxLength"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingMaxLengthCall is not null)
@@ -27,8 +27,8 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingMaxLength(root, existingMaxLengthCall, newMaxLength);
         }
 
-        var existingPropertyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
 
         if (existingPropertyCall is not null)
@@ -36,11 +36,11 @@ public sealed class OnModelCreatingRewriter
             return AppendMaxLengthToPropertyCall(root, existingPropertyCall, newMaxLength);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertPropertyStatement(root, existingEntityInvocation, propertyName, newMaxLength);
+            return InsertPropertyStatement(root, existingScope, propertyName, newMaxLength);
         }
 
         return InsertEntityBlock(root, entityName, propertyName, newMaxLength);
@@ -69,12 +69,10 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertPropertyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, int newMaxLength)
+    private static string InsertPropertyStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, int newMaxLength)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
-        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
 
         var newStatement = BuildPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, newMaxLength);
         var newBlock = block.AddStatements(newStatement);
@@ -1221,6 +1219,39 @@ public sealed class OnModelCreatingRewriter
             .FirstOrDefault();
     }
 
+    /// Given a config scope from `FluentSyntaxHelpers.FindConfigurationScopes` — either an
+    /// `Entity&lt;T&gt;(entity =&gt; { ... })` invocation or an `IEntityTypeConfiguration&lt;T&gt;.Configure(...)`
+    /// method — returns the statement block to search/insert into and the identifier fluent
+    /// calls are chained off (the `Entity&lt;T&gt;()` lambda's parameter, or `Configure`'s own parameter).
+    private static (BlockSyntax Block, string ReceiverName) GetScopeBlockAndReceiver(SyntaxNode scope)
+    {
+        if (scope is InvocationExpressionSyntax entityInvocation)
+        {
+            var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
+            return (lambda.Block!, lambda.Parameter.Identifier.Text);
+        }
+
+        if (scope is MethodDeclarationSyntax configureMethod)
+        {
+            return (configureMethod.Body!, configureMethod.ParameterList.Parameters.Single().Identifier.Text);
+        }
+
+        throw new InvalidOperationException($"Unsupported configuration scope node type: {scope.GetType().Name}");
+    }
+
+    /// All config scopes for `entityName` — `Entity&lt;T&gt;()` invocations first (in file order),
+    /// then `IEntityTypeConfiguration&lt;T&gt;` `Configure` methods, matching
+    /// `FluentSyntaxHelpers.FindConfigurationScopes`'s yield order. Callers that pick
+    /// `.FirstOrDefault()` therefore prefer an existing `Entity&lt;T&gt;()` block over a config class
+    /// when both exist for the same entity.
+    private static List<SyntaxNode> FindConfigScopes(CompilationUnitSyntax root, string entityName)
+    {
+        return FluentSyntaxHelpers.FindConfigurationScopes(root)
+            .Where(s => s.EntityName == entityName)
+            .Select(s => s.Scope)
+            .ToList();
+    }
+
     private static ExpressionStatementSyntax BuildEntityInvocationStatement(string modelBuilderParamName, string entityName, BlockSyntax block)
     {
         return SyntaxFactory.ExpressionStatement(
@@ -1298,10 +1329,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingMaxLengthCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasMaxLength"))
+        var existingMaxLengthCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasMaxLength"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingMaxLengthCall is null)
