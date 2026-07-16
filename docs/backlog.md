@@ -510,10 +510,20 @@ these matter before any new surface is added.
       `DiagramEditor` would be cheap (it already funnels every mutation through
       `Apply`).
 
-- [ ] **`[found]` Drag-to-connect / key-toggle gestures are undiscoverable.**
-      Nothing on the page explains the interaction model (drag between ports to
-      draw a relationship, click a property to expand options). A short legend or
-      first-run hint would help; at least document the gestures in the README.
+- [~] **`[found]` Diagram gestures are undiscoverable.**
+      Nothing on the page explained the interaction model (double-click a
+      name/type to edit, drag between ports to draw a relationship, click a
+      property to expand options). A short legend or first-run hint would help;
+      at least document the gestures in the README.
+      **Update (2fba175):** the double-click *rename/edit* affordance is now
+      obvious — the entity title, property name, and property type carry a
+      dashed underline, text cursor, tooltips, and a ✎ pencil on the title, the
+      node hint line leads with "Double-click a name or type to edit", and the
+      "Table:" field is tooltipped to clarify it sets `.ToTable` rather than the
+      class name (the exact mix-up that surfaced this). Still open: the
+      drag-to-connect and property-expand/key-toggle gestures have no legend
+      beyond the existing one-line connect hint, and none of it is documented in
+      the README yet.
 
 ## Priority 3 — Deploy & CI hardening
 
