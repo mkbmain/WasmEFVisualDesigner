@@ -25,16 +25,23 @@
         </label>
         @if (_kind != RelationshipKind.ManyToMany)
         {
-            <label style="display: block;">
+            <div style="display: block;">
                 Foreign key:
-                <select value="@_foreignKeyProperty" @onchange="e => CommitForeignKey(e.Value?.ToString())">
-                    <option value="">(none — shadow FK)</option>
-                    @foreach (var property in DependentProperties)
-                    {
-                        <option value="@property.Name">@property.Name</option>
-                    }
-                </select>
-            </label>
+                @if (!DependentProperties.Any())
+                {
+                    <span>(none — shadow FK)</span>
+                }
+                @foreach (var property in DependentProperties)
+                {
+                    <label style="display: block;">
+                        <input type="checkbox" checked="@_foreignKeyProperties.Contains(property.Name)"
+                               @onchange="e => ToggleForeignKeyProperty(property.Name, (bool)(e.Value ?? false))"
+                               @onpointerdown:stopPropagation="true"
+                               @onmousedown:stopPropagation="true" />
+                        @property.Name
+                    </label>
+                }
+            </div>
         }
         @if (_error is not null)
         {
@@ -53,7 +60,7 @@
 
     private bool _expanded;
     private RelationshipKind _kind;
-    private string _foreignKeyProperty = string.Empty;
+    private List<string> _foreignKeyProperties = new();
     private string? _error;
 
     private IEnumerable<PropertyModel> DependentProperties =>
@@ -66,7 +73,7 @@
         if (_expanded)
         {
             _kind = Label.Relationship.Kind;
-            _foreignKeyProperty = Label.Relationship.ForeignKeyProperties.FirstOrDefault() ?? string.Empty;
+            _foreignKeyProperties = Label.Relationship.ForeignKeyProperties.ToList();
             _error = null;
         }
     }
@@ -82,17 +89,28 @@
         await Commit();
     }
 
-    private async Task CommitForeignKey(string? propertyName)
+    private async Task ToggleForeignKeyProperty(string propertyName, bool include)
     {
-        _foreignKeyProperty = propertyName ?? string.Empty;
+        if (include)
+        {
+            if (!_foreignKeyProperties.Contains(propertyName))
+            {
+                _foreignKeyProperties.Add(propertyName);
+            }
+        }
+        else
+        {
+            _foreignKeyProperties.Remove(propertyName);
+        }
+
         await Commit();
     }
 
     private async Task Commit()
     {
-        var foreignKeyProperties = _kind == RelationshipKind.ManyToMany || string.IsNullOrEmpty(_foreignKeyProperty)
+        var foreignKeyProperties = _kind == RelationshipKind.ManyToMany
             ? Array.Empty<string>()
-            : new[] { _foreignKeyProperty };
+            : _foreignKeyProperties.ToArray();
 
         var result = EditContext.Editor.SetRelationshipShape(Label.Relationship, _kind, foreignKeyProperties);
         if (result.Success)
