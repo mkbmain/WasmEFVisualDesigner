@@ -744,7 +744,7 @@ these matter before any new surface is added.
 
 ## Priority 1 — The unrecognized-call diagnostic (highest-leverage trust fix)
 
-- [ ] **`[found]` Emit a diagnostic for any fluent call the parser doesn't
+- [x] **`[found]` Emit a diagnostic for any fluent call the parser doesn't
       recognize.** The README's "Unsupported EF Core features" section admits
       that everything unread is dropped with *no signal*. Rather than parsing
       every remaining EF feature, add one generic diagnostic:
@@ -758,6 +758,30 @@ these matter before any new surface is added.
       largely disappears. Care needed to not flag chain-links that are part
       of recognized patterns (e.g. `WithMany` inside a parsed relationship
       chain, `IsUnique` after `HasIndex`).
+      **Update:** Added `FluentConfigParser.ParseUnrecognizedCalls`, wired
+      into `DiagramModelBuilder.Build`. A new `FluentSyntaxHelpers.
+      FindConfigChainCalls` walks only the fluent *chain spine* of each
+      config statement (following `.Expression.Expression` down through
+      `MemberAccessExpressionSyntax`/`InvocationExpressionSyntax` links, plus
+      any call chained directly onto a bare `Entity<T>()` scope with no
+      lambda block), rather than a blind descendant walk — deliberately not
+      descending into argument expressions (lambda bodies, helper-method
+      calls used as arguments), so e.g. `HasMaxLength(GetMaxLength())`
+      doesn't misattribute the argument's own invocation as an unrecognized
+      chain link. Any call name not in a `RecognizedCallNames` set (the union
+      of every name read by the existing `Parse*` methods) is flagged with
+      `DiagnosticCodes.UnrecognizedConfigCall`. Respects the same nested-
+      `Entity<T>()` opaque boundary as `FindCallsNamed` (which itself was
+      refactored to share the underlying walk via a new `FindAllCalls`
+      helper, no behavior change). `FluentConfigParser`'s private
+      `WalkRelationshipTailChain` was promoted to a shared
+      `FluentSyntaxHelpers.WalkChainedTail` and reused by both the
+      relationship parser and the new chain-call finder. 9 new tests
+      (unrecognized call, chained-after-recognized-call, known chains
+      including `IsUnique`/`WithMany` not flagged, helper-method-as-argument
+      not flagged, nested-entity attribution, bare-chained tail call,
+      bare-chained relationship not flagged, `IEntityTypeConfiguration`
+      style). 394/394 tests green across all three test projects.
 
 ## Priority 2 — Parsed and rewritable in Core, but no UI
 
