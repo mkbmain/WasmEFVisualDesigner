@@ -361,11 +361,19 @@ these matter before any new surface is added.
       non-goals, project layout, and local dev/test commands.
 - [x] **`[spec]` MIT license file.**
       **Update:** Added `LICENSE` (MIT, Michael Bourke, 2026).
-- [ ] **`[found]` Perf (minor at current scale):** `FluentConfigParser` re-walks
+- [x] **`[found]` Perf (minor at current scale):** `FluentConfigParser` re-walks
       the whole tree once per distinct entity name (`FluentConfigParser.cs:18-44`,
       O(entities × nodes)); `ModelMerger.ApplyMaxLengths` is O(props × configs)
       via `FirstOrDefault` (`ModelMerger.cs:14`). A single grouped pass / a
       `(entity, property)`-keyed dictionary would fix both.
+      **Update:** `FluentSyntaxHelpers.FindConfigurationScopes` now does a
+      single `DescendantNodes()` pass, grouping invocations by entity name
+      into a dictionary instead of re-walking the tree per distinct name.
+      `ModelMerger`'s six per-property `Apply*` methods (`ApplyMaxLengths`,
+      `ApplyIsRequired`, `ApplyPrecisions`, `ApplyColumnNames`,
+      `ApplyColumnTypes`, `ApplyDefaultValues`) now build a property-keyed
+      dictionary once per call via a shared `IndexByProperty` helper instead
+      of calling `FirstOrDefault` per property. 303/303 tests still green.
 - [ ] **`[found]` Namespacing:** `ModelMerger` and `MaxLengthConfig` live under
       `Parsing` but are merge/DTO concerns, not parsing.
 - [ ] **`[found]` Null-forgiving noise** (`.Distinct()!`, `entityName!`) in

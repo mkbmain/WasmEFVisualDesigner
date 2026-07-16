@@ -242,17 +242,32 @@ internal static class FluentSyntaxHelpers
     internal static IEnumerable<(string EntityName, SyntaxNode Scope)> FindConfigurationScopes(
         CompilationUnitSyntax root)
     {
-        var entityInvocationNames = root.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Select(GetConfiguredEntityName)
-            .Where(name => name is not null)
-            .Distinct()!;
+        var invocationsByEntity = new Dictionary<string, List<InvocationExpressionSyntax>>();
+        var entityOrder = new List<string>();
 
-        foreach (var entityName in entityInvocationNames)
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
-            foreach (var entityInvocation in FindEntityConfigInvocations(root, entityName!))
+            var entityName = GetConfiguredEntityName(invocation);
+            if (entityName is null)
             {
-                yield return (entityName!, entityInvocation);
+                continue;
+            }
+
+            if (!invocationsByEntity.TryGetValue(entityName, out var invocations))
+            {
+                invocations = new List<InvocationExpressionSyntax>();
+                invocationsByEntity[entityName] = invocations;
+                entityOrder.Add(entityName);
+            }
+
+            invocations.Add(invocation);
+        }
+
+        foreach (var entityName in entityOrder)
+        {
+            foreach (var entityInvocation in invocationsByEntity[entityName])
+            {
+                yield return (entityName, entityInvocation);
             }
         }
 
