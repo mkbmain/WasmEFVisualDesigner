@@ -55,13 +55,25 @@ public sealed class EntityClassRewriter
 
         var targetProperty = targetType.Members
             .OfType<PropertyDeclarationSyntax>()
-            .FirstOrDefault(p => p.Identifier.Text == propertyName)
-            ?? throw new InvalidOperationException($"No property named '{propertyName}' found on type '{className}'.");
+            .FirstOrDefault(p => p.Identifier.Text == propertyName);
 
-        var newType = targetType.RemoveNode(targetProperty, SyntaxRemoveOptions.KeepNoTrivia)!;
+        if (targetProperty is not null)
+        {
+            var newType = targetType.RemoveNode(targetProperty, SyntaxRemoveOptions.KeepNoTrivia)!;
 
-        var newRoot = root.ReplaceNode(targetType, newType);
-        return newRoot.NormalizeWhitespace().ToFullString();
+            var newRoot = root.ReplaceNode(targetType, newType);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var targetParameter = FindPositionalParameter(targetType, propertyName, className);
+
+        var newParameterList = targetType.ParameterList!.WithParameters(
+            targetType.ParameterList.Parameters.Remove(targetParameter));
+
+        var newTypeWithParameterRemoved = targetType.WithParameterList(newParameterList);
+
+        var newRootWithParameterRemoved = root.ReplaceNode(targetType, newTypeWithParameterRemoved);
+        return newRootWithParameterRemoved.NormalizeWhitespace().ToFullString();
     }
 
     public string RenameClass(string sourceCode, string oldClassName, string newClassName)
@@ -86,10 +98,20 @@ public sealed class EntityClassRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var targets = root.DescendantNodes()
+        var propertyTargets = root.DescendantNodes()
             .OfType<PropertyDeclarationSyntax>()
             .SelectMany(p => p.Type.DescendantNodesAndSelf())
-            .OfType<IdentifierNameSyntax>()
+            .OfType<IdentifierNameSyntax>();
+
+        var positionalParameterTargets = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Select(t => t.ParameterList)
+            .Where(parameterList => parameterList is not null)
+            .SelectMany(parameterList => parameterList!.Parameters)
+            .SelectMany(p => p.Type!.DescendantNodesAndSelf())
+            .OfType<IdentifierNameSyntax>();
+
+        var targets = propertyTargets.Concat(positionalParameterTargets)
             .Where(id => id.Identifier.Text == oldTypeName)
             .ToList();
 
@@ -114,13 +136,21 @@ public sealed class EntityClassRewriter
 
         var targetProperty = targetType.Members
             .OfType<PropertyDeclarationSyntax>()
-            .FirstOrDefault(p => p.Identifier.Text == oldPropertyName)
-            ?? throw new InvalidOperationException($"No property named '{oldPropertyName}' found on type '{className}'.");
+            .FirstOrDefault(p => p.Identifier.Text == oldPropertyName);
 
-        var newProperty = targetProperty.WithIdentifier(SyntaxFactory.Identifier(newPropertyName));
+        if (targetProperty is not null)
+        {
+            var newProperty = targetProperty.WithIdentifier(SyntaxFactory.Identifier(newPropertyName));
 
-        var newRoot = root.ReplaceNode(targetProperty, newProperty);
-        return newRoot.NormalizeWhitespace().ToFullString();
+            var newRoot = root.ReplaceNode(targetProperty, newProperty);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var targetParameter = FindPositionalParameter(targetType, oldPropertyName, className);
+        var newParameter = targetParameter.WithIdentifier(SyntaxFactory.Identifier(newPropertyName));
+
+        var newRootWithParameterRenamed = root.ReplaceNode(targetParameter, newParameter);
+        return newRootWithParameterRenamed.NormalizeWhitespace().ToFullString();
     }
 
     public string ChangePropertyType(string sourceCode, string className, string propertyName, string newClrType, bool newIsNullable)
@@ -132,8 +162,7 @@ public sealed class EntityClassRewriter
 
         var targetProperty = targetType.Members
             .OfType<PropertyDeclarationSyntax>()
-            .FirstOrDefault(p => p.Identifier.Text == propertyName)
-            ?? throw new InvalidOperationException($"No property named '{propertyName}' found on type '{className}'.");
+            .FirstOrDefault(p => p.Identifier.Text == propertyName);
 
         TypeSyntax newTypeSyntax = SyntaxFactory.ParseTypeName(newClrType);
         if (newIsNullable)
@@ -141,10 +170,19 @@ public sealed class EntityClassRewriter
             newTypeSyntax = SyntaxFactory.NullableType(newTypeSyntax);
         }
 
-        var newProperty = targetProperty.WithType(newTypeSyntax);
+        if (targetProperty is not null)
+        {
+            var newProperty = targetProperty.WithType(newTypeSyntax);
 
-        var newRoot = root.ReplaceNode(targetProperty, newProperty);
-        return newRoot.NormalizeWhitespace().ToFullString();
+            var newRoot = root.ReplaceNode(targetProperty, newProperty);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var targetParameter = FindPositionalParameter(targetType, propertyName, className);
+        var newParameter = targetParameter.WithType(newTypeSyntax);
+
+        var newRootWithParameterTypeChanged = root.ReplaceNode(targetParameter, newParameter);
+        return newRootWithParameterTypeChanged.NormalizeWhitespace().ToFullString();
     }
 
     private static TypeDeclarationSyntax FindTopLevelType(CompilationUnitSyntax root, string className)
@@ -154,6 +192,13 @@ public sealed class EntityClassRewriter
             .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
             .FirstOrDefault(t => t.Identifier.Text == className)
             ?? throw new InvalidOperationException($"No top-level class, record, or struct named '{className}' found in source.");
+    }
+
+    private static ParameterSyntax FindPositionalParameter(TypeDeclarationSyntax targetType, string propertyName, string className)
+    {
+        return targetType.ParameterList?.Parameters
+            .FirstOrDefault(p => p.Identifier.Text == propertyName)
+            ?? throw new InvalidOperationException($"No property named '{propertyName}' found on type '{className}'.");
     }
 
     private static PropertyDeclarationSyntax BuildPropertyDeclaration(PropertyModel property)

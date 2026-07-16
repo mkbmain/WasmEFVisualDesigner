@@ -187,6 +187,20 @@ public class EntityClassRewriterTests
         Assert.Contains("public int Id { get; set; }", result);
     }
 
+    private const string RecordWithPositionalProperties = """
+        public record Product(int Id, string Name);
+        """;
+
+    [Fact]
+    public void RemoveProperty_PositionalParameter_RemovesFromParameterList()
+    {
+        var result = new EntityClassRewriter().RemoveProperty(
+            RecordWithPositionalProperties, className: "Product", propertyName: "Name");
+
+        Assert.DoesNotContain("Name", result);
+        Assert.Contains("int Id", result);
+    }
+
     [Fact]
     public void RemoveProperty_PropertyNotFoundOnExistingClass_Throws()
     {
@@ -326,6 +340,17 @@ public class EntityClassRewriterTests
 
         Assert.Contains("public string FullName { get; set; }", result);
         Assert.Contains("public int Id { get; set; }", result);
+    }
+
+    [Fact]
+    public void RenameProperty_PositionalParameter_RenamesInParameterList()
+    {
+        var result = new EntityClassRewriter().RenameProperty(
+            RecordWithPositionalProperties, className: "Product", oldPropertyName: "Name", newPropertyName: "Title");
+
+        Assert.Contains("string Title", result);
+        Assert.DoesNotContain("string Name", result);
+        Assert.Contains("int Id", result);
     }
 
     [Fact]
@@ -601,5 +626,49 @@ public class EntityClassRewriterTests
             newClrType: "long", newIsNullable: false);
 
         Assert.Contains("public long Id { get; set; }", result);
+    }
+
+    [Fact]
+    public void ChangePropertyType_PositionalParameter_ChangesType()
+    {
+        var result = new EntityClassRewriter().ChangePropertyType(
+            RecordWithPositionalProperties, className: "Product", propertyName: "Id",
+            newClrType: "long", newIsNullable: false);
+
+        Assert.Contains("long Id", result);
+        Assert.Contains("string Name", result);
+    }
+
+    [Fact]
+    public void ChangePropertyType_PositionalParameter_NullableTargetAddsQuestionMark()
+    {
+        var result = new EntityClassRewriter().ChangePropertyType(
+            RecordWithPositionalProperties, className: "Product", propertyName: "Name",
+            newClrType: "string", newIsNullable: true);
+
+        Assert.Contains("string? Name", result);
+    }
+
+    [Fact]
+    public void RemoveProperty_PositionalParameter_NotFound_Throws()
+    {
+        var rewriter = new EntityClassRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.RemoveProperty(RecordWithPositionalProperties, className: "Product", propertyName: "DoesNotExist"));
+    }
+
+    [Fact]
+    public void RenamePropertyTypeReferences_PositionalParameterNavigationType_RenamesIdentifier()
+    {
+        const string source = """
+            public record Order(int Id, Customer Customer);
+            """;
+
+        var result = new EntityClassRewriter().RenamePropertyTypeReferences(
+            source, oldTypeName: "Customer", newTypeName: "Client");
+
+        Assert.Contains("Client Customer", result);
+        Assert.DoesNotContain("Customer Customer", result);
     }
 }

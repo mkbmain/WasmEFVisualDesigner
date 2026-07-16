@@ -513,13 +513,32 @@ these matter before any new surface is added.
       in both styles simultaneously has edits prefer the `Entity<T>()` block
       (see `2026-07-16-ientitytypeconfiguration-rewriter-design.md`).
 
-- [ ] **`[found]` Record positional parameters render but aren't editable.**
+- [x] **`[found]` Record positional parameters render but aren't editable.**
       `EntityClassParser.ParseParameterProperty` reads record primary-constructor
       params as properties, but the rewriter explicitly doesn't touch positional
       params (documented in the add/drop/rename items above). Result: rename /
       change-type / remove on a positional property silently fails or no-ops.
       Support them in the rewriter, or mark those rows read-only in the UI so the
       failure isn't silent.
+      **Update:** `EntityClassRewriter.RenameProperty`/`ChangePropertyType`/
+      `RemoveProperty` now fall back to searching the type's primary-constructor
+      `ParameterList` whenever no matching `PropertyDeclarationSyntax` member is
+      found, operating on the matching `ParameterSyntax` instead (rename via
+      `WithIdentifier`, retype via `WithType`, remove via rebuilding the
+      `ParameterList` with the parameter removed). Investigation found the
+      backlog's "silently fails or no-ops" description was inaccurate — the
+      actual prior behavior was an unhandled `InvalidOperationException` thrown
+      from the `?? throw` on the property lookup, since `DiagramEditor`/
+      `EntityNode.razor` have no try/catch around these calls; this was a crash,
+      not a silent no-op. Also fixed the related dangling-reference gap in
+      `RenamePropertyTypeReferences` (used when renaming an entity, to fix up
+      navigation-property type references elsewhere): it only searched
+      `PropertyDeclarationSyntax` types, so a navigation property declared as a
+      positional parameter (e.g. `record Order(Customer Customer)`) kept
+      pointing at the old type name after an entity rename; now it also scans
+      every type declaration's `ParameterList`. 7 new tests added to
+      `EntityClassRewriterTests`; 373/373 tests green across all three test
+      projects.
 
 ## Priority 2 — App shell robustness & UX
 
