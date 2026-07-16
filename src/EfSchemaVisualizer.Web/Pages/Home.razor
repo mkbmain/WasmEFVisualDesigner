@@ -30,7 +30,7 @@
 </div>
 
 <p>
-    <button id="render-diagram" class="btn btn-primary" @onclick="RenderDiagram">Render Diagram</button>
+    <button id="render-diagram" class="btn btn-primary" @onclick="RenderDiagramAsync">Render Diagram</button>
     @if (_editContext is not null)
     {
         <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
@@ -100,7 +100,7 @@
     private IReadOnlyList<Diagnostic>? _diagnostics;
     private string? _error;
 
-    private void RenderDiagram()
+    private async Task RenderDiagramAsync()
     {
         _error = null;
         _diagnostics = null;
@@ -131,7 +131,8 @@
         }
         catch (Exception ex)
         {
-            _error = ex.ToString();
+            _error = "Something went wrong while rendering the diagram from the pasted source. See the browser console for details.";
+            await LogErrorAsync(ex);
         }
     }
 
@@ -198,7 +199,7 @@
             _classSource = archiveResult.ClassSource;
             _configSource = archiveResult.ConfigSource;
 
-            RenderDiagram();
+            await RenderDiagramAsync();
 
             if (archiveResult.Diagnostics.Count > 0)
             {
@@ -209,8 +210,14 @@
         }
         catch (Exception ex)
         {
-            _error = ex.ToString();
+            _error = "Something went wrong while reading the uploaded .zip file. See the browser console for details.";
+            await LogErrorAsync(ex);
         }
+    }
+
+    private async Task LogErrorAsync(Exception ex)
+    {
+        await JS.InvokeVoidAsync("console.error", ex.ToString());
     }
 
     private async Task DownloadZip()

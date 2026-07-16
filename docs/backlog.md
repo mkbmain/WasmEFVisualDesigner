@@ -542,11 +542,28 @@ these matter before any new surface is added.
 
 ## Priority 2 — App shell robustness & UX
 
-- [ ] **`[found]` Raw exception dumps are shown to the user.** `Home.razor`
+- [x] **`[found]` Raw exception dumps are shown to the user.** `Home.razor`
       sets `_error = ex.ToString()` (full stack trace) on both the render path
       (`Home.razor:134`) and the zip-upload path (`Home.razor:211`), rendered in
       a red `<pre>`. Show a friendly message; log the detail to the browser
       console instead.
+      **Update:** Both catch blocks now set a short, path-specific friendly
+      `_error` message and call a new `LogErrorAsync` helper
+      (`await JS.InvokeVoidAsync("console.error", ex.ToString())`) with the
+      full exception detail. `RenderDiagram` became `RenderDiagramAsync` (it
+      needs to `await` the JS interop call), and `OnZipSelected` awaits it
+      instead of calling it synchronously. Browser-verified with a headless
+      Chromium run against the real published app: uploading a corrupt (non-
+      zip) file now shows "Something went wrong while reading the uploaded
+      .zip file. See the browser console for details." in the red `<pre>`
+      (no stack trace), while the full `System.IO.InvalidDataException` with
+      stack trace lands in `console.error`. Confirmed the render path (fed
+      via pasted source) is largely unreachable for ordinary malformed
+      input — the parsing pipeline already turns bad C#/config into
+      diagnostics rather than exceptions (per the Priority 0 hardening
+      above), so this catch is now a defensive backstop rather than a
+      commonly-hit path; both catch blocks share the same code shape and
+      `LogErrorAsync` helper, so the fix applies uniformly regardless.
 
 - [ ] **`[found]` Textarea `<label>`s aren't associated with their inputs.**
       `Home.razor:23,27` use bare `<label>Entity classes</label>` with no
