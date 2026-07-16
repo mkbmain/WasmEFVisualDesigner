@@ -570,10 +570,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasColumnName"))
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasColumnName"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingCall is not null)
@@ -581,8 +581,8 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingStringArgCall(root, existingCall, columnName);
         }
 
-        var existingPropertyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
 
         if (existingPropertyCall is not null)
@@ -590,11 +590,11 @@ public sealed class OnModelCreatingRewriter
             return AppendStringArgCallToPropertyCall(root, existingPropertyCall, "HasColumnName", columnName);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertStringArgPropertyStatement(root, existingEntityInvocation, propertyName, "HasColumnName", columnName);
+            return InsertStringArgPropertyStatement(root, existingScope, propertyName, "HasColumnName", columnName);
         }
 
         return InsertStringArgEntityBlock(root, entityName, propertyName, "HasColumnName", columnName);
@@ -610,10 +610,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasColumnType"))
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasColumnType"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingCall is not null)
@@ -621,8 +621,8 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingStringArgCall(root, existingCall, columnType);
         }
 
-        var existingPropertyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
 
         if (existingPropertyCall is not null)
@@ -630,11 +630,11 @@ public sealed class OnModelCreatingRewriter
             return AppendStringArgCallToPropertyCall(root, existingPropertyCall, "HasColumnType", columnType);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertStringArgPropertyStatement(root, existingEntityInvocation, propertyName, "HasColumnType", columnType);
+            return InsertStringArgPropertyStatement(root, existingScope, propertyName, "HasColumnType", columnType);
         }
 
         return InsertStringArgEntityBlock(root, entityName, propertyName, "HasColumnType", columnType);
@@ -668,12 +668,10 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertStringArgPropertyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, string methodName, string value)
+    private static string InsertStringArgPropertyStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, string methodName, string value)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
-        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
 
         var newStatement = BuildStringArgPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, methodName, value);
         var newBlock = block.AddStatements(newStatement);
@@ -739,10 +737,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, methodName))
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, methodName))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingCall is null)
@@ -761,10 +759,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasDefaultValue"))
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasDefaultValue"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingCall is not null)
@@ -772,8 +770,8 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingDefaultValue(root, existingCall, literalText);
         }
 
-        var existingPropertyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
 
         if (existingPropertyCall is not null)
@@ -781,11 +779,11 @@ public sealed class OnModelCreatingRewriter
             return AppendDefaultValueToPropertyCall(root, existingPropertyCall, literalText);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertDefaultValuePropertyStatement(root, existingEntityInvocation, propertyName, literalText);
+            return InsertDefaultValuePropertyStatement(root, existingScope, propertyName, literalText);
         }
 
         return InsertDefaultValueEntityBlock(root, entityName, propertyName, literalText);
@@ -807,12 +805,10 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertDefaultValuePropertyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, string literalText)
+    private static string InsertDefaultValuePropertyStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, string literalText)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
-        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
 
         var newStatement = BuildDefaultValuePropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, literalText);
         var newBlock = block.AddStatements(newStatement);
@@ -882,10 +878,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasDefaultValue"))
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasDefaultValue"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingCall is null)

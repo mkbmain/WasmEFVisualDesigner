@@ -2014,4 +2014,89 @@ public class OnModelCreatingRewriterTests
 
         Assert.Contains("builder.HasKey(e => e.Id)", result);
     }
+
+    private const string SourceUsingEntityTypeConfigurationForColumnsAndDefault = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.Property(e => e.Name).HasColumnName("full_name").HasColumnType("varchar(100)");
+                builder.Property(e => e.Status).HasDefaultValue("Active");
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetColumnName_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnName(SourceUsingEntityTypeConfigurationForColumnsAndDefault, entityName: "Person", propertyName: "Name", columnName: "display_name");
+
+        Assert.Contains("HasColumnName(\"display_name\")", result);
+    }
+
+    [Fact]
+    public void RemoveColumnName_EntityTypeConfigurationStyle_RemovesCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveColumnName(SourceUsingEntityTypeConfigurationForColumnsAndDefault, entityName: "Person", propertyName: "Name");
+
+        Assert.DoesNotContain("HasColumnName", result);
+        Assert.Contains("HasColumnType(\"varchar(100)\")", result);
+    }
+
+    [Fact]
+    public void SetColumnType_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnType(SourceUsingEntityTypeConfigurationForColumnsAndDefault, entityName: "Person", propertyName: "Name", columnType: "text");
+
+        Assert.Contains("HasColumnType(\"text\")", result);
+    }
+
+    [Fact]
+    public void RemoveColumnType_EntityTypeConfigurationStyle_RemovesCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveColumnType(SourceUsingEntityTypeConfigurationForColumnsAndDefault, entityName: "Person", propertyName: "Name");
+
+        Assert.DoesNotContain("HasColumnType", result);
+        Assert.Contains("HasColumnName(\"full_name\")", result);
+    }
+
+    [Fact]
+    public void SetDefaultValue_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetDefaultValue(SourceUsingEntityTypeConfigurationForColumnsAndDefault, entityName: "Person", propertyName: "Status", literalText: "\"Inactive\"");
+
+        Assert.Contains("HasDefaultValue(\"Inactive\")", result);
+    }
+
+    [Fact]
+    public void RemoveDefaultValue_EntityTypeConfigurationStyle_RemovesCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveDefaultValue(SourceUsingEntityTypeConfigurationForColumnsAndDefault, entityName: "Person", propertyName: "Status");
+
+        Assert.DoesNotContain("HasDefaultValue", result);
+    }
+
+    private const string SourceUsingEntityTypeConfigurationEmptyForColumns = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetColumnName_EntityTypeConfigurationStyle_InsertsNewStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetColumnName(SourceUsingEntityTypeConfigurationEmptyForColumns, entityName: "Person", propertyName: "Name", columnName: "full_name");
+
+        Assert.Contains("builder.Property(e => e.Name).HasColumnName(\"full_name\")", result);
+    }
 }
