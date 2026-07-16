@@ -841,6 +841,40 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
     }
 
+    private const string SourceUsingEntityTypeConfigurationForRemove = """
+        public class Blog
+        {
+            public int Id { get; set; }
+        }
+
+        public class BlogConfiguration : IEntityTypeConfiguration<Blog>
+        {
+            public void Configure(EntityTypeBuilder<Blog> builder)
+            {
+                builder.Property(e => e.Id);
+            }
+        }
+
+        public class UnrelatedConfiguration : IEntityTypeConfiguration<Post>
+        {
+            public void Configure(EntityTypeBuilder<Post> builder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void RemoveEntity_EntityTypeConfigurationStyle_DeletesWholeConfigClass()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveEntity(SourceUsingEntityTypeConfigurationForRemove, entityName: "Blog");
+
+        Assert.DoesNotContain("BlogConfiguration", result);
+        Assert.DoesNotContain("IEntityTypeConfiguration<Blog>", result);
+        Assert.Contains("UnrelatedConfiguration", result);
+        Assert.Contains("IEntityTypeConfiguration<Post>", result);
+    }
+
     private const string SourceWithBothConfigsChainedForRewrite = """
         public class AppDbContext : DbContext
         {

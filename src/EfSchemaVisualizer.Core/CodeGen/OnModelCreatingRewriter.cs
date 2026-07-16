@@ -1673,6 +1673,14 @@ public sealed class OnModelCreatingRewriter
             }
         }
 
+        foreach (var classDeclaration in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+        {
+            if (FluentSyntaxHelpers.TryGetEntityTypeConfigurationEntityName(classDeclaration) == entityName)
+            {
+                nodesToRemove.Add(classDeclaration);
+            }
+        }
+
         if (nodesToRemove.Count == 0)
         {
             return sourceCode;
