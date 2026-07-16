@@ -307,4 +307,56 @@ public class EntityClassParserTests
         var entity = Assert.Single(result.Value);
         Assert.Equal("Person", entity.Name);
     }
+
+    [Fact]
+    public void Parse_DuplicateEntityNames_EmitsDiagnostic_AndKeepsFirst()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+
+            public class Person
+            {
+                public int Id { get; set; }
+                public string? Nickname { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = Assert.Single(result.Value);
+        Assert.Equal("Person", entity.Name);
+        Assert.Single(entity.Properties); // the first declaration's shape, not the second's
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.DuplicateEntityName, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+    }
+
+    [Fact]
+    public void Parse_NestedTypeDeclaration_EmitsDiagnostic_AndIsExcluded()
+    {
+        const string source = """
+            public class Outer
+            {
+                public int Id { get; set; }
+
+                public class Inner
+                {
+                    public int Id { get; set; }
+                }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = Assert.Single(result.Value);
+        Assert.Equal("Outer", entity.Name);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.NestedTypeDeclaration, diagnostic.Code);
+        Assert.Equal("Inner", diagnostic.EntityName);
+    }
 }

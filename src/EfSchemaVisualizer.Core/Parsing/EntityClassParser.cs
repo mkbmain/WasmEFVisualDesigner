@@ -14,29 +14,58 @@ public sealed class EntityClassParser
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var typeDeclarations = root.DescendantNodes()
+        var allTypeDeclarations = root.DescendantNodes()
             .OfType<TypeDeclarationSyntax>()
             .Where(t => t is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax)
+            .ToList();
+
+        var typeDeclarations = allTypeDeclarations
             .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
             .ToList();
 
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var nested in allTypeDeclarations.Except(typeDeclarations))
+        {
+            var enclosing = nested.Ancestors().OfType<TypeDeclarationSyntax>().First();
+            diagnostics.Add(new Diagnostic(
+                DiagnosticCodes.NestedTypeDeclaration,
+                $"'{nested.Identifier.Text}' is nested inside '{enclosing.Identifier.Text}' and was skipped; nested type declarations are not parsed as entities.",
+                nested.Identifier.Text,
+                PropertyName: null,
+                nested.Span));
+        }
+
         if (typeDeclarations.Count == 0)
         {
-            var diagnostic = new Diagnostic(
+            diagnostics.Add(new Diagnostic(
                 DiagnosticCodes.NoEntityDeclarations,
                 "No class, record, or struct declarations found in file; nothing to parse.",
                 EntityName: null,
                 PropertyName: null,
-                root.Span);
+                root.Span));
 
-            return new ParseResult<IReadOnlyList<EntityModel>>(
-                new List<EntityModel>(),
-                new List<Diagnostic> { diagnostic });
+            return new ParseResult<IReadOnlyList<EntityModel>>(new List<EntityModel>(), diagnostics);
         }
 
         var entities = typeDeclarations.Select(ParseEntity).ToList();
 
-        return new ParseResult<IReadOnlyList<EntityModel>>(entities, new List<Diagnostic>());
+        foreach (var duplicateGroup in entities.GroupBy(e => e.Name).Where(g => g.Count() > 1))
+        {
+            diagnostics.Add(new Diagnostic(
+                DiagnosticCodes.DuplicateEntityName,
+                $"{duplicateGroup.Count()} entity declarations share the name '{duplicateGroup.Key}'; only the first is used.",
+                duplicateGroup.Key,
+                PropertyName: null,
+                root.Span));
+        }
+
+        var deduplicatedEntities = entities
+            .GroupBy(e => e.Name)
+            .Select(g => g.First())
+            .ToList();
+
+        return new ParseResult<IReadOnlyList<EntityModel>>(deduplicatedEntities, diagnostics);
     }
 
     private static EntityModel ParseEntity(TypeDeclarationSyntax typeDeclaration)

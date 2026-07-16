@@ -2,6 +2,8 @@ namespace EfSchemaVisualizer.Core.Parsing;
 
 public static class DiagnosticCodes
 {
+    public const string DuplicateEntityName = nameof(DuplicateEntityName);
+    public const string NestedTypeDeclaration = nameof(NestedTypeDeclaration);
     public const string NoEntityDeclarations = nameof(NoEntityDeclarations);
     public const string UnresolvablePropertyName = nameof(UnresolvablePropertyName);
     public const string UnreadableMaxLengthArgument = nameof(UnreadableMaxLengthArgument);
