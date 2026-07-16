@@ -1469,10 +1469,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingHasIndexCall = entityInvocations
-            .SelectMany(inv => FluentSyntaxHelpers.FindCallsNamed(inv, "HasIndex"))
+        var existingHasIndexCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasIndex"))
             .FirstOrDefault(call =>
             {
                 var args = FluentSyntaxHelpers.TryReadIndexPropertyNames(call);
@@ -1484,11 +1484,11 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingIndex(root, existingHasIndexCall, propertyNames, isUnique, name);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertIndexStatement(root, existingEntityInvocation, propertyNames, isUnique, name);
+            return InsertIndexStatement(root, existingScope, propertyNames, isUnique, name);
         }
 
         return InsertIndexEntityBlock(root, entityName, propertyNames, isUnique, name);
@@ -1511,14 +1511,12 @@ public sealed class OnModelCreatingRewriter
 
     private static string InsertIndexStatement(
         CompilationUnitSyntax root,
-        InvocationExpressionSyntax entityInvocation,
+        SyntaxNode scope,
         IReadOnlyList<string> propertyNames,
         bool isUnique,
         string? name)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
 
         var newStatement = BuildHasIndexStatement(blockReceiverName, propertyNames, isUnique, name);
         var newBlock = block.AddStatements(newStatement);
@@ -1619,10 +1617,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingHasIndexCall = entityInvocations
-            .SelectMany(inv => FluentSyntaxHelpers.FindCallsNamed(inv, "HasIndex"))
+        var existingHasIndexCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasIndex"))
             .FirstOrDefault(call =>
             {
                 var args = FluentSyntaxHelpers.TryReadIndexPropertyNames(call);

@@ -1060,6 +1060,52 @@ public class OnModelCreatingRewriterTests
         Assert.Equal(source, result);
     }
 
+    private const string SourceUsingEntityTypeConfigurationForIndex = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.HasIndex(e => e.Email);
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetIndex_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetIndex(SourceUsingEntityTypeConfigurationForIndex, entityName: "Person", propertyNames: new[] { "Email" }, isUnique: true, name: "IX_Person_Email");
+
+        Assert.Contains("builder.HasIndex(e => e.Email, \"IX_Person_Email\").IsUnique()", result);
+    }
+
+    [Fact]
+    public void RemoveIndex_EntityTypeConfigurationStyle_RemovesStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveIndex(SourceUsingEntityTypeConfigurationForIndex, entityName: "Person", propertyNames: new[] { "Email" });
+
+        Assert.DoesNotContain("HasIndex", result);
+    }
+
+    private const string SourceUsingEntityTypeConfigurationEmptyForIndex = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetIndex_EntityTypeConfigurationStyle_InsertsNewStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetIndex(SourceUsingEntityTypeConfigurationEmptyForIndex, entityName: "Person", propertyNames: new[] { "Name" }, isUnique: false, name: null);
+
+        Assert.Contains("builder.HasIndex(e => e.Name)", result);
+    }
+
     private const string PrecisionSource = """
         public class AppDbContext : DbContext
         {
