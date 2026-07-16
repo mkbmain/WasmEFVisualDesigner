@@ -51,6 +51,10 @@ your model entirely client-side.
   rendering (`Z.Blazor.Diagrams`), editing UI, zip upload/download.
 - `tests/EfSchemaVisualizer.Core.Tests` — unit tests for the parsing/
   rewriting engine.
+- `tests/EfSchemaVisualizer.Web.Tests` — unit tests for the Blazor app's
+  non-UI logic (diagram sync, accessibility).
+- `tests/EfSchemaVisualizer.SmokeTests` — headless-Chromium smoke test that
+  drives the actual published app and confirms it boots.
 - `docs/backlog.md` — what's built and what's left.
 - `docs/superpowers/specs/` — design docs for each feature slice.
 
@@ -70,6 +74,34 @@ The app is fully static once published — `dotnet publish
 src/EfSchemaVisualizer.Web` produces a `wwwroot` you can host anywhere.
 A GitHub Actions workflow (`.github/workflows/deploy.yml`) builds and
 deploys `main` to GitHub Pages automatically.
+
+## Unsupported EF Core features
+
+The parser only reads syntax it explicitly recognizes. If your model uses any
+of the following, that configuration is silently dropped from the diagram —
+**no diagnostic fires** for any of them today, so double-check these areas by
+eye before trusting a regenerated file:
+
+- `HasDefaultValueSql` (only literal `HasDefaultValue` is read).
+- `HasPrincipalKey`.
+- `UsingEntity`'s nested join-entity configuration (the join entity itself is
+  read/written, but calls chained inside its `UsingEntity(j => ...)` builder
+  are not).
+- Owned types (`OwnsOne`/`OwnsMany`) and complex types (`ComplexProperty`).
+- Value converters (`HasConversion`).
+- Inheritance mapping (TPH/TPT/TPC, `HasDiscriminator`).
+- Enum properties (read as their CLR type, not as an EF enum column).
+- Non-literal argument values in general — e.g. `HasMaxLength(SomeConstant)`,
+  `HasMaxLength(50 * 2)`. A handful of these *do* get a diagnostic today
+  (`UnreadableMaxLengthArgument`, `UnreadableHasPrecisionArgument`,
+  `UnreadableIsRequiredArgument`, `UnreadableHasKeyArgument`,
+  `UnreadableToTableArgument`, `UnreadableHasColumnNameArgument`,
+  `UnreadableHasColumnTypeArgument`, `UnreadableHasDefaultValueArgument`,
+  `UnreadableHasIndexArgument`, `UnreadableIsUniqueArgument`,
+  `UnreadableHasForeignKeyArgument`, `UnreadableOnDeleteArgument`) — see
+  `src/EfSchemaVisualizer.Core/Parsing/DiagnosticCodes.cs` for the full,
+  current list. Anything not on that list (including all the bullets above)
+  is dropped with no signal.
 
 ## Contributing
 

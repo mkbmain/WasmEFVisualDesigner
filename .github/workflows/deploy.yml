@@ -26,14 +26,37 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Format check
+        run: dotnet format EfSchemaVisualizer.slnx --verify-no-changes
+
       - name: Test
         run: dotnet test EfSchemaVisualizer.slnx --configuration Release
 
       - name: Publish
         run: dotnet publish src/EfSchemaVisualizer.Web/EfSchemaVisualizer.Web.csproj -c Release -o publish
 
+      - name: Install Playwright Chromium
+        run: pwsh tests/EfSchemaVisualizer.SmokeTests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+
+      - name: Smoke test — published app boots in a real browser
+        run: dotnet test tests/EfSchemaVisualizer.SmokeTests --configuration Release --no-build
+        env:
+          SMOKE_TEST_PUBLISH_DIR: ${{ github.workspace }}/publish/wwwroot
+
       - name: Patch base href for GitHub Pages subpath
-        run: sed -i 's#<base href="/" />#<base href="/WasmEFVisualDesigner/" />#' publish/wwwroot/index.html
+        run: |
+          file=publish/wwwroot/index.html
+          before=$(grep -c '<base [^>]*href="/"[^>]*>' "$file" || true)
+          if [ "$before" -eq 0 ]; then
+            echo "::error::No '<base href=\"/\">' tag found in $file — the Blazor template must have changed. Update the patch step instead of deploying a broken base href." >&2
+            exit 1
+          fi
+          sed -i -E 's#<base ([^>]*)href="/"([^>]*)>#<base \1href="/WasmEFVisualDesigner/"\2>#' "$file"
+          after=$(grep -c 'href="/WasmEFVisualDesigner/"' "$file" || true)
+          if [ "$after" -eq 0 ]; then
+            echo "::error::base href patch did not apply to $file" >&2
+            exit 1
+          fi
 
       - name: Disable Jekyll processing
         run: touch publish/wwwroot/.nojekyll

@@ -558,7 +558,7 @@ these matter before any new surface is added.
 
 ## Priority 3 — Deploy & CI hardening
 
-- [ ] **`[found]` GitHub Pages base-href rewrite is a brittle `sed`.**
+- [x] **`[found]` GitHub Pages base-href rewrite is a brittle `sed`.**
       `deploy.yml:36` string-replaces the exact literal `<base href="/" />`. If
       the Blazor template ever emits that tag differently (spacing, self-close,
       an added attribute), the `sed` becomes a silent no-op and **every asset
@@ -566,35 +566,87 @@ these matter before any new surface is added.
       `dotnet publish -p:StaticWebAssetBasePath=WasmEFVisualDesigner` (the
       csproj already sets `OverrideHtmlAssetPlaceholders`), or fail the step if
       the replacement count is zero.
+      **Update:** Tried `-p:StaticWebAssetBasePath` first — it moves published
+      assets under a `wwwroot/<subpath>/` folder but leaves `index.html` (and
+      its relative `_framework` references) at the root, so it doesn't
+      actually fix anything for a GitHub Pages project-site layout, where the
+      *server* prefixes the whole `wwwroot` tree with `/reponame/` rather than
+      the files being physically nested. Went with the documented fallback
+      instead: the patch step now counts matches with a spacing/self-close
+      tolerant regex before and after the substitution and fails the workflow
+      (`::error::`) if either count is zero, so a template change trips CI
+      instead of silently shipping 404s.
 
-- [ ] **`[found]` No warnings-as-errors / analyzer gate.** Neither csproj sets
+- [x] **`[found]` No warnings-as-errors / analyzer gate.** Neither csproj sets
       `TreatWarningsAsErrors`, and CI has no `dotnet format --verify-no-changes`
       step, so warnings and style drift accumulate invisibly.
+      **Update:** Added `Directory.Build.props` at the repo root setting
+      `TreatWarningsAsErrors`, `EnableNETAnalyzers`, and
+      `AnalysisLevel=latest` for every project; added a `Format check` step to
+      `deploy.yml` running `dotnet format EfSchemaVisualizer.slnx
+      --verify-no-changes` before `Test`. Solution was already warning- and
+      format-clean, so no code changes were needed to turn these on.
 
-- [ ] **`[found]` No CI smoke test that the published WASM app actually boots.**
+- [x] **`[found]` No CI smoke test that the published WASM app actually boots.**
       The one-off browser verification was an uncommitted Playwright script
       (noted above) that never runs in CI, and `Home.razor`'s `@code` (zip
       upload, relationship drag wiring, error handling, `OnDiagramEditedAsync`)
       has zero automated coverage. A headless-Chromium smoke test in the deploy
       workflow, plus extracting `Home.razor` logic into a testable class, would
       close both.
+      **Update:** Added `tests/EfSchemaVisualizer.SmokeTests` (Microsoft.Playwright
+      .NET, no Node/`package.json`), whose one test serves a real `dotnet
+      publish` output over a local Kestrel static-file host and drives headless
+      Chromium against it, asserting the app's source textareas render and no
+      console/network errors fired. Self-skips (no-ops to a pass) when the
+      `SMOKE_TEST_PUBLISH_DIR` env var isn't set, so it's inert in the existing
+      `dotnet test EfSchemaVisualizer.slnx` step; `deploy.yml` runs it for real
+      as a dedicated step right after `Publish` (before the base-href patch, so
+      it exercises the unmodified `href="/"` output), installing Chromium via
+      the generated `playwright.ps1`. Getting it green surfaced two real gaps
+      in a bare `UseStaticFiles()` host that a real static host (GitHub Pages,
+      `dotnet run`) papers over: it doesn't serve `index.html` for `/` without
+      `UseDefaultFiles()`, and it 404s WASM's unrecognized extensions
+      (`.dat`, etc.) without `ServeUnknownFileTypes = true` — both are now
+      commented in `AppBootSmokeTests.cs`. Extracting `Home.razor`'s `@code`
+      into a testable class remains out of scope; this closes the "app boots"
+      half of the item, not full `@code` coverage.
 
-- [ ] **`[found]` No round-trip / idempotency fuzz test.** The trust story rests
+- [x] **`[found]` No round-trip / idempotency fuzz test.** The trust story rests
       on parse→edit→regenerate not losing data, but there's no test that feeds a
       corpus of realistic DbContext files through the pipeline and asserts the
       unsupported constructs are *preserved verbatim* (not dropped) and that a
       no-op edit is byte-stable. Add one over a small corpus of real-world
       shapes.
+      **Update:** Added `RoundTripFuzzTests.cs` (Core.Tests) against a
+      two-entity, multi-config-kind corpus (keys, table mapping, max length,
+      required, column name/type, index, relationships, plus a
+      `HasDefaultValueSql` call the parser doesn't model at all). Confirms:
+      the unsupported `HasDefaultValueSql` construct is dropped from the
+      model (documented gap, not silently corrupted); every config kind's
+      no-op write-back round-trips (byte-identical for the pure-mutation
+      paths — `HasMaxLength`, `IsRequired`, column name/type, default value —
+      and content-identical modulo the already-documented whole-file
+      `NormalizeWhitespace()` line-ending/blank-line normalization for the
+      synthesis paths — `HasKey`, `ToTable`, `HasIndex`); and renaming one
+      property leaves every other entity's config, including the
+      `HasDefaultValueSql` line, untouched.
 
 ## Priority 4 — Documentation
 
-- [ ] **`[found]` README project-layout section is stale.** It lists only
+- [x] **`[found]` README project-layout section is stale.** It lists only
       `tests/EfSchemaVisualizer.Core.Tests` (README:52) but
       `tests/EfSchemaVisualizer.Web.Tests` now also exists. Update it.
+      **Update:** Added the missing `tests/EfSchemaVisualizer.Web.Tests`
+      bullet to the README's project-layout list.
 
-- [ ] **`[found]` No single "what EF features are unsupported" list.** Known
+- [x] **`[found]` No single "what EF features are unsupported" list.** Known
       gaps are scattered across specs: `HasDefaultValueSql`, `HasPrincipalKey`,
       `UsingEntity` join config, owned/complex types, value converters,
       inheritance (TPH/TPT), enums, non-literal argument values. Collect them in
       one README/docs section so users know before they upload what will be
       dropped (and whether a diagnostic fires for each).
+      **Update:** Added an "Unsupported EF Core features" README section
+      listing all of the above, noting that none of them raise a diagnostic
+      today, and pointing at `DiagnosticCodes.cs` for the current, authoritative
+      list of what *does* get flagged (the non-literal-argument cases).
