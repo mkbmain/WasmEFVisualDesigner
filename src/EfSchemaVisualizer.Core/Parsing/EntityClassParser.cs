@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -254,5 +255,132 @@ public sealed class EntityClassParser
     private static int? TryReadIntArg(AttributeArgumentSyntax? arg)
     {
         return arg is not null && int.TryParse(arg.Expression.ToString(), out var value) ? value : null;
+    }
+
+    public ParseResult<IReadOnlyList<RelationshipConfig>> ParseRelationships(
+        string sourceCode, IReadOnlyList<EntityModel> entities)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<RelationshipConfig>();
+
+        var typeDeclarations = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(t => t is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax)
+            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any());
+
+        foreach (var typeDeclaration in typeDeclarations)
+        {
+            var dependentEntityName = typeDeclaration.Identifier.Text;
+
+            foreach (var property in typeDeclaration.Members.OfType<PropertyDeclarationSyntax>())
+            {
+                if (FindAttribute(property.AttributeLists, "ForeignKey") is not { } foreignKeyAttr)
+                {
+                    continue;
+                }
+
+                var pairedPropertyName = TryReadStringArg(GetPositionalArg(foreignKeyAttr, 0));
+                if (pairedPropertyName is null)
+                {
+                    continue;
+                }
+
+                var pairedProperty = typeDeclaration.Members
+                    .OfType<PropertyDeclarationSyntax>()
+                    .FirstOrDefault(p => p.Identifier.Text == pairedPropertyName);
+
+                if (pairedProperty is null)
+                {
+                    continue;
+                }
+
+                var relationship = TryResolveForeignKeyRelationship(dependentEntityName, property, pairedProperty, entities);
+                if (relationship is not null)
+                {
+                    results.Add(relationship);
+                }
+            }
+        }
+
+        var deduplicated = results
+            .GroupBy(r => (r.PrincipalEntity, r.DependentEntity, Fk: string.Join(",", r.ForeignKeyProperties)))
+            .Select(g => g.First())
+            .ToList();
+
+        return new ParseResult<IReadOnlyList<RelationshipConfig>>(deduplicated, new List<Diagnostic>());
+    }
+
+    private static RelationshipConfig? TryResolveForeignKeyRelationship(
+        string dependentEntityName,
+        PropertyDeclarationSyntax annotatedProperty,
+        PropertyDeclarationSyntax pairedProperty,
+        IReadOnlyList<EntityModel> entities)
+    {
+        PropertyDeclarationSyntax navigationProperty;
+        PropertyDeclarationSyntax fkProperty;
+
+        if (TryGetNavigationTargetEntity(annotatedProperty, entities) is not null)
+        {
+            navigationProperty = annotatedProperty;
+            fkProperty = pairedProperty;
+        }
+        else if (TryGetNavigationTargetEntity(pairedProperty, entities) is not null)
+        {
+            navigationProperty = pairedProperty;
+            fkProperty = annotatedProperty;
+        }
+        else
+        {
+            return null;
+        }
+
+        var principalEntityName = TryGetNavigationTargetEntity(navigationProperty, entities)!;
+        var principalEntity = entities.FirstOrDefault(e => e.Name == principalEntityName);
+        if (principalEntity is null)
+        {
+            return null;
+        }
+
+        var (kind, principalNavigation) = FindPrincipalBackReference(principalEntity, dependentEntityName);
+
+        return new RelationshipConfig(
+            principalEntityName,
+            dependentEntityName,
+            kind,
+            principalNavigation,
+            navigationProperty.Identifier.Text,
+            new List<string> { fkProperty.Identifier.Text });
+    }
+
+    private static string? TryGetNavigationTargetEntity(PropertyDeclarationSyntax property, IReadOnlyList<EntityModel> entities)
+    {
+        var typeText = property.Type is NullableTypeSyntax nullableType
+            ? nullableType.ElementType.ToString()
+            : property.Type.ToString();
+
+        return entities.Any(e => e.Name == typeText) ? typeText : null;
+    }
+
+    private static (RelationshipKind Kind, string? PrincipalNavigation) FindPrincipalBackReference(
+        EntityModel principalEntity, string dependentEntityName)
+    {
+        foreach (var property in principalEntity.Properties)
+        {
+            var elementTypeName = FluentSyntaxHelpers.TryGetElementTypeName(property.ClrType);
+
+            if (elementTypeName != dependentEntityName)
+            {
+                continue;
+            }
+
+            var isCollection = elementTypeName != property.ClrType;
+            return isCollection
+                ? (RelationshipKind.OneToMany, property.Name)
+                : (RelationshipKind.OneToOne, property.Name);
+        }
+
+        return (RelationshipKind.OneToMany, null);
     }
 }

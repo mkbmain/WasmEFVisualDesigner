@@ -1,4 +1,5 @@
 using System.Linq;
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 
@@ -618,5 +619,200 @@ public class EntityClassParserTests
         var result = new EntityClassParser().Parse(source);
 
         Assert.Empty(result.Value.Single().KeyPropertyNames);
+    }
+
+    [Fact]
+    public void ParseRelationships_ForeignKeyOnNavigationProperty_ResolvesOneToMany()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+                public int BlogId { get; set; }
+
+                [ForeignKey("BlogId")]
+                public Blog Blog { get; set; }
+            }
+            """;
+
+        var parser = new EntityClassParser();
+        var entityResult = parser.Parse(source);
+        var relationshipResult = parser.ParseRelationships(source, entityResult.Value);
+
+        var relationship = Assert.Single(relationshipResult.Value);
+        Assert.Equal("Blog", relationship.PrincipalEntity);
+        Assert.Equal("Post", relationship.DependentEntity);
+        Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
+        Assert.Null(relationship.PrincipalNavigation);
+        Assert.Equal("Blog", relationship.DependentNavigation);
+        Assert.Equal(new[] { "BlogId" }, relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_ForeignKeyOnScalarProperty_ResolvesSameAsNavigationPlacement()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+
+                [ForeignKey("Blog")]
+                public int BlogId { get; set; }
+
+                public Blog Blog { get; set; }
+            }
+            """;
+
+        var parser = new EntityClassParser();
+        var entityResult = parser.Parse(source);
+        var relationshipResult = parser.ParseRelationships(source, entityResult.Value);
+
+        var relationship = Assert.Single(relationshipResult.Value);
+        Assert.Equal("Blog", relationship.PrincipalEntity);
+        Assert.Equal("Post", relationship.DependentEntity);
+        Assert.Equal(new[] { "BlogId" }, relationship.ForeignKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_PrincipalHasCollectionBackReference_ResolvesOneToManyWithPrincipalNavigation()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+                public ICollection<Post> Posts { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+                public int BlogId { get; set; }
+
+                [ForeignKey("BlogId")]
+                public Blog Blog { get; set; }
+            }
+            """;
+
+        var parser = new EntityClassParser();
+        var entityResult = parser.Parse(source);
+        var relationshipResult = parser.ParseRelationships(source, entityResult.Value);
+
+        var relationship = Assert.Single(relationshipResult.Value);
+        Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
+        Assert.Equal("Posts", relationship.PrincipalNavigation);
+    }
+
+    [Fact]
+    public void ParseRelationships_PrincipalHasScalarBackReference_ResolvesOneToOne()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+                public Post FeaturedPost { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+                public int BlogId { get; set; }
+
+                [ForeignKey("BlogId")]
+                public Blog Blog { get; set; }
+            }
+            """;
+
+        var parser = new EntityClassParser();
+        var entityResult = parser.Parse(source);
+        var relationshipResult = parser.ParseRelationships(source, entityResult.Value);
+
+        var relationship = Assert.Single(relationshipResult.Value);
+        Assert.Equal(RelationshipKind.OneToOne, relationship.Kind);
+        Assert.Equal("FeaturedPost", relationship.PrincipalNavigation);
+    }
+
+    [Fact]
+    public void ParseRelationships_ForeignKeyNamesNonexistentProperty_SkipsSilently_NoException()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+
+                [ForeignKey("DoesNotExist")]
+                public Blog Blog { get; set; }
+            }
+            """;
+
+        var parser = new EntityClassParser();
+        var entityResult = parser.Parse(source);
+        var relationshipResult = parser.ParseRelationships(source, entityResult.Value);
+
+        Assert.Empty(relationshipResult.Value);
+        Assert.Empty(relationshipResult.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseRelationships_NeitherSideIsKnownEntity_SkipsSilently()
+    {
+        const string source = """
+            public class Post
+            {
+                public int Id { get; set; }
+                public int PublisherId { get; set; }
+
+                [ForeignKey("PublisherId")]
+                public string Publisher { get; set; }
+            }
+            """;
+
+        var parser = new EntityClassParser();
+        var entityResult = parser.Parse(source);
+        var relationshipResult = parser.ParseRelationships(source, entityResult.Value);
+
+        Assert.Empty(relationshipResult.Value);
+    }
+
+    [Fact]
+    public void ParseRelationships_BothSidesAnnotated_ProducesOneRelationshipNotTwo()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+
+                [ForeignKey("Blog")]
+                public int BlogId { get; set; }
+
+                [ForeignKey("BlogId")]
+                public Blog Blog { get; set; }
+            }
+            """;
+
+        var parser = new EntityClassParser();
+        var entityResult = parser.Parse(source);
+        var relationshipResult = parser.ParseRelationships(source, entityResult.Value);
+
+        Assert.Single(relationshipResult.Value);
     }
 }
