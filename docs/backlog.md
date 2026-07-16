@@ -354,10 +354,13 @@ these matter before any new surface is added.
 
 ## Priority 5 — Repo hygiene & smaller cleanups
 
-- [ ] **`[found]` No README.** `[spec]` makes the README load-bearing for the
+- [x] **`[found]` No README.** `[spec]` makes the README load-bearing for the
       trust story and star/donation prompts — it's the public front door and is
       currently absent.
-- [ ] **`[spec]` MIT license file.**
+      **Update:** Added `README.md` covering the pitch, how it works,
+      non-goals, project layout, and local dev/test commands.
+- [x] **`[spec]` MIT license file.**
+      **Update:** Added `LICENSE` (MIT, Michael Bourke, 2026).
 - [ ] **`[found]` Perf (minor at current scale):** `FluentConfigParser` re-walks
       the whole tree once per distinct entity name (`FluentConfigParser.cs:18-44`,
       O(entities × nodes)); `ModelMerger.ApplyMaxLengths` is O(props × configs)
