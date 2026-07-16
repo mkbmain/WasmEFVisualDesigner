@@ -126,6 +126,23 @@
                         </label>
                         <div style="font-size: 0.8em; margin-top: 4px;">
                             <label style="display: block;">
+                                Max length:
+                                <input type="number" style="width: 60px;" value="@property.MaxLength"
+                                       @onchange="e => CommitMaxLength(property, ParseNullableInt(e.Value?.ToString()))"
+                                       @onpointerdown:stopPropagation="true"
+                                       @onmousedown:stopPropagation="true" />
+                            </label>
+                            <label style="display: block;">
+                                Required override:
+                                <select value="@RequiredOverrideValue(property)" @onchange="e => CommitRequiredOverride(property, e.Value?.ToString())"
+                                        @onpointerdown:stopPropagation="true"
+                                        @onmousedown:stopPropagation="true">
+                                    <option value="">(no override)</option>
+                                    <option value="true">Required</option>
+                                    <option value="false">Not required</option>
+                                </select>
+                            </label>
+                            <label style="display: block;">
                                 Column name:
                                 <input style="width: 100px;" value="@property.ColumnName" placeholder="(same as property)"
                                        @onchange="e => CommitColumnName(property, e.Value?.ToString())"
@@ -501,6 +518,49 @@
     private async Task ToggleNullable(PropertyModel property, bool isNullable)
     {
         var result = EditContext.Editor.ChangePropertyType(Node.Entity.Name, property.Name, property.ClrType, isNullable);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private static string RequiredOverrideValue(PropertyModel property) =>
+        property.IsRequiredOverride switch
+        {
+            true => "true",
+            false => "false",
+            null => "",
+        };
+
+    private async Task CommitMaxLength(PropertyModel property, int? newMaxLength)
+    {
+        var result = EditContext.Editor.SetMaxLength(Node.Entity.Name, property.Name, newMaxLength);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitRequiredOverride(PropertyModel property, string? value)
+    {
+        bool? newIsRequired = value switch
+        {
+            "true" => true,
+            "false" => false,
+            _ => null,
+        };
+
+        var result = EditContext.Editor.SetRequiredOverride(Node.Entity.Name, property.Name, newIsRequired);
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);

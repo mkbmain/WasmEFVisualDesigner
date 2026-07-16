@@ -42,6 +42,20 @@
                     </label>
                 }
             </div>
+            <label style="display: block;">
+                On delete:
+                <select value="@_onDeleteBehavior" @onchange="e => CommitOnDeleteBehavior(e.Value?.ToString())">
+                    <option value="">(default)</option>
+                    <option value="Cascade">Cascade</option>
+                    <option value="Restrict">Restrict</option>
+                    <option value="SetNull">SetNull</option>
+                    <option value="NoAction">NoAction</option>
+                </select>
+            </label>
+        }
+        else if (Label.Relationship.JoinEntityName is not null)
+        {
+            <div style="display: block;">Join entity: @Label.Relationship.JoinEntityName</div>
         }
         @if (_error is not null)
         {
@@ -61,6 +75,7 @@
     private bool _expanded;
     private RelationshipKind _kind;
     private List<string> _foreignKeyProperties = new();
+    private string? _onDeleteBehavior;
     private string? _error;
 
     private IEnumerable<PropertyModel> DependentProperties =>
@@ -74,6 +89,7 @@
         {
             _kind = Label.Relationship.Kind;
             _foreignKeyProperties = Label.Relationship.ForeignKeyProperties.ToList();
+            _onDeleteBehavior = Label.Relationship.OnDeleteBehavior;
             _error = null;
         }
     }
@@ -106,13 +122,20 @@
         await Commit();
     }
 
+    private async Task CommitOnDeleteBehavior(string? behavior)
+    {
+        _onDeleteBehavior = string.IsNullOrEmpty(behavior) ? null : behavior;
+        await Commit();
+    }
+
     private async Task Commit()
     {
         var foreignKeyProperties = _kind == RelationshipKind.ManyToMany
             ? Array.Empty<string>()
             : _foreignKeyProperties.ToArray();
+        var onDeleteBehavior = _kind == RelationshipKind.ManyToMany ? null : _onDeleteBehavior;
 
-        var result = EditContext.Editor.SetRelationshipShape(Label.Relationship, _kind, foreignKeyProperties);
+        var result = EditContext.Editor.SetRelationshipShape(Label.Relationship, _kind, foreignKeyProperties, onDeleteBehavior);
         if (result.Success)
         {
             _error = null;

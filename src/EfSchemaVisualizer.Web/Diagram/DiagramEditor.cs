@@ -482,6 +482,73 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetMaxLength(string entityName, string propertyName, int? maxLength)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (maxLength == property.MaxLength)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (maxLength is null)
+        {
+            var clearedConfigSource = _configRewriter.RemoveMaxLength(ConfigSource, entityName, propertyName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        if (maxLength <= 0)
+        {
+            return DiagramEditResult.Fail("Max length must be a positive number.");
+        }
+
+        var newConfigSource = _configRewriter.RewriteMaxLength(ConfigSource, entityName, propertyName, maxLength.Value);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetRequiredOverride(string entityName, string propertyName, bool? isRequired)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (isRequired == property.IsRequiredOverride)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (isRequired is null)
+        {
+            var clearedConfigSource = _configRewriter.RemoveIsRequired(ConfigSource, entityName, propertyName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.RewriteIsRequired(ConfigSource, entityName, propertyName, isRequired.Value);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     public DiagramEditResult SetPrecision(string entityName, string propertyName, int? precision, int? scale)
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
@@ -581,14 +648,17 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
-    public DiagramEditResult SetRelationshipShape(RelationshipModel relationship, RelationshipKind newKind, IReadOnlyList<string> newForeignKeyProperties)
+    public DiagramEditResult SetRelationshipShape(
+        RelationshipModel relationship, RelationshipKind newKind, IReadOnlyList<string> newForeignKeyProperties, string? newOnDeleteBehavior)
     {
         if (!Current.Relationships.Contains(relationship))
         {
             return DiagramEditResult.Fail("Relationship no longer exists.");
         }
 
-        if (newKind == relationship.Kind && newForeignKeyProperties.SequenceEqual(relationship.ForeignKeyProperties))
+        if (newKind == relationship.Kind
+            && newForeignKeyProperties.SequenceEqual(relationship.ForeignKeyProperties)
+            && newOnDeleteBehavior == relationship.OnDeleteBehavior)
         {
             return DiagramEditResult.Ok();
         }
@@ -605,7 +675,12 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"'{missingProperty}' is not a property of '{relationship.DependentEntity}'.");
         }
 
-        var updated = relationship with { Kind = newKind, ForeignKeyProperties = newForeignKeyProperties };
+        var updated = relationship with
+        {
+            Kind = newKind,
+            ForeignKeyProperties = newForeignKeyProperties,
+            OnDeleteBehavior = newOnDeleteBehavior,
+        };
 
         var withoutOld = _configRewriter.RemoveRelationship(ConfigSource, relationship);
         if (withoutOld == ConfigSource)
