@@ -2240,4 +2240,72 @@ public class OnModelCreatingRewriterTests
 
         Assert.Contains("builder.Property(e => e.Headline).HasMaxLength(100)", result);
     }
+
+    private const string SourceWithBothStylesForSameEntity = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.Property(e => e.Email).HasMaxLength(50);
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_BothStylesConfigureSameEntity_PrefersEntityBlockOverConfigClass()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteMaxLength(SourceWithBothStylesForSameEntity, entityName: "Person", propertyName: "Age", newMaxLength: 3);
+
+        // No existing HasMaxLength/Property() call for "Age" in either scope, so this falls to the
+        // "insert new statement into an existing scope" tier - which must pick the Entity<T>()
+        // block (already has Person config) over the IEntityTypeConfiguration<T> class.
+        Assert.Contains("entity.Property(e => e.Age).HasMaxLength(3)", result);
+        Assert.DoesNotContain("builder.Property(e => e.Age)", result);
+
+        // The IEntityTypeConfiguration<T> class's own existing config is untouched.
+        Assert.Contains("builder.Property(e => e.Email).HasMaxLength(50)", result);
+    }
+
+    private const string SourceMixingDbContextAndEntityTypeConfigurationForAdd = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+            }
+        }
+
+        public class BlogConfiguration : IEntityTypeConfiguration<Blog>
+        {
+            public void Configure(EntityTypeBuilder<Blog> builder)
+            {
+                builder.Property(e => e.Title).HasMaxLength(100);
+            }
+        }
+        """;
+
+    [Fact]
+    public void AddEntity_ProjectUsesEntityTypeConfigurationStyleElsewhere_StillSynthesizesOnModelCreatingBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddEntity(SourceMixingDbContextAndEntityTypeConfigurationForAdd, entityName: "Comment", dbSetPropertyName: "Comments");
+
+        Assert.Contains("modelBuilder.Entity<Comment>(entity =>", result);
+        Assert.Contains("DbSet<Comment> Comments", result);
+        Assert.DoesNotContain("IEntityTypeConfiguration<Comment>", result);
+
+        // BlogConfiguration is untouched.
+        Assert.Contains("builder.Property(e => e.Title).HasMaxLength(100)", result);
+    }
 }

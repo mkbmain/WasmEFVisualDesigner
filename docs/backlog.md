@@ -493,7 +493,7 @@ these matter before any new surface is added.
 
 ## Priority 1 — Read/write capability mismatches (renders, can't save back)
 
-- [ ] **`[found]` `IEntityTypeConfiguration<T>` is parse-only — edits can't be
+- [x] **`[found]` `IEntityTypeConfiguration<T>` is parse-only — edits can't be
       written back.** Per Priority 3 above, the parser reads config classes but
       the rewriter (`OnModelCreatingRewriter`) only writes into
       `modelBuilder.Entity<T>(...)` blocks. So a project whose config lives in
@@ -501,6 +501,17 @@ these matter before any new surface is added.
       supported) renders correctly but every diagram edit silently no-ops or
       targets the wrong place. Either build the config-class rewriter path or
       disable/flag editing when the source uses that style.
+      **Update:** Every `OnModelCreatingRewriter` mutator now resolves its
+      target scope via the existing `FluentSyntaxHelpers.FindConfigurationScopes`
+      (previously used only by the parser), so edits land in whichever scope
+      an entity's config already lives in — `Entity<T>()` block or
+      `IEntityTypeConfiguration<T>.Configure` method — via a shared
+      `GetScopeBlockAndReceiver` helper. Rename now also patches the config
+      class's base-list generic argument and `Configure` parameter type;
+      remove now deletes the whole config class. New entities still always
+      synthesize into `OnModelCreating`, unchanged, and an entity configured
+      in both styles simultaneously has edits prefer the `Entity<T>()` block
+      (see `2026-07-16-ientitytypeconfiguration-rewriter-design.md`).
 
 - [ ] **`[found]` Record positional parameters render but aren't editable.**
       `EntityClassParser.ParseParameterProperty` reads record primary-constructor
