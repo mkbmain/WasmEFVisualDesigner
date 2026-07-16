@@ -2308,4 +2308,26 @@ public class OnModelCreatingRewriterTests
         // BlogConfiguration is untouched.
         Assert.Contains("builder.Property(e => e.Title).HasMaxLength(100)", result);
     }
+
+    private const string SourceUsingExpressionBodiedConfigure = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder) => builder.Property(e => e.Name).HasMaxLength(50);
+        }
+        """;
+
+    [Fact]
+    public void RewriteMaxLength_ExpressionBodiedConfigure_InsertTierThrowsClearException()
+    {
+        // "Age" has no existing HasMaxLength/Property() call in the expression-bodied Configure
+        // method, so this forces the insert-new-statement tier, which needs a statement block to
+        // insert into. An expression-bodied Configure has no Body (Body == null), so this must
+        // fail loudly with a descriptive InvalidOperationException rather than an NRE.
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new OnModelCreatingRewriter()
+                .RewriteMaxLength(SourceUsingExpressionBodiedConfigure, entityName: "Person", propertyName: "Age", newMaxLength: 3));
+
+        Assert.Contains("expression-bodied", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Configure", exception.Message);
+    }
 }

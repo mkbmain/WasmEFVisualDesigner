@@ -11,15 +11,6 @@ namespace EfSchemaVisualizer.Core.Parsing;
 
 internal static class FluentSyntaxHelpers
 {
-    /// Finds every `&lt;receiver&gt;.Entity&lt;{entityName}&gt;(entity => { ... })` invocation, regardless of receiver identifier.
-    public static IEnumerable<InvocationExpressionSyntax> FindEntityConfigInvocations(
-        CompilationUnitSyntax root, string entityName)
-    {
-        return root.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Where(invocation => GetConfiguredEntityName(invocation) == entityName);
-    }
-
     /// Finds every invocation named `methodName` within the given scope, e.g. all `HasMaxLength(...)` calls.
     /// A nested `Entity&lt;...&gt;(...)` invocation (regardless of receiver) is treated as an opaque boundary: its
     /// subtree is not descended into, so calls belonging to a nested entity's configuration are never

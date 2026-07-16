@@ -1219,7 +1219,14 @@ public sealed class OnModelCreatingRewriter
 
         if (scope is MethodDeclarationSyntax configureMethod)
         {
-            return (configureMethod.Body!, configureMethod.ParameterList.Parameters.Single().Identifier.Text);
+            if (configureMethod.Body is null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot insert a new statement into expression-bodied Configure method '{configureMethod.Identifier.Text}'. " +
+                    "Rewrite it with a block body before applying this edit.");
+            }
+
+            return (configureMethod.Body, configureMethod.ParameterList.Parameters.Single().Identifier.Text);
         }
 
         throw new InvalidOperationException($"Unsupported configuration scope node type: {scope.GetType().Name}");
