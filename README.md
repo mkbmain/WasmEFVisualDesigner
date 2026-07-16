@@ -26,8 +26,11 @@ your model entirely client-side.
    assembly resolution — this is what makes it work under Blazor
    WebAssembly) into an in-memory model.
 3. The model renders as an editable ER diagram — drag to reposition
-   entities, drag between ports to draw relationships, click a property
-   to expand its key/index/column/precision/default-value options.
+   entities, drag between ports to draw relationships, double-click a
+   name or type to rename/retype it, and click the ▸ next to a property
+   to expand its primary-key/index/column/precision/default-value
+   options. A "How to edit the diagram" legend above the canvas recaps
+   these gestures.
 4. Every edit is applied back to your original C# via a Roslyn syntax
    rewriter and immediately reparsed, so the diagram always reflects
    exactly what will be downloaded.

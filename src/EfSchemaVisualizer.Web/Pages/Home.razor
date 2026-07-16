@@ -55,6 +55,15 @@
 
 @if (_diagram is not null && _editContext is not null)
 {
+    <details style="margin: 8px 0; font-size: 0.85em;">
+        <summary style="cursor: pointer;">How to edit the diagram</summary>
+        <ul style="margin: 4px 0;">
+            <li>Double-click an entity name, property name, or property type to rename/retype it in place.</li>
+            <li>Drag from a port on the child (many) entity to the parent (one) entity to draw a relationship.</li>
+            <li>Click the ▸ next to a property to expand its options: primary key toggle, column name/type, precision/scale, default value, and indexes.</li>
+            <li>Use the "nullable" checkbox next to a property's type, and the × buttons to remove properties/entities.</li>
+        </ul>
+    </details>
     <div style="height: 600px; width: 100%; border: 1px solid #ccc;">
         <CascadingValue Value="_diagram">
             <CascadingValue Value="_editContext">

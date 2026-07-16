@@ -577,7 +577,7 @@ these matter before any new surface is added.
       `DiagramEditor` would be cheap (it already funnels every mutation through
       `Apply`).
 
-- [~] **`[found]` Diagram gestures are undiscoverable.**
+- [x] **`[found]` Diagram gestures are undiscoverable.**
       Nothing on the page explained the interaction model (double-click a
       name/type to edit, drag between ports to draw a relationship, click a
       property to expand options). A short legend or first-run hint would help;
@@ -587,10 +587,15 @@ these matter before any new surface is added.
       dashed underline, text cursor, tooltips, and a ✎ pencil on the title, the
       node hint line leads with "Double-click a name or type to edit", and the
       "Table:" field is tooltipped to clarify it sets `.ToTable` rather than the
-      class name (the exact mix-up that surfaced this). Still open: the
-      drag-to-connect and property-expand/key-toggle gestures have no legend
-      beyond the existing one-line connect hint, and none of it is documented in
-      the README yet.
+      class name (the exact mix-up that surfaced this).
+      **Update:** Closed the remaining gap. The per-node hint line now also
+      calls out the property-expand gesture ("Click ▸ next to a property for
+      more options"). Added a collapsible "How to edit the diagram" `<details>`
+      legend above the canvas in `Home.razor`, shown whenever a diagram is
+      rendered, listing all four gesture families (rename/retype, drag-to-
+      connect, property-expand panel, nullable checkbox/remove buttons).
+      README's "How it works" step 3 now spells out the double-click and
+      expand-panel gestures explicitly and points at the in-app legend.
 
 ## Priority 3 — Deploy & CI hardening
 
