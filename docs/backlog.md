@@ -391,11 +391,17 @@ these matter before any new surface is added.
       a dictionary keyed only when `GetConfiguredEntityName` is non-null, so
       the `.Distinct()!`/`entityName!` forgiving operators this item was
       about no longer exist anywhere in the codebase.
-- [ ] **`[found]` Widen test surface** with the P0 edge cases: empty/class-less
+- [x] **`[found]` Widen test surface** with the P0 edge cases: empty/class-less
       file, record entity, `Property("Name")` string overload, non-literal
       `HasMaxLength` arg, renamed builder param, multiple classes per file, and
       the not-yet-built add/remove/rename paths.
-- [ ] **`[found]` No test project for `EfSchemaVisualizer.Web`.** Only
+      **Update:** Already fully covered — `EntityClassParserTests` exercises
+      the class-less/record/multi-class-per-file cases,
+      `FluentConfigParserTests` exercises the string-overload/non-literal/
+      renamed-param cases, and `EntityClassRewriterTests`/
+      `OnModelCreatingRewriterTests` carry 85+ tests across the add/remove/
+      rename paths. No gaps found; 303/303 tests green.
+- [x] **`[found]` No test project for `EfSchemaVisualizer.Web`.** Only
       `EfSchemaVisualizer.Core` has automated test coverage; the Web project
       (Razor components, `DiagramEditor`, `DiagramSync`) has none. Surfaced by
       the 2026-07-15 browser-verification pass
@@ -408,3 +414,18 @@ these matter before any new surface is added.
       `DiagramSync.Rebuild` in particular is pure and DI-free, so it's
       readily unit-testable against a `BlazorDiagram` once a
       `EfSchemaVisualizer.Web.Tests` project exists.
+      **Update:** Added `tests/EfSchemaVisualizer.Web.Tests` (referenced from
+      `EfSchemaVisualizer.slnx`). `DiagramSyncTests` covers `Rebuild`'s
+      node-identity/reuse logic directly against a real `BlazorDiagram`
+      (new/removed/kept entities, node-instance reuse across edits, link
+      clear-and-recreate, unresolvable-relationship skip, grid placement).
+      The `aria-label` regression turned out not to be coverable via full
+      component rendering: `EntityNode`'s `PortRenderer` children throw a
+      `NullReferenceException` in `OnAfterRenderAsync` under bUnit because
+      they depend on real browser layout APIs
+      (`getBoundingClientRect`/`ResizeObserver`) bUnit's headless render
+      tree doesn't provide — so `EntityNodeAccessibilityTests` instead
+      asserts directly against `EntityNode.razor`'s markup source that every
+      button with a `title` has a matching `aria-label`; verified it fails
+      when an `aria-label` is stripped. 311/311 tests green across both
+      projects.
