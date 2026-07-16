@@ -13,7 +13,7 @@
     <PortRenderer Port="@(Node.GetPort(PortAlignment.Right))" Class="entity-port"
                   Style="position: absolute; right: -6px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: #666; cursor: crosshair;">
     </PortRenderer>
-    <div style="font-size: 0.65em; color: #888; padding: 2px 8px 0;">Drag from the child (many) entity to the parent (one) entity to connect.</div>
+    <div style="font-size: 0.65em; color: #888; padding: 2px 8px 0;">Double-click a name or type to edit. Drag from the child (many) entity to the parent (one) entity to connect.</div>
     <div class="card-header" style="font-weight: bold; padding: 4px 8px; background: #eee; display: flex; justify-content: space-between; align-items: center;">
         <span style="flex: 1;">
             @if (_isEditingName)
@@ -27,7 +27,8 @@
             }
             else
             {
-                <span @ondblclick="BeginNameEdit">@Node.Entity.Name</span>
+                <span @ondblclick="BeginNameEdit" title="Double-click to rename entity"
+                      style="cursor: text; border-bottom: 1px dashed #999;">@Node.Entity.Name ✎</span>
             }
         </span>
         <button type="button" title="Remove entity" aria-label="Remove entity" style="border: none; background: transparent; cursor: pointer; font-weight: bold;"
@@ -36,8 +37,9 @@
                 @onmousedown:stopPropagation="true">×</button>
     </div>
     <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
-        <span>Table:</span>
+        <span title="SQL table name (.ToTable). Not the class name — double-click the title above to rename the entity.">Table:</span>
         <input style="width: 80px;" value="@Node.Entity.TableName" placeholder="(default)"
+               title="SQL table name (.ToTable). Not the class name — double-click the title above to rename the entity."
                @onchange="e => CommitTableName(e.Value?.ToString())"
                @onpointerdown:stopPropagation="true"
                @onmousedown:stopPropagation="true" />
@@ -75,7 +77,8 @@
                 }
                 else
                 {
-                    <span @ondblclick="() => BeginPropertyRename(property.Name)">@property.Name</span>
+                    <span @ondblclick="() => BeginPropertyRename(property.Name)" title="Double-click to rename property"
+                          style="cursor: text; border-bottom: 1px dashed #999;">@property.Name</span>
                 }
                 :
                 @if (_editingPropertyType == property.Name)
@@ -89,7 +92,8 @@
                 }
                 else
                 {
-                    <span @ondblclick="() => BeginTypeEdit(property)">@property.ClrType@(property.IsNullable ? "?" : "")</span>
+                    <span @ondblclick="() => BeginTypeEdit(property)" title="Double-click to edit type"
+                          style="cursor: text; border-bottom: 1px dashed #999;">@property.ClrType@(property.IsNullable ? "?" : "")</span>
                 }
                 <label style="font-size: 0.8em; margin-left: 4px;">
                     <input type="checkbox" checked="@property.IsNullable"
