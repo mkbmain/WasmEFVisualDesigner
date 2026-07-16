@@ -30,7 +30,8 @@ your model entirely client-side.
    name or type to rename/retype it, and click the ▸ next to a property
    to expand its primary-key/index/column/precision/default-value
    options. A "How to edit the diagram" legend above the canvas recaps
-   these gestures.
+   these gestures. Undo/Redo buttons step back and forward through
+   diagram edits one gesture at a time.
 4. Every edit is applied back to your original C# via a Roslyn syntax
    rewriter and immediately reparsed, so the diagram always reflects
    exactly what will be downloaded.

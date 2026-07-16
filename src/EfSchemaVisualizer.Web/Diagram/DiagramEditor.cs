@@ -24,6 +24,10 @@ public sealed class DiagramEditor
     private readonly EntityClassRewriter _classRewriter = new();
     private readonly OnModelCreatingRewriter _configRewriter = new();
     private readonly Dictionary<string, Guid> _entityIds = new();
+    private readonly Stack<Snapshot> _undoStack = new();
+    private readonly Stack<Snapshot> _redoStack = new();
+
+    private sealed record Snapshot(string ClassSource, string ConfigSource, Dictionary<string, Guid> EntityIds);
 
     public DiagramEditor(string classSource, string configSource)
     {
@@ -669,8 +673,53 @@ public sealed class DiagramEditor
         ConfigSource = configSource;
     }
 
+    public bool CanUndo => _undoStack.Count > 0;
+    public bool CanRedo => _redoStack.Count > 0;
+
+    public DiagramEditResult Undo()
+    {
+        if (_undoStack.Count == 0)
+        {
+            return DiagramEditResult.Fail("Nothing to undo.");
+        }
+
+        _redoStack.Push(CurrentSnapshot());
+        Restore(_undoStack.Pop());
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult Redo()
+    {
+        if (_redoStack.Count == 0)
+        {
+            return DiagramEditResult.Fail("Nothing to redo.");
+        }
+
+        _undoStack.Push(CurrentSnapshot());
+        Restore(_redoStack.Pop());
+        return DiagramEditResult.Ok();
+    }
+
+    private Snapshot CurrentSnapshot() => new(ClassSource, ConfigSource, new Dictionary<string, Guid>(_entityIds));
+
+    private void Restore(Snapshot snapshot)
+    {
+        ClassSource = snapshot.ClassSource;
+        ConfigSource = snapshot.ConfigSource;
+        _entityIds.Clear();
+        foreach (var (name, id) in snapshot.EntityIds)
+        {
+            _entityIds[name] = id;
+        }
+
+        Current = DiagramModelBuilder.Build(ClassSource, ConfigSource);
+    }
+
     private void Apply(string newClassSource, string newConfigSource)
     {
+        _undoStack.Push(CurrentSnapshot());
+        _redoStack.Clear();
+
         ClassSource = newClassSource;
         ConfigSource = newConfigSource;
         Current = DiagramModelBuilder.Build(ClassSource, ConfigSource);

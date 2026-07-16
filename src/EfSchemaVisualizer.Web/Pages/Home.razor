@@ -20,11 +20,11 @@
 
 <div style="display: flex; gap: 16px;">
     <div style="flex: 1;">
-        <label>Entity classes</label>
+        <label for="class-source">Entity classes</label>
         <textarea id="class-source" @bind="_classSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
     </div>
     <div style="flex: 1;">
-        <label>DbContext / OnModelCreating</label>
+        <label for="config-source">DbContext / OnModelCreating</label>
         <textarea id="config-source" @bind="_configSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
     </div>
 </div>
@@ -34,6 +34,8 @@
     @if (_editContext is not null)
     {
         <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
+        <button class="btn btn-secondary" title="Undo last diagram edit" disabled="@(_editor is null || !_editor.CanUndo)" @onclick="UndoAsync">Undo</button>
+        <button class="btn btn-secondary" title="Redo last undone diagram edit" disabled="@(_editor is null || !_editor.CanRedo)" @onclick="RedoAsync">Redo</button>
     }
     <InputFile OnChange="OnZipSelected" accept=".zip" />
     <button class="btn btn-secondary" disabled="@(_editor is null)" @onclick="DownloadZip">Download .zip</button>
@@ -62,6 +64,7 @@
             <li>Drag from a port on the child (many) entity to the parent (one) entity to draw a relationship.</li>
             <li>Click the ▸ next to a property to expand its options: primary key toggle, column name/type, precision/scale, default value, and indexes.</li>
             <li>Use the "nullable" checkbox next to a property's type, and the × buttons to remove properties/entities.</li>
+            <li>Use the Undo/Redo buttons above to step back through diagram edits (each gesture is one step).</li>
         </ul>
     </details>
     <div style="height: 600px; width: 100%; border: 1px solid #ccc;">
@@ -250,6 +253,28 @@
         }
 
         _editor.AddEntity();
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task UndoAsync()
+    {
+        if (_editor is null || !_editor.CanUndo)
+        {
+            return;
+        }
+
+        _editor.Undo();
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task RedoAsync()
+    {
+        if (_editor is null || !_editor.CanRedo)
+        {
+            return;
+        }
+
+        _editor.Redo();
         await OnDiagramEditedAsync();
     }
 

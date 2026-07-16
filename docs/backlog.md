@@ -565,17 +565,33 @@ these matter before any new surface is added.
       commonly-hit path; both catch blocks share the same code shape and
       `LogErrorAsync` helper, so the fix applies uniformly regardless.
 
-- [ ] **`[found]` Textarea `<label>`s aren't associated with their inputs.**
+- [x] **`[found]` Textarea `<label>`s aren't associated with their inputs.**
       `Home.razor:23,27` use bare `<label>Entity classes</label>` with no
       `for`/`id` linkage, so screen readers don't announce them. (The in-diagram
       controls already got `aria-label`s in the last round — this is the one
       spot that was missed.)
+      **Update:** Both `<label>`s in `Home.razor` now carry `for="class-source"`
+      / `for="config-source"` matching the adjacent `<textarea id="...">`.
 
-- [ ] **`[found]` No undo/redo.** For a visual editor every gesture rewrites the
+- [x] **`[found]` No undo/redo.** For a visual editor every gesture rewrites the
       source irreversibly; the only "undo" is Ctrl-Z inside a textarea, which
       then desyncs from the diagram. A source-snapshot undo stack in
       `DiagramEditor` would be cheap (it already funnels every mutation through
       `Apply`).
+      **Update:** `DiagramEditor` now maintains `_undoStack`/`_redoStack` of
+      `(ClassSource, ConfigSource, EntityIds)` snapshots; `Apply` (the single
+      funnel every gesture-driven mutation already goes through) pushes the
+      pre-mutation snapshot and clears the redo stack, so no-op edits that
+      return `Ok()` without calling `Apply` correctly push nothing. New public
+      `CanUndo`/`CanRedo`/`Undo()`/`Redo()` restore a snapshot (including
+      `_entityIds`, so undone/redone diagram nodes keep stable identity) and
+      rebuild `Current` via `DiagramModelBuilder.Build`. Hand-edits via
+      `SyncSource` (raw textarea typing) deliberately do not push undo state,
+      matching the item's framing that undo tracks diagram *gestures*, not
+      every keystroke. Wired to new Undo/Redo buttons in `Home.razor`'s
+      toolbar and called out in the "How to edit the diagram" legend. 7 new
+      tests in `DiagramEditorTests.cs`; 386/386 tests green across all three
+      test projects.
 
 - [x] **`[found]` Diagram gestures are undiscoverable.**
       Nothing on the page explained the interaction model (double-click a
