@@ -721,7 +721,7 @@ these matter before any new surface is added.
 
 ## Priority 0 — Data loss on the edit path
 
-- [ ] **`[found]` Composite foreign keys are truncated to one property by the
+- [x] **`[found]` Composite foreign keys are truncated to one property by the
       relationship panel.** The model carries `ForeignKeyProperties` as a list
       and `FluentConfigParser` reads composite FKs correctly, but
       `RelationshipLinkLabel.razor` renders a single-select `<select>` and
@@ -731,6 +731,16 @@ these matter before any new surface is added.
       not a missing feature. Fix: multi-select (checkbox list, like the index
       panel's membership toggles) or at minimum refuse to commit when the
       existing relationship has a composite FK.
+      **Update:** Replaced the single-select `<select>` with a checkbox list
+      (one row per dependent-entity property), mirroring the existing
+      index-membership checkbox pattern in `EntityNode.razor`. `_foreignKeyProperty`
+      (single `string`) became `_foreignKeyProperties` (ordered `List<string>`),
+      seeded from `Label.Relationship.ForeignKeyProperties` on expand; a new
+      `ToggleForeignKeyProperty` handler appends on check / removes on uncheck,
+      preserving order (significant for composite FK-to-key correspondence and
+      for `DiagramEditor.SetRelationshipShape`'s `SequenceEqual` no-op check —
+      no `DiagramEditor`/`SetRelationshipShape` changes were needed, it already
+      took an ordered `IReadOnlyList<string>`). 386/386 tests green.
 
 ## Priority 1 — The unrecognized-call diagnostic (highest-leverage trust fix)
 
