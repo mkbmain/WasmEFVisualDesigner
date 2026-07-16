@@ -103,10 +103,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingPrecisionCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasPrecision"))
+        var existingPrecisionCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasPrecision"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingPrecisionCall is not null)
@@ -114,8 +114,8 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingPrecision(root, existingPrecisionCall, precision, scale);
         }
 
-        var existingPropertyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
 
         if (existingPropertyCall is not null)
@@ -123,11 +123,11 @@ public sealed class OnModelCreatingRewriter
             return AppendPrecisionToPropertyCall(root, existingPropertyCall, precision, scale);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertPrecisionStatement(root, existingEntityInvocation, propertyName, precision, scale);
+            return InsertPrecisionStatement(root, existingScope, propertyName, precision, scale);
         }
 
         return InsertPrecisionEntityBlock(root, entityName, propertyName, precision, scale);
@@ -149,12 +149,10 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertPrecisionStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, int precision, int? scale)
+    private static string InsertPrecisionStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, int precision, int? scale)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
-        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
 
         var newStatement = BuildPrecisionPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, precision, scale);
         var newBlock = block.AddStatements(newStatement);
@@ -238,10 +236,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingIsRequiredCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "IsRequired"))
+        var existingIsRequiredCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "IsRequired"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingIsRequiredCall is not null)
@@ -249,8 +247,8 @@ public sealed class OnModelCreatingRewriter
             return MutateExistingIsRequired(root, existingIsRequiredCall, newIsRequired);
         }
 
-        var existingPropertyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
 
         if (existingPropertyCall is not null)
@@ -258,11 +256,11 @@ public sealed class OnModelCreatingRewriter
             return AppendIsRequiredToPropertyCall(root, existingPropertyCall, newIsRequired);
         }
 
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertIsRequiredPropertyStatement(root, existingEntityInvocation, propertyName, newIsRequired);
+            return InsertIsRequiredPropertyStatement(root, existingScope, propertyName, newIsRequired);
         }
 
         return InsertIsRequiredEntityBlock(root, entityName, propertyName, newIsRequired);
@@ -307,12 +305,10 @@ public sealed class OnModelCreatingRewriter
                     SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression))));
     }
 
-    private static string InsertIsRequiredPropertyStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, string propertyName, bool newIsRequired)
+    private static string InsertIsRequiredPropertyStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, bool newIsRequired)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
-        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(entityInvocation);
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
 
         var newStatement = BuildIsRequiredPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, newIsRequired);
         var newBlock = block.AddStatements(newStatement);
@@ -1351,10 +1347,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingPrecisionCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "HasPrecision"))
+        var existingPrecisionCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasPrecision"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingPrecisionCall is null)
@@ -1373,10 +1369,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingIsRequiredCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "IsRequired"))
+        var existingIsRequiredCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "IsRequired"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
         if (existingIsRequiredCall is null)

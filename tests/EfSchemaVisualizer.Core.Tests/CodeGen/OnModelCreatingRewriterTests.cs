@@ -1884,4 +1884,69 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("builder.Property(e => e.Name);", result);
         Assert.DoesNotContain("HasMaxLength", result);
     }
+
+    private const string SourceUsingEntityTypeConfigurationForPrecisionAndRequired = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.Property(e => e.Balance).HasPrecision(18, 2);
+                builder.Property(e => e.Name).IsRequired();
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewritePrecision_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(SourceUsingEntityTypeConfigurationForPrecisionAndRequired, entityName: "Person", propertyName: "Balance", precision: 10, scale: 4);
+
+        Assert.Contains("builder.Property(e => e.Balance).HasPrecision(10, 4)", result);
+    }
+
+    [Fact]
+    public void RemovePrecision_EntityTypeConfigurationStyle_RemovesCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemovePrecision(SourceUsingEntityTypeConfigurationForPrecisionAndRequired, entityName: "Person", propertyName: "Balance");
+
+        Assert.DoesNotContain("HasPrecision", result);
+    }
+
+    [Fact]
+    public void RewriteIsRequired_EntityTypeConfigurationStyle_MutatesExistingCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewriteIsRequired(SourceUsingEntityTypeConfigurationForPrecisionAndRequired, entityName: "Person", propertyName: "Name", newIsRequired: false);
+
+        Assert.Contains("builder.Property(e => e.Name).IsRequired(false)", result);
+    }
+
+    [Fact]
+    public void RemoveIsRequired_EntityTypeConfigurationStyle_RemovesCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveIsRequired(SourceUsingEntityTypeConfigurationForPrecisionAndRequired, entityName: "Person", propertyName: "Name");
+
+        Assert.DoesNotContain("IsRequired", result);
+    }
+
+    private const string SourceUsingEntityTypeConfigurationNoPrecisionYet = """
+        public class PersonConfiguration : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void RewritePrecision_EntityTypeConfigurationStyle_InsertsNewStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RewritePrecision(SourceUsingEntityTypeConfigurationNoPrecisionYet, entityName: "Person", propertyName: "Balance", precision: 12, scale: null);
+
+        Assert.Contains("builder.Property(e => e.Balance).HasPrecision(12)", result);
+    }
 }
