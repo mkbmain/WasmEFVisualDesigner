@@ -11,6 +11,51 @@ namespace EfSchemaVisualizer.Core.Parsing;
 
 public sealed class FluentConfigParser
 {
+    /// Fluent call names read by one of the `Parse*` methods above. Anything chained onto an entity's
+    /// config scope whose name isn't in this set is flagged by <see cref="ParseUnrecognizedCalls"/>.
+    private static readonly HashSet<string> RecognizedCallNames = new()
+    {
+        "Property", "HasMaxLength", "HasPrecision", "IsRequired", "HasKey", "ToTable",
+        "HasColumnName", "HasColumnType", "HasDefaultValue", "HasIndex", "IsUnique",
+        "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
+    };
+
+    /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
+    /// any of the `Parse*` methods above (e.g. `Ignore`, `HasFilter`, `HasConversion`) so it surfaces
+    /// as a diagnostic instead of silently disappearing.
+    public IReadOnlyList<Diagnostic> ParseUnrecognizedCalls(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindConfigChainCalls(scope))
+            {
+                if (call.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var methodName })
+                {
+                    continue;
+                }
+
+                if (RecognizedCallNames.Contains(methodName))
+                {
+                    continue;
+                }
+
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticCodes.UnrecognizedConfigCall,
+                    $"'{methodName}' is not a recognized configuration call and was ignored.",
+                    entityName,
+                    PropertyName: null,
+                    call.Span));
+            }
+        }
+
+        return diagnostics;
+    }
+
     public ParseResult<IReadOnlyList<MaxLengthConfig>> ParseMaxLengths(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
@@ -524,7 +569,7 @@ public sealed class FluentConfigParser
         InvocationExpressionSyntax? onDeleteCall = null;
         InvocationExpressionSyntax? usingEntityCall = null;
 
-        WalkRelationshipTailChain(withCall, invocation =>
+        FluentSyntaxHelpers.WalkChainedTail(withCall, invocation =>
         {
             switch (GetInvokedMethodName(invocation))
             {
@@ -701,21 +746,6 @@ public sealed class FluentConfigParser
         return invocation?.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArg] } }
             ? typeArg.ToString()
             : null;
-    }
-
-    private static void WalkRelationshipTailChain(InvocationExpressionSyntax withCall, Action<InvocationExpressionSyntax> visit)
-    {
-        SyntaxNode? cursor = withCall.Parent;
-
-        while (cursor is not null && cursor is not StatementSyntax)
-        {
-            if (cursor is MemberAccessExpressionSyntax && cursor.Parent is InvocationExpressionSyntax invocation)
-            {
-                visit(invocation);
-            }
-
-            cursor = cursor.Parent;
-        }
     }
 
     private static (bool IsUnique, Diagnostic? Diagnostic) TryReadIsUnique(

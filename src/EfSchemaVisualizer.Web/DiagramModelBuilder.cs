@@ -30,6 +30,7 @@ public static class DiagramModelBuilder
         var indexes = configParser.ParseIndexes(configSource);
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
         var annotationRelationships = entityParser.ParseRelationships(classSource, entityResult.Value);
+        var unrecognizedCalls = configParser.ParseUnrecognizedCalls(configSource);
 
         diagnostics.AddRange(maxLengths.Diagnostics);
         diagnostics.AddRange(precisions.Diagnostics);
@@ -42,6 +43,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(indexes.Diagnostics);
         diagnostics.AddRange(fluentRelationships.Diagnostics);
         diagnostics.AddRange(annotationRelationships.Diagnostics);
+        diagnostics.AddRange(unrecognizedCalls);
 
         var entities = entityResult.Value
             .Select(entity => ModelMerger.ApplyMaxLengths(entity, maxLengths.Value))

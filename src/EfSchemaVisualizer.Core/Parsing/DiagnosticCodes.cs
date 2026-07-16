@@ -19,5 +19,6 @@ public static class DiagnosticCodes
     public const string UnresolvableRelationshipTarget = nameof(UnresolvableRelationshipTarget);
     public const string UnreadableHasForeignKeyArgument = nameof(UnreadableHasForeignKeyArgument);
     public const string UnreadableOnDeleteArgument = nameof(UnreadableOnDeleteArgument);
+    public const string UnrecognizedConfigCall = nameof(UnrecognizedConfigCall);
     public const string ArchiveNoContentFound = nameof(ArchiveNoContentFound);
 }

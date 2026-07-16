@@ -1901,4 +1901,180 @@ public class FluentConfigParserTests
         Assert.Equal(new[] { "Email" }, config.PropertyNames);
         Assert.True(config.IsUnique);
     }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_FlagsCallNotReadByAnyParser()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Ignore(e => e.Secret);
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Contains("Ignore", diagnostic.Message);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_ChainedAfterRecognizedCall_IsFlagged()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasIndex(e => e.Email).IsUnique().HasFilter("[Email] IS NOT NULL");
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Contains("HasFilter", diagnostic.Message);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_KnownChainsIncludingIsUniqueAndWithMany_AreNotFlagged()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+                        entity.HasKey(e => e.Id);
+                        entity.HasIndex(e => e.Email).IsUnique();
+                        entity.HasOne(e => e.Manager).WithMany(m => m.Reports).HasForeignKey(e => e.ManagerId).OnDelete(DeleteBehavior.Cascade);
+                        entity.ToTable("People");
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_HelperMethodCallUsedAsArgument_IsNotFlagged()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Name).HasMaxLength(GetMaxNameLength());
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_NestedEntityConfig_DoesNotAttributeToOuterEntity()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+
+                        modelBuilder.Entity<Address>(nested =>
+                        {
+                            nested.Ignore(e => e.Secret);
+                        });
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("Address", diagnostic.EntityName);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_BareChainedStyle_FlagsUnrecognizedTailCall()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>().HasQueryFilter(e => !e.IsDeleted);
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Contains("HasQueryFilter", diagnostic.Message);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_BareChainedRelationship_IsNotFlagged()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>().HasOne(e => e.Customer).WithMany(c => c.Orders);
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_EntityTypeConfigurationStyle_FlagsUnrecognizedCall()
+    {
+        const string source = """
+            public class PersonConfiguration : IEntityTypeConfiguration<Person>
+            {
+                public void Configure(EntityTypeBuilder<Person> builder)
+                {
+                    builder.HasComment("legacy table");
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Contains("HasComment", diagnostic.Message);
+    }
 }

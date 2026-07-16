@@ -17,6 +17,14 @@ internal static class FluentSyntaxHelpers
     /// misattributed to the outer scope's entity.
     public static IEnumerable<InvocationExpressionSyntax> FindCallsNamed(SyntaxNode scope, string methodName)
     {
+        return FindAllCalls(scope).Where(invocation =>
+            invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var name } && name == methodName);
+    }
+
+    /// Finds every invocation within the given scope, respecting the same nested-`Entity&lt;T&gt;()`
+    /// opaque boundary as <see cref="FindCallsNamed"/>.
+    private static IEnumerable<InvocationExpressionSyntax> FindAllCalls(SyntaxNode scope)
+    {
         var results = new List<InvocationExpressionSyntax>();
         Walk(scope);
         return results;
@@ -32,15 +40,126 @@ internal static class FluentSyntaxHelpers
                     continue;
                 }
 
-                if (child is InvocationExpressionSyntax invocation
-                    && invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var name }
-                    && name == methodName)
+                if (child is InvocationExpressionSyntax invocation)
                 {
                     results.Add(invocation);
                 }
 
                 Walk(child);
             }
+        }
+    }
+
+    /// Finds every invocation forming a fluent config chain within `scope` — e.g. every link in
+    /// `entity.Property(e => e.Name).HasMaxLength(100).IsRequired();` — without descending into
+    /// argument expressions (lambda bodies, helper-method arguments), where an unrelated invocation
+    /// could otherwise be mistaken for a chain link. Also includes any call chained directly onto
+    /// `scope` itself when `scope` is the bare `Entity&lt;T&gt;()` invocation (e.g. the
+    /// `.HasOne(...).WithMany(...)` style with no lambda block). A chain rooted at a nested
+    /// `Entity&lt;T&gt;()` call is skipped (opaque boundary), since it belongs to a different entity's
+    /// own scope.
+    internal static IEnumerable<InvocationExpressionSyntax> FindConfigChainCalls(SyntaxNode scope)
+    {
+        var results = new List<InvocationExpressionSyntax>();
+
+        foreach (var rootInvocation in FindStatementRootInvocations(scope))
+        {
+            WalkChainDown(rootInvocation);
+        }
+
+        if (scope is InvocationExpressionSyntax scopeInvocation)
+        {
+            WalkChainedTail(scopeInvocation, results.Add);
+        }
+
+        return results;
+
+        void WalkChainDown(InvocationExpressionSyntax invocation)
+        {
+            if (GetConfiguredEntityName(invocation) is not null)
+            {
+                return;
+            }
+
+            var current = invocation;
+            while (true)
+            {
+                results.Add(current);
+
+                if (current.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner })
+                {
+                    current = inner;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<InvocationExpressionSyntax> FindStatementRootInvocations(SyntaxNode scope)
+    {
+        switch (scope)
+        {
+            case MethodDeclarationSyntax method:
+                if (method.Body is not null)
+                {
+                    foreach (var statement in method.Body.Statements.OfType<ExpressionStatementSyntax>())
+                    {
+                        if (statement.Expression is InvocationExpressionSyntax invocation)
+                        {
+                            yield return invocation;
+                        }
+                    }
+                }
+                else if (method.ExpressionBody?.Expression is InvocationExpressionSyntax bodyInvocation)
+                {
+                    yield return bodyInvocation;
+                }
+
+                break;
+
+            case InvocationExpressionSyntax entityInvocation:
+                var lambda = entityInvocation.ArgumentList.Arguments
+                    .Select(a => a.Expression)
+                    .OfType<AnonymousFunctionExpressionSyntax>()
+                    .FirstOrDefault();
+
+                if (lambda?.Block is not null)
+                {
+                    foreach (var statement in lambda.Block.Statements.OfType<ExpressionStatementSyntax>())
+                    {
+                        if (statement.Expression is InvocationExpressionSyntax invocation)
+                        {
+                            yield return invocation;
+                        }
+                    }
+                }
+                else if (lambda?.ExpressionBody is InvocationExpressionSyntax lambdaBodyInvocation)
+                {
+                    yield return lambdaBodyInvocation;
+                }
+
+                break;
+        }
+    }
+
+    /// Walks every invocation chained directly onto `invocation` via `.methodName(...)` links
+    /// (e.g. given the `WithMany(...)` invocation, visits `.HasForeignKey(...)`, then `.OnDelete(...)`
+    /// chained after it), stopping at the end of the statement.
+    internal static void WalkChainedTail(InvocationExpressionSyntax invocation, Action<InvocationExpressionSyntax> visit)
+    {
+        SyntaxNode? cursor = invocation.Parent;
+
+        while (cursor is not null && cursor is not StatementSyntax)
+        {
+            if (cursor is MemberAccessExpressionSyntax && cursor.Parent is InvocationExpressionSyntax chained)
+            {
+                visit(chained);
+            }
+
+            cursor = cursor.Parent;
         }
     }
 
