@@ -964,22 +964,20 @@ public sealed class OnModelCreatingRewriter
             ? relationship.PrincipalEntity
             : relationship.DependentEntity;
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, scopeEntityName).ToList();
-        var existingEntityInvocation = entityInvocations.FirstOrDefault();
+        var scopes = FindConfigScopes(root, scopeEntityName);
+        var existingScope = scopes.FirstOrDefault();
 
-        if (existingEntityInvocation is not null)
+        if (existingScope is not null)
         {
-            return InsertRelationshipStatement(root, existingEntityInvocation, relationship);
+            return InsertRelationshipStatement(root, existingScope, relationship);
         }
 
         return InsertRelationshipEntityBlock(root, scopeEntityName, relationship);
     }
 
-    private static string InsertRelationshipStatement(CompilationUnitSyntax root, InvocationExpressionSyntax entityInvocation, RelationshipModel relationship)
+    private static string InsertRelationshipStatement(CompilationUnitSyntax root, SyntaxNode scope, RelationshipModel relationship)
     {
-        var lambda = (SimpleLambdaExpressionSyntax)entityInvocation.ArgumentList.Arguments.Single().Expression;
-        var block = lambda.Block!;
-        var blockReceiverName = lambda.Parameter.Identifier.Text;
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
 
         var newStatement = BuildRelationshipStatement(blockReceiverName, relationship);
         var newBlock = block.AddStatements(newStatement);
@@ -1142,10 +1140,10 @@ public sealed class OnModelCreatingRewriter
             ? relationship.PrincipalNavigation
             : relationship.DependentNavigation;
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, scopeEntityName).ToList();
+        var scopes = FindConfigScopes(root, scopeEntityName);
 
-        var matchingCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, methodName))
+        var matchingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, methodName))
             .FirstOrDefault(call =>
                 HasGenericTypeArgument(call, otherEntityName)
                 || (expectedNavigation is not null && TryGetNavigationPropertyName(call) == expectedNavigation));
@@ -1417,10 +1415,10 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var entityInvocations = FluentSyntaxHelpers.FindEntityConfigInvocations(root, entityName).ToList();
+        var scopes = FindConfigScopes(root, entityName);
 
-        var existingPropertyCall = entityInvocations
-            .SelectMany(entityInvocation => FluentSyntaxHelpers.FindCallsNamed(entityInvocation, "Property"))
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == oldPropertyName);
 
         if (existingPropertyCall is null)

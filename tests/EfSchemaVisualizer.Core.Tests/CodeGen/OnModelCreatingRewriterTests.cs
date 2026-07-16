@@ -2145,4 +2145,43 @@ public class OnModelCreatingRewriterTests
 
         Assert.Contains("builder.Property(e => e.Name).HasColumnName(\"full_name\")", result);
     }
+
+    private const string SourceUsingEntityTypeConfigurationForRelationshipAndRename = """
+        public class BlogConfiguration : IEntityTypeConfiguration<Blog>
+        {
+            public void Configure(EntityTypeBuilder<Blog> builder)
+            {
+                builder.Property(e => e.Title).HasMaxLength(100);
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetRelationship_EntityTypeConfigurationStyle_InsertsIntoExistingScope()
+    {
+        // SetRelationship scopes a OneToMany relationship onto DependentEntity (the FK-holding
+        // side), so DependentEntity must be "Blog" to land in this fixture's existing
+        // BlogConfiguration : IEntityTypeConfiguration<Blog> scope.
+        var relationship = new RelationshipModel(
+            PrincipalEntity: "Post",
+            DependentEntity: "Blog",
+            Kind: RelationshipKind.OneToMany,
+            PrincipalNavigation: "Blogs",
+            DependentNavigation: "Post",
+            ForeignKeyProperties: new[] { "PostId" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceUsingEntityTypeConfigurationForRelationshipAndRename, relationship);
+
+        Assert.Contains("builder.HasOne<Post>(x => x.Post).WithMany(x => x.Blogs).HasForeignKey(d => d.PostId)", result);
+    }
+
+    [Fact]
+    public void RenamePropertyReferences_EntityTypeConfigurationStyle_RenamesPropertyLambda()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyReferences(SourceUsingEntityTypeConfigurationForRelationshipAndRename, entityName: "Blog", oldPropertyName: "Title", newPropertyName: "Headline");
+
+        Assert.Contains("builder.Property(e => e.Headline).HasMaxLength(100)", result);
+    }
 }
