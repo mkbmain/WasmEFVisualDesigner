@@ -359,4 +359,171 @@ public class EntityClassParserTests
         Assert.Equal(DiagnosticCodes.NestedTypeDeclaration, diagnostic.Code);
         Assert.Equal("Inner", diagnostic.EntityName);
     }
+
+    [Fact]
+    public void Parse_RequiredAttribute_SetsIsRequiredOverride()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [Required]
+                public string? Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var name = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.True(name.IsRequiredOverride);
+    }
+
+    [Fact]
+    public void Parse_MaxLengthAttribute_SetsMaxLength()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [MaxLength(50)]
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var name = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal(50, name.MaxLength);
+    }
+
+    [Fact]
+    public void Parse_StringLengthAttribute_SetsMaxLength()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [StringLength(80)]
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var name = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal(80, name.MaxLength);
+    }
+
+    [Fact]
+    public void Parse_MaxLengthAndStringLengthBothPresent_MaxLengthWins()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [MaxLength(50)]
+                [StringLength(80)]
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var name = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal(50, name.MaxLength);
+    }
+
+    [Fact]
+    public void Parse_MaxLengthWithNonLiteralArgument_SkipsSilently_NoException()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [MaxLength(MaxNameLength)]
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var name = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Null(name.MaxLength);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void Parse_ColumnAttribute_SetsColumnNameAndType()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [Column(Name = "full_name", TypeName = "varchar(80)")]
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var name = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal("full_name", name.ColumnName);
+        Assert.Equal("varchar(80)", name.ColumnType);
+    }
+
+    [Fact]
+    public void Parse_ColumnAttributePositionalName_SetsColumnName()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [Column("full_name")]
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var name = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal("full_name", name.ColumnName);
+    }
+
+    [Fact]
+    public void Parse_PrecisionAttribute_SetsPrecisionAndScale()
+    {
+        const string source = """
+            public class Invoice
+            {
+                public int Id { get; set; }
+                [Precision(18, 2)]
+                public decimal Total { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var total = result.Value.Single().Properties.Single(p => p.Name == "Total");
+        Assert.Equal(18, total.Precision);
+        Assert.Equal(2, total.Scale);
+    }
+
+    [Fact]
+    public void Parse_PrecisionAttributeNoScale_SetsPrecisionOnly()
+    {
+        const string source = """
+            public class Invoice
+            {
+                public int Id { get; set; }
+                [Precision(18)]
+                public decimal Total { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var total = result.Value.Single().Properties.Single(p => p.Name == "Total");
+        Assert.Equal(18, total.Precision);
+        Assert.Null(total.Scale);
+    }
 }

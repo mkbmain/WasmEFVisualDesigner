@@ -102,7 +102,47 @@ public sealed class EntityClassParser
             ? nullableType.ElementType.ToString()
             : property.Type.ToString();
 
-        return new PropertyModel(property.Identifier.Text, clrType, isNullable, MaxLength: null);
+        var attributeLists = property.AttributeLists;
+
+        bool? isRequiredOverride = FindAttribute(attributeLists, "Required") is not null ? true : null;
+
+        int? maxLength = null;
+        if (FindAttribute(attributeLists, "MaxLength") is { } maxLengthAttr)
+        {
+            maxLength = TryReadIntArg(GetPositionalArg(maxLengthAttr, 0));
+        }
+        else if (FindAttribute(attributeLists, "StringLength") is { } stringLengthAttr)
+        {
+            maxLength = TryReadIntArg(GetPositionalArg(stringLengthAttr, 0));
+        }
+
+        string? columnName = null;
+        string? columnType = null;
+        if (FindAttribute(attributeLists, "Column") is { } columnAttr)
+        {
+            columnName = TryReadStringArg(GetPositionalArg(columnAttr, 0))
+                ?? TryReadStringArg(GetNamedArg(columnAttr, "Name"));
+            columnType = TryReadStringArg(GetNamedArg(columnAttr, "TypeName"));
+        }
+
+        int? precision = null;
+        int? scale = null;
+        if (FindAttribute(attributeLists, "Precision") is { } precisionAttr)
+        {
+            precision = TryReadIntArg(GetPositionalArg(precisionAttr, 0));
+            scale = TryReadIntArg(GetPositionalArg(precisionAttr, 1));
+        }
+
+        return new PropertyModel(
+            property.Identifier.Text,
+            clrType,
+            isNullable,
+            maxLength,
+            isRequiredOverride,
+            precision,
+            scale,
+            columnName,
+            columnType);
     }
 
     private static bool IsMappedInstanceProperty(PropertyDeclarationSyntax property)
@@ -130,8 +170,41 @@ public sealed class EntityClassParser
 
     private static bool HasNotMappedAttribute(SyntaxList<AttributeListSyntax> attributeLists)
     {
+        return FindAttribute(attributeLists, "NotMapped") is not null;
+    }
+
+    private static AttributeSyntax? FindAttribute(SyntaxList<AttributeListSyntax> attributeLists, string simpleName)
+    {
         return attributeLists
             .SelectMany(list => list.Attributes)
-            .Any(attribute => attribute.Name.ToString() is "NotMapped" or "NotMappedAttribute");
+            .FirstOrDefault(attribute => attribute.Name.ToString() is var name
+                && (name == simpleName || name == simpleName + "Attribute"));
+    }
+
+    private static AttributeArgumentSyntax? GetPositionalArg(AttributeSyntax attribute, int index)
+    {
+        var positional = attribute.ArgumentList?.Arguments
+            .Where(a => a.NameEquals is null)
+            .ToList();
+
+        return positional is not null && index < positional.Count ? positional[index] : null;
+    }
+
+    private static AttributeArgumentSyntax? GetNamedArg(AttributeSyntax attribute, string name)
+    {
+        return attribute.ArgumentList?.Arguments
+            .FirstOrDefault(a => a.NameEquals?.Name.Identifier.Text == name);
+    }
+
+    private static string? TryReadStringArg(AttributeArgumentSyntax? arg)
+    {
+        return arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression)
+            ? literal.Token.ValueText
+            : null;
+    }
+
+    private static int? TryReadIntArg(AttributeArgumentSyntax? arg)
+    {
+        return arg is not null && int.TryParse(arg.Expression.ToString(), out var value) ? value : null;
     }
 }
