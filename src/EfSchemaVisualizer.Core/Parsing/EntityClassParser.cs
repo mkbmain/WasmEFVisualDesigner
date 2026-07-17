@@ -133,6 +133,76 @@ public sealed class EntityClassParser
         return (tableName, schema);
     }
 
+    public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexAttributes(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var typeDeclarations = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(t => t is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax)
+            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any());
+
+        var results = new List<IndexConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var typeDeclaration in typeDeclarations)
+        {
+            var entityName = typeDeclaration.Identifier.Text;
+
+            foreach (var indexAttr in FindAttributes(typeDeclaration.AttributeLists, "Index"))
+            {
+                var positionalArgs = indexAttr.ArgumentList?.Arguments
+                    .Where(a => a.NameEquals is null)
+                    .ToList() ?? new List<AttributeArgumentSyntax>();
+
+                if (positionalArgs.Count == 0)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasIndexArgument,
+                        "[Index] attribute has no property name arguments.",
+                        entityName,
+                        PropertyName: null,
+                        indexAttr.Span));
+                    continue;
+                }
+
+                var propertyNames = new List<string>();
+                var unresolved = false;
+
+                foreach (var arg in positionalArgs)
+                {
+                    var propertyName = TryReadIndexAttributePropertyName(arg);
+                    if (propertyName is null)
+                    {
+                        unresolved = true;
+                        break;
+                    }
+
+                    propertyNames.Add(propertyName);
+                }
+
+                if (unresolved)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasIndexArgument,
+                        "[Index] attribute argument(s) could not be read as property name(s).",
+                        entityName,
+                        PropertyName: null,
+                        indexAttr.Span));
+                    continue;
+                }
+
+                var isUnique = TryReadBoolArg(GetNamedArg(indexAttr, "IsUnique"));
+                var name = TryReadStringArg(GetNamedArg(indexAttr, "Name"));
+
+                results.Add(new IndexConfig(entityName, propertyNames, isUnique, name));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<IndexConfig>>(results, diagnostics);
+    }
+
     private static PropertyModel ParseParameterProperty(ParameterSyntax parameter)
     {
         var type = parameter.Type!;
@@ -255,6 +325,38 @@ public sealed class EntityClassParser
     private static int? TryReadIntArg(AttributeArgumentSyntax? arg)
     {
         return arg is not null && int.TryParse(arg.Expression.ToString(), out var value) ? value : null;
+    }
+
+    private static IEnumerable<AttributeSyntax> FindAttributes(SyntaxList<AttributeListSyntax> attributeLists, string simpleName)
+    {
+        return attributeLists
+            .SelectMany(list => list.Attributes)
+            .Where(attribute => attribute.Name.ToString() is var name
+                && (name == simpleName || name == simpleName + "Attribute"));
+    }
+
+    private static string? TryReadIndexAttributePropertyName(AttributeArgumentSyntax arg)
+    {
+        return arg.Expression switch
+        {
+            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression) => literal.Token.ValueText,
+            InvocationExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax { Identifier.Text: "nameof" },
+                ArgumentList.Arguments: [var nameofArg],
+            } => nameofArg.Expression switch
+            {
+                IdentifierNameSyntax id => id.Identifier.Text,
+                MemberAccessExpressionSyntax { Name.Identifier.Text: var memberName } => memberName,
+                _ => null,
+            },
+            _ => null,
+        };
+    }
+
+    private static bool TryReadBoolArg(AttributeArgumentSyntax? arg)
+    {
+        return arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.TrueLiteralExpression);
     }
 
     public ParseResult<IReadOnlyList<RelationshipConfig>> ParseRelationships(

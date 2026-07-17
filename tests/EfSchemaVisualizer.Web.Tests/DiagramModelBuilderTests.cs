@@ -234,4 +234,90 @@ public class DiagramModelBuilderTests
 
         Assert.Empty(result.Relationships);
     }
+
+    [Fact]
+    public void Build_IndexAttributeOnly_NoFluentConfig_AttributeIndexUsed()
+    {
+        const string classSource = """
+            [Index(nameof(Email))]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var index = Assert.Single(result.Entities.Single().Indexes);
+        Assert.Equal(new[] { "Email" }, index.PropertyNames);
+    }
+
+    [Fact]
+    public void Build_FluentIndexAndAttributeIndexOnSameProperties_FluentWins()
+    {
+        const string classSource = """
+            [Index(nameof(Email))]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasIndex(e => e.Email).IsUnique();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var index = Assert.Single(result.Entities.Single().Indexes);
+        Assert.True(index.IsUnique);
+    }
+
+    [Fact]
+    public void Build_FluentIndexAndAttributeIndexOnDifferentProperties_BothPresent()
+    {
+        const string classSource = """
+            [Index(nameof(LastName))]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+                public string LastName { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasIndex(e => e.Email);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.Equal(2, result.Entities.Single().Indexes.Count);
+    }
 }

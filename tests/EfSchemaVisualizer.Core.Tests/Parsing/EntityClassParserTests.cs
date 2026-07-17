@@ -815,4 +815,121 @@ public class EntityClassParserTests
 
         Assert.Single(relationshipResult.Value);
     }
+
+    // ─── ParseIndexAttributes ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseIndexAttributes_SinglePropertyViaNameof_ReadsPropertyName()
+    {
+        const string source = """
+            [Index(nameof(Email))]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseIndexAttributes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+        Assert.False(config.IsUnique);
+        Assert.Null(config.Name);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexAttributes_BareStringLiteral_ReadsPropertyName()
+    {
+        const string source = """
+            [Index("Email")]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseIndexAttributes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "Email" }, config.PropertyNames);
+    }
+
+    [Fact]
+    public void ParseIndexAttributes_CompositeProperties_PreservesOrder()
+    {
+        const string source = """
+            [Index(nameof(LastName), nameof(FirstName))]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string FirstName { get; set; }
+                public string LastName { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseIndexAttributes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "LastName", "FirstName" }, config.PropertyNames);
+    }
+
+    [Fact]
+    public void ParseIndexAttributes_NamedArgsIsUniqueAndName_AreRead()
+    {
+        const string source = """
+            [Index(nameof(Email), IsUnique = true, Name = "IX_Person_Email")]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseIndexAttributes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.True(config.IsUnique);
+        Assert.Equal("IX_Person_Email", config.Name);
+    }
+
+    [Fact]
+    public void ParseIndexAttributes_MultipleAttributesOnSameClass_AllRead()
+    {
+        const string source = """
+            [Index(nameof(Email))]
+            [Index(nameof(LastName))]
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+                public string LastName { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseIndexAttributes(source);
+
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c.PropertyNames.SequenceEqual(new[] { "Email" }));
+        Assert.Contains(result.Value, c => c.PropertyNames.SequenceEqual(new[] { "LastName" }));
+    }
+
+    [Fact]
+    public void ParseIndexAttributes_NoIndexAttribute_ReturnsEmpty()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseIndexAttributes(source);
+
+        Assert.Empty(result.Value);
+        Assert.Empty(result.Diagnostics);
+    }
 }

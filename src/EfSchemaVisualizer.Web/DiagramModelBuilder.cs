@@ -29,6 +29,7 @@ public static class DiagramModelBuilder
         var columnTypes = configParser.ParseColumnTypes(configSource);
         var defaultValues = configParser.ParseDefaultValues(configSource);
         var indexes = configParser.ParseIndexes(configSource);
+        var indexAttributes = entityParser.ParseIndexAttributes(classSource);
         var ignoredProperties = configParser.ParseIgnoredProperties(configSource);
         var ignoredEntityNames = configParser.ParseIgnoredEntities(configSource).ToHashSet();
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
@@ -44,10 +45,17 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(columnTypes.Diagnostics);
         diagnostics.AddRange(defaultValues.Diagnostics);
         diagnostics.AddRange(indexes.Diagnostics);
+        diagnostics.AddRange(indexAttributes.Diagnostics);
         diagnostics.AddRange(ignoredProperties.Diagnostics);
         diagnostics.AddRange(fluentRelationships.Diagnostics);
         diagnostics.AddRange(annotationRelationships.Diagnostics);
         diagnostics.AddRange(unrecognizedCalls);
+
+        var fluentIndexKeys = indexes.Value.Select(IndexDedupeKey).ToHashSet();
+        var mergedIndexConfigs = indexAttributes.Value
+            .Where(c => !fluentIndexKeys.Contains(IndexDedupeKey(c)))
+            .Concat(indexes.Value)
+            .ToList();
 
         var entities = entityResult.Value
             .Where(entity => !ignoredEntityNames.Contains(entity.Name))
@@ -59,7 +67,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyColumnNames(entity, columnNames.Value))
             .Select(entity => ModelMerger.ApplyColumnTypes(entity, columnTypes.Value))
             .Select(entity => ModelMerger.ApplyDefaultValues(entity, defaultValues.Value))
-            .Select(entity => ModelMerger.ApplyIndexes(entity, indexes.Value))
+            .Select(entity => ModelMerger.ApplyIndexes(entity, mergedIndexConfigs))
             .Select(entity => ModelMerger.ApplyIgnoredProperties(entity, ignoredProperties.Value))
             .ToList();
 
@@ -81,5 +89,10 @@ public static class DiagramModelBuilder
         RelationshipConfig config)
     {
         return (config.PrincipalEntity, config.DependentEntity, string.Join(",", config.ForeignKeyProperties));
+    }
+
+    private static (string EntityName, string PropertyNames) IndexDedupeKey(IndexConfig config)
+    {
+        return (config.EntityName, string.Join(",", config.PropertyNames));
     }
 }
