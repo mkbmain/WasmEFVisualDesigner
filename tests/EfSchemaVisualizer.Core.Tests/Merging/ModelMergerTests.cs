@@ -356,4 +356,27 @@ public class ModelMergerTests
 
         Assert.Single(merged.Properties);
     }
+
+    // ─── ApplyValueGeneration ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyValueGeneration_SetsValueGeneratedOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var configs = new List<ValueGenerationConfig>
+        {
+            new("Person", "Id", "Identity"),
+            new("Address", "Line1", "OnAdd"), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyValueGeneration(entity, configs);
+
+        Assert.Equal("Identity", merged.Properties.Single(p => p.Name == "Id").ValueGenerated);
+        Assert.Null(merged.Properties.Single(p => p.Name == "Name").ValueGenerated);
+    }
 }

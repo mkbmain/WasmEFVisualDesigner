@@ -1,5 +1,6 @@
 using System.Linq;
 using EfSchemaVisualizer.Web;
+using Xunit;
 
 namespace EfSchemaVisualizer.Web.Tests;
 
@@ -319,5 +320,34 @@ public class DiagramModelBuilderTests
         var result = DiagramModelBuilder.Build(classSource, configSource);
 
         Assert.Equal(2, result.Entities.Single().Indexes.Count);
+    }
+
+    [Fact]
+    public void Build_UseIdentityColumn_SetsValueGeneratedOnProperty()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Id).UseIdentityColumn();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var id = result.Entities.Single().Properties.Single(p => p.Name == "Id");
+        Assert.Equal("Identity", id.ValueGenerated);
     }
 }

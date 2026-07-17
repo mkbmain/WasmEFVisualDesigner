@@ -128,6 +128,19 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyValueGeneration(EntityModel entity, IReadOnlyList<ValueGenerationConfig> configs)
+    {
+        var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var config)
+                ? property with { ValueGenerated = config.Mode }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     /// Builds a property-name-keyed lookup of the configs belonging to `entityName`, in a single
     /// pass over `configs`. Where a property has more than one matching config, the first one
     /// (in list order) wins, matching the `FirstOrDefault` semantics this replaces.

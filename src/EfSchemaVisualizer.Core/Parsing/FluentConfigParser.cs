@@ -519,6 +519,50 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<IgnoreConfig>>(results, diagnostics);
     }
 
+    private static readonly Dictionary<string, string> ValueGenerationCallModes = new()
+    {
+        ["ValueGeneratedOnAdd"] = "OnAdd",
+        ["ValueGeneratedOnUpdate"] = "OnUpdate",
+        ["ValueGeneratedOnAddOrUpdate"] = "OnAddOrUpdate",
+        ["ValueGeneratedNever"] = "Never",
+        ["UseIdentityColumn"] = "Identity",
+    };
+
+    public ParseResult<IReadOnlyList<ValueGenerationConfig>> ParseValueGeneration(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<ValueGenerationConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var (callName, mode) in ValueGenerationCallModes)
+            {
+                foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+                {
+                    var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                    if (propertyName is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnresolvablePropertyName,
+                            $"Could not resolve the property configured by '{callName}'.",
+                            entityName,
+                            PropertyName: null,
+                            call.Span));
+                        continue;
+                    }
+
+                    results.Add(new ValueGenerationConfig(entityName, propertyName, mode));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<ValueGenerationConfig>>(results, diagnostics);
+    }
+
     /// Reads bare `modelBuilder.Ignore<T>()` calls (whole-entity ignore). Distinguished from the
     /// property-level `entity.Ignore(e => e.X)` / `entity.Ignore("X")` overloads by shape alone:
     /// this one is always generic with zero arguments, the property-level one is always

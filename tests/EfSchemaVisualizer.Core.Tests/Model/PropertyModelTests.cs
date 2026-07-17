@@ -188,4 +188,24 @@ public class PropertyModelTests
         Assert.Equal("Cascade", updated.OnDeleteBehavior);
         Assert.Equal(original.PrincipalEntity, updated.PrincipalEntity);
     }
+
+    [Fact]
+    public void ValueGenerated_DefaultsToNull()
+    {
+        var property = new PropertyModel("Id", "int", IsNullable: false, MaxLength: null);
+
+        Assert.Null(property.ValueGenerated);
+    }
+
+    [Fact]
+    public void WithValueGenerated_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new PropertyModel("Id", "int", IsNullable: false, MaxLength: null);
+
+        var updated = original with { ValueGenerated = "Identity" };
+
+        Assert.Null(original.ValueGenerated);
+        Assert.Equal("Identity", updated.ValueGenerated);
+        Assert.Equal(original.Name, updated.Name);
+    }
 }

@@ -10,4 +10,6 @@ public sealed record PropertyModel(
     int? Scale = null,
     string? ColumnName = null,
     string? ColumnType = null,
-    string? DefaultValueLiteral = null);
+    string? DefaultValueLiteral = null,
+    string? ValueGenerated = null,
+    bool IsShadow = false);

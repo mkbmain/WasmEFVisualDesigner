@@ -2213,4 +2213,71 @@ public class FluentConfigParserTests
 
         Assert.Equal(new[] { "AuditLog" }, result);
     }
+
+    // ─── ParseValueGeneration ──────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("ValueGeneratedOnAdd", "OnAdd")]
+    [InlineData("ValueGeneratedOnUpdate", "OnUpdate")]
+    [InlineData("ValueGeneratedOnAddOrUpdate", "OnAddOrUpdate")]
+    [InlineData("ValueGeneratedNever", "Never")]
+    [InlineData("UseIdentityColumn", "Identity")]
+    public void ParseValueGeneration_EachRecognizedCall_MapsToExpectedMode(string callName, string expectedMode)
+    {
+        var source = $$"""
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.Id).{{callName}}();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueGeneration(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Id", config.PropertyName);
+        Assert.Equal(expectedMode, config.Mode);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseValueGeneration_NoValueGenerationCalls_ReturnsEmpty()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueGeneration(source);
+
+        Assert.Empty(result.Value);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseValueGeneration_IEntityTypeConfigurationStyle_ReadsMode()
+    {
+        const string source = """
+            class PersonConfig : IEntityTypeConfiguration<Person> {
+                public void Configure(EntityTypeBuilder<Person> builder) {
+                    builder.Property(e => e.Id).UseIdentityColumn();
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueGeneration(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Id", config.PropertyName);
+        Assert.Equal("Identity", config.Mode);
+    }
 }
