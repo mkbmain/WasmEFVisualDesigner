@@ -62,161 +62,169 @@
         {
             var isKey = Node.Entity.KeyPropertyNames.Contains(property.Name);
             <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "")">
-                @if (isKey)
+                @if (property.IsShadow)
                 {
-                    <text>🔑 </text>
-                }
-                @if (_editingPropertyName == property.Name)
-                {
-                    <input value="@_editingPropertyValue"
-                           @oninput="e => _editingPropertyValue = e.Value?.ToString() ?? string.Empty"
-                           @onblur="() => CommitPropertyRename(property.Name)"
-                           @onkeydown="e => OnPropertyRenameKeyDown(e, property.Name)"
-                           @onpointerdown:stopPropagation="true"
-                           @onmousedown:stopPropagation="true" />
+                    <span class="shadow-property" title="Shadow property: configured in code but has no matching CLR member. Read-only here."
+                          style="font-style: italic; color: #888;">@property.Name : @property.ClrType@(property.IsNullable ? "?" : "") (shadow)</span>
                 }
                 else
                 {
-                    <span @ondblclick="() => BeginPropertyRename(property.Name)" title="Double-click to rename property"
-                          style="cursor: text; border-bottom: 1px dashed #999;">@property.Name</span>
-                }
-                :
-                @if (_editingPropertyType == property.Name)
-                {
-                    <input style="width: 90px;" value="@_editingTypeValue"
-                           @oninput="e => _editingTypeValue = e.Value?.ToString() ?? string.Empty"
-                           @onblur="() => CommitTypeEdit(property)"
-                           @onkeydown="e => OnTypeKeyDown(e, property)"
-                           @onpointerdown:stopPropagation="true"
-                           @onmousedown:stopPropagation="true" />
-                }
-                else
-                {
-                    <span @ondblclick="() => BeginTypeEdit(property)" title="Double-click to edit type"
-                          style="cursor: text; border-bottom: 1px dashed #999;">@property.ClrType@(property.IsNullable ? "?" : "")</span>
-                }
-                @if (property.ValueGenerated is not null)
-                {
-                    <span class="value-generated-badge" title="EF value generation: @property.ValueGenerated"
-                          style="font-size: 0.7em; background: #ddf; border-radius: 3px; padding: 1px 4px; margin-left: 4px;">@property.ValueGenerated</span>
-                }
-                <label style="font-size: 0.8em; margin-left: 4px;">
-                    <input type="checkbox" checked="@property.IsNullable"
-                           @onchange="e => ToggleNullable(property, (bool)(e.Value ?? false))"
-                           @onpointerdown:stopPropagation="true"
-                           @onmousedown:stopPropagation="true" />
-                    nullable
-                </label>
-                <button type="button" title="More options" aria-label="More options" style="border: none; background: transparent; cursor: pointer;"
-                        @onclick="() => ToggleExpand(property.Name)"
-                        @onpointerdown:stopPropagation="true"
-                        @onmousedown:stopPropagation="true">@(_expandedPropertyName == property.Name ? "▾" : "▸")</button>
-                <button type="button" title="Remove property" aria-label="Remove property" style="border: none; background: transparent; cursor: pointer;"
-                        @onclick="() => RemoveProperty(property.Name)"
-                        @onpointerdown:stopPropagation="true"
-                        @onmousedown:stopPropagation="true">×</button>
-                @if (_propertyErrors.TryGetValue(property.Name, out var propertyError))
-                {
-                    <div style="color: red; font-size: 0.8em;">@propertyError</div>
-                }
-                @if (_expandedPropertyName == property.Name)
-                {
-                    <div style="margin: 4px 0 4px 16px; padding: 4px 8px; background: #f7f7f7; border-left: 2px solid #ccc;">
-                        <label style="font-size: 0.8em; display: block;">
-                            <input type="checkbox" checked="@Node.Entity.KeyPropertyNames.Contains(property.Name)"
-                                   @onchange="e => ToggleKey(property, (bool)(e.Value ?? false))"
-                                   @onpointerdown:stopPropagation="true"
-                                   @onmousedown:stopPropagation="true" />
-                            primary key
-                        </label>
-                        <div style="font-size: 0.8em; margin-top: 4px;">
-                            <label style="display: block;">
-                                Max length:
-                                <input type="number" style="width: 60px;" value="@property.MaxLength"
-                                       @onchange="e => CommitMaxLength(property, ParseNullableInt(e.Value?.ToString()))"
+                    @if (isKey)
+                    {
+                        <text>🔑 </text>
+                    }
+                    @if (_editingPropertyName == property.Name)
+                    {
+                        <input value="@_editingPropertyValue"
+                               @oninput="e => _editingPropertyValue = e.Value?.ToString() ?? string.Empty"
+                               @onblur="() => CommitPropertyRename(property.Name)"
+                               @onkeydown="e => OnPropertyRenameKeyDown(e, property.Name)"
+                               @onpointerdown:stopPropagation="true"
+                               @onmousedown:stopPropagation="true" />
+                    }
+                    else
+                    {
+                        <span @ondblclick="() => BeginPropertyRename(property.Name)" title="Double-click to rename property"
+                              style="cursor: text; border-bottom: 1px dashed #999;">@property.Name</span>
+                    }
+                    <text>:</text>
+                    @if (_editingPropertyType == property.Name)
+                    {
+                        <input style="width: 90px;" value="@_editingTypeValue"
+                               @oninput="e => _editingTypeValue = e.Value?.ToString() ?? string.Empty"
+                               @onblur="() => CommitTypeEdit(property)"
+                               @onkeydown="e => OnTypeKeyDown(e, property)"
+                               @onpointerdown:stopPropagation="true"
+                               @onmousedown:stopPropagation="true" />
+                    }
+                    else
+                    {
+                        <span @ondblclick="() => BeginTypeEdit(property)" title="Double-click to edit type"
+                              style="cursor: text; border-bottom: 1px dashed #999;">@property.ClrType@(property.IsNullable ? "?" : "")</span>
+                    }
+                    @if (property.ValueGenerated is not null)
+                    {
+                        <span class="value-generated-badge" title="EF value generation: @property.ValueGenerated"
+                              style="font-size: 0.7em; background: #ddf; border-radius: 3px; padding: 1px 4px; margin-left: 4px;">@property.ValueGenerated</span>
+                    }
+                    <label style="font-size: 0.8em; margin-left: 4px;">
+                        <input type="checkbox" checked="@property.IsNullable"
+                               @onchange="e => ToggleNullable(property, (bool)(e.Value ?? false))"
+                               @onpointerdown:stopPropagation="true"
+                               @onmousedown:stopPropagation="true" />
+                        nullable
+                    </label>
+                    <button type="button" title="More options" aria-label="More options" style="border: none; background: transparent; cursor: pointer;"
+                            @onclick="() => ToggleExpand(property.Name)"
+                            @onpointerdown:stopPropagation="true"
+                            @onmousedown:stopPropagation="true">@(_expandedPropertyName == property.Name ? "▾" : "▸")</button>
+                    <button type="button" title="Remove property" aria-label="Remove property" style="border: none; background: transparent; cursor: pointer;"
+                            @onclick="() => RemoveProperty(property.Name)"
+                            @onpointerdown:stopPropagation="true"
+                            @onmousedown:stopPropagation="true">×</button>
+                    @if (_propertyErrors.TryGetValue(property.Name, out var propertyError))
+                    {
+                        <div style="color: red; font-size: 0.8em;">@propertyError</div>
+                    }
+                    @if (_expandedPropertyName == property.Name)
+                    {
+                        <div style="margin: 4px 0 4px 16px; padding: 4px 8px; background: #f7f7f7; border-left: 2px solid #ccc;">
+                            <label style="font-size: 0.8em; display: block;">
+                                <input type="checkbox" checked="@Node.Entity.KeyPropertyNames.Contains(property.Name)"
+                                       @onchange="e => ToggleKey(property, (bool)(e.Value ?? false))"
                                        @onpointerdown:stopPropagation="true"
                                        @onmousedown:stopPropagation="true" />
+                                primary key
                             </label>
-                            <label style="display: block;">
-                                Required override:
-                                <select value="@RequiredOverrideValue(property)" @onchange="e => CommitRequiredOverride(property, e.Value?.ToString())"
-                                        @onpointerdown:stopPropagation="true"
-                                        @onmousedown:stopPropagation="true">
-                                    <option value="">(no override)</option>
-                                    <option value="true">Required</option>
-                                    <option value="false">Not required</option>
-                                </select>
-                            </label>
-                            <label style="display: block;">
-                                Column name:
-                                <input style="width: 100px;" value="@property.ColumnName" placeholder="(same as property)"
-                                       @onchange="e => CommitColumnName(property, e.Value?.ToString())"
-                                       @onpointerdown:stopPropagation="true"
-                                       @onmousedown:stopPropagation="true" />
-                            </label>
-                            <label style="display: block;">
-                                Column type:
-                                <input style="width: 100px;" value="@property.ColumnType" placeholder="(default)"
-                                       @onchange="e => CommitColumnType(property, e.Value?.ToString())"
-                                       @onpointerdown:stopPropagation="true"
-                                       @onmousedown:stopPropagation="true" />
-                            </label>
-                            <label style="display: block;">
-                                Precision:
-                                <input type="number" style="width: 50px;" value="@property.Precision"
-                                       @onchange="e => CommitPrecision(property, ParseNullableInt(e.Value?.ToString()))"
-                                       @onpointerdown:stopPropagation="true"
-                                       @onmousedown:stopPropagation="true" />
-                                Scale:
-                                <input type="number" style="width: 50px;" value="@property.Scale"
-                                       @onchange="e => CommitScale(property, ParseNullableInt(e.Value?.ToString()))"
-                                       @onpointerdown:stopPropagation="true"
-                                       @onmousedown:stopPropagation="true" />
-                            </label>
-                            <label style="display: block;">
-                                Default value:
-                                <input style="width: 100px;" value="@property.DefaultValueLiteral" placeholder="(none)"
-                                       @onchange="e => CommitDefaultValue(property, e.Value?.ToString())"
-                                       @onpointerdown:stopPropagation="true"
-                                       @onmousedown:stopPropagation="true" />
-                            </label>
-                        </div>
-                        <div style="font-size: 0.8em; margin-top: 4px;">
-                            <div>Indexes:</div>
-                            @foreach (var index in Node.Entity.Indexes)
-                            {
-                                <div style="display: flex; align-items: center; gap: 4px; margin: 2px 0;">
-                                    <input type="checkbox" checked="@index.PropertyNames.Contains(property.Name)"
-                                           @onchange="e => ToggleIndexMembership(property, index, (bool)(e.Value ?? false))"
+                            <div style="font-size: 0.8em; margin-top: 4px;">
+                                <label style="display: block;">
+                                    Max length:
+                                    <input type="number" style="width: 60px;" value="@property.MaxLength"
+                                           @onchange="e => CommitMaxLength(property, ParseNullableInt(e.Value?.ToString()))"
                                            @onpointerdown:stopPropagation="true"
                                            @onmousedown:stopPropagation="true" />
-                                    <span>[@string.Join(", ", index.PropertyNames)]</span>
-                                    <label>
-                                        <input type="checkbox" checked="@index.IsUnique"
-                                               @onchange="e => SetIndexUnique(index, (bool)(e.Value ?? false))"
+                                </label>
+                                <label style="display: block;">
+                                    Required override:
+                                    <select value="@RequiredOverrideValue(property)" @onchange="e => CommitRequiredOverride(property, e.Value?.ToString())"
+                                            @onpointerdown:stopPropagation="true"
+                                            @onmousedown:stopPropagation="true">
+                                        <option value="">(no override)</option>
+                                        <option value="true">Required</option>
+                                        <option value="false">Not required</option>
+                                    </select>
+                                </label>
+                                <label style="display: block;">
+                                    Column name:
+                                    <input style="width: 100px;" value="@property.ColumnName" placeholder="(same as property)"
+                                           @onchange="e => CommitColumnName(property, e.Value?.ToString())"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                </label>
+                                <label style="display: block;">
+                                    Column type:
+                                    <input style="width: 100px;" value="@property.ColumnType" placeholder="(default)"
+                                           @onchange="e => CommitColumnType(property, e.Value?.ToString())"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                </label>
+                                <label style="display: block;">
+                                    Precision:
+                                    <input type="number" style="width: 50px;" value="@property.Precision"
+                                           @onchange="e => CommitPrecision(property, ParseNullableInt(e.Value?.ToString()))"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                    Scale:
+                                    <input type="number" style="width: 50px;" value="@property.Scale"
+                                           @onchange="e => CommitScale(property, ParseNullableInt(e.Value?.ToString()))"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                </label>
+                                <label style="display: block;">
+                                    Default value:
+                                    <input style="width: 100px;" value="@property.DefaultValueLiteral" placeholder="(none)"
+                                           @onchange="e => CommitDefaultValue(property, e.Value?.ToString())"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                </label>
+                            </div>
+                            <div style="font-size: 0.8em; margin-top: 4px;">
+                                <div>Indexes:</div>
+                                @foreach (var index in Node.Entity.Indexes)
+                                {
+                                    <div style="display: flex; align-items: center; gap: 4px; margin: 2px 0;">
+                                        <input type="checkbox" checked="@index.PropertyNames.Contains(property.Name)"
+                                               @onchange="e => ToggleIndexMembership(property, index, (bool)(e.Value ?? false))"
                                                @onpointerdown:stopPropagation="true"
                                                @onmousedown:stopPropagation="true" />
-                                        unique
-                                    </label>
-                                    <input value="@index.Name" placeholder="(auto name)" style="width: 90px;"
-                                           @onchange="e => RenameIndex(index, e.Value?.ToString())"
-                                           @onpointerdown:stopPropagation="true"
-                                           @onmousedown:stopPropagation="true" />
-                                    <button type="button" title="Remove index" aria-label="Remove index" style="border: none; background: transparent; cursor: pointer;"
-                                            @onclick="() => RemoveIndex(index)"
-                                            @onpointerdown:stopPropagation="true"
-                                            @onmousedown:stopPropagation="true">×</button>
-                                </div>
-                            }
-                            <button type="button" @onclick="() => AddIndex(property)"
-                                    @onpointerdown:stopPropagation="true"
-                                    @onmousedown:stopPropagation="true">+ New index on this property</button>
-                            @if (_indexError is not null)
-                            {
-                                <div style="color: red;">@_indexError</div>
-                            }
+                                        <span>[@string.Join(", ", index.PropertyNames)]</span>
+                                        <label>
+                                            <input type="checkbox" checked="@index.IsUnique"
+                                                   @onchange="e => SetIndexUnique(index, (bool)(e.Value ?? false))"
+                                                   @onpointerdown:stopPropagation="true"
+                                                   @onmousedown:stopPropagation="true" />
+                                            unique
+                                        </label>
+                                        <input value="@index.Name" placeholder="(auto name)" style="width: 90px;"
+                                               @onchange="e => RenameIndex(index, e.Value?.ToString())"
+                                               @onpointerdown:stopPropagation="true"
+                                               @onmousedown:stopPropagation="true" />
+                                        <button type="button" title="Remove index" aria-label="Remove index" style="border: none; background: transparent; cursor: pointer;"
+                                                @onclick="() => RemoveIndex(index)"
+                                                @onpointerdown:stopPropagation="true"
+                                                @onmousedown:stopPropagation="true">×</button>
+                                    </div>
+                                }
+                                <button type="button" @onclick="() => AddIndex(property)"
+                                        @onpointerdown:stopPropagation="true"
+                                        @onmousedown:stopPropagation="true">+ New index on this property</button>
+                                @if (_indexError is not null)
+                                {
+                                    <div style="color: red;">@_indexError</div>
+                                }
+                            </div>
                         </div>
-                    </div>
+                    }
                 }
             </li>
         }

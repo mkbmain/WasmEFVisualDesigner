@@ -14,6 +14,15 @@ public class EntityNodeMarkupTests
         Assert.Contains("value-generated-badge", markup);
     }
 
+    [Fact]
+    public void PropertyRow_RendersReadOnlyShadowRow_WhenIsShadowIsSet()
+    {
+        var markup = ReadEntityNodeRazorSource();
+
+        Assert.Contains("property.IsShadow", markup);
+        Assert.Contains("shadow-property", markup);
+    }
+
     private static string ReadEntityNodeRazorSource()
     {
         var path = Path.Combine(FindRepoRoot(), "src", "EfSchemaVisualizer.Web", "Diagram", "EntityNode.razor");
