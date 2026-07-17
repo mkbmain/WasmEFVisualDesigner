@@ -208,4 +208,23 @@ public class PropertyModelTests
         Assert.Equal("Identity", updated.ValueGenerated);
         Assert.Equal(original.Name, updated.Name);
     }
+
+    [Fact]
+    public void IsShadow_DefaultsToFalse()
+    {
+        var property = new PropertyModel("Id", "int", IsNullable: false, MaxLength: null);
+
+        Assert.False(property.IsShadow);
+    }
+
+    [Fact]
+    public void WithIsShadow_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new PropertyModel("CreatedBy", "string", IsNullable: true, MaxLength: null);
+
+        var updated = original with { IsShadow = true };
+
+        Assert.False(original.IsShadow);
+        Assert.True(updated.IsShadow);
+    }
 }

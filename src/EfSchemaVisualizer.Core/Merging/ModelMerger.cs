@@ -141,6 +141,23 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyShadowProperties(EntityModel entity, IReadOnlyList<ShadowPropertyConfig> configs)
+    {
+        var existingNames = entity.Properties.Select(p => p.Name).ToHashSet();
+
+        var shadowProperties = configs
+            .Where(c => c.EntityName == entity.Name && !existingNames.Contains(c.PropertyName))
+            .Select(c => new PropertyModel(c.PropertyName, c.ClrType, IsNullable: true, MaxLength: null, IsShadow: true))
+            .ToList();
+
+        if (shadowProperties.Count == 0)
+        {
+            return entity;
+        }
+
+        return entity with { Properties = entity.Properties.Concat(shadowProperties).ToList() };
+    }
+
     /// Builds a property-name-keyed lookup of the configs belonging to `entityName`, in a single
     /// pass over `configs`. Where a property has more than one matching config, the first one
     /// (in list order) wins, matching the `FirstOrDefault` semantics this replaces.

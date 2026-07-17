@@ -2280,4 +2280,64 @@ public class FluentConfigParserTests
         Assert.Equal("Id", config.PropertyName);
         Assert.Equal("Identity", config.Mode);
     }
+
+    // ─── ParseShadowProperties ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseShadowProperties_GenericPropertyWithStringLiteralName_ReadsNameAndType()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property<string>("CreatedBy");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseShadowProperties(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("CreatedBy", config.PropertyName);
+        Assert.Equal("string", config.ClrType);
+    }
+
+    [Fact]
+    public void ParseShadowProperties_NonGenericPropertyCall_NotTreatedAsShadow()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseShadowProperties(source);
+
+        Assert.Empty(result.Value);
+    }
+
+    [Fact]
+    public void ParseShadowProperties_IEntityTypeConfigurationStyle_ReadsNameAndType()
+    {
+        const string source = """
+            class PersonConfig : IEntityTypeConfiguration<Person> {
+                public void Configure(EntityTypeBuilder<Person> builder) {
+                    builder.Property<DateTime>("LastModified");
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseShadowProperties(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("LastModified", config.PropertyName);
+        Assert.Equal("DateTime", config.ClrType);
+    }
 }

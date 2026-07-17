@@ -379,4 +379,61 @@ public class ModelMergerTests
         Assert.Equal("Identity", merged.Properties.Single(p => p.Name == "Id").ValueGenerated);
         Assert.Null(merged.Properties.Single(p => p.Name == "Name").ValueGenerated);
     }
+
+    // ─── ApplyShadowProperties ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyShadowProperties_AppendsSynthesizedPropertyForUnmatchedConfig()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<ShadowPropertyConfig>
+        {
+            new("Person", "CreatedBy", "string"),
+            new("Address", "Line1", "string"), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyShadowProperties(entity, configs);
+
+        Assert.Equal(2, merged.Properties.Count);
+        var shadow = merged.Properties.Single(p => p.Name == "CreatedBy");
+        Assert.Equal("string", shadow.ClrType);
+        Assert.True(shadow.IsShadow);
+    }
+
+    [Fact]
+    public void ApplyShadowProperties_NameCollidesWithExistingProperty_DoesNotSynthesizeDuplicate()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("CreatedBy", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var configs = new List<ShadowPropertyConfig>
+        {
+            new("Person", "CreatedBy", "string"),
+        };
+
+        var merged = ModelMerger.ApplyShadowProperties(entity, configs);
+
+        Assert.Equal(2, merged.Properties.Count);
+        Assert.False(merged.Properties.Single(p => p.Name == "CreatedBy").IsShadow);
+    }
+
+    [Fact]
+    public void ApplyShadowProperties_NoMatchingConfig_ReturnsEntityUnchanged()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyShadowProperties(entity, new List<ShadowPropertyConfig>());
+
+        Assert.Single(merged.Properties);
+    }
 }

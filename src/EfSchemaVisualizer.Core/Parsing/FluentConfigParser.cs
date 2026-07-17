@@ -563,6 +563,38 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<ValueGenerationConfig>>(results, diagnostics);
     }
 
+    public ParseResult<IReadOnlyList<ShadowPropertyConfig>> ParseShadowProperties(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<ShadowPropertyConfig>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var propertyCall in FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
+            {
+                if (propertyCall.Expression is not MemberAccessExpressionSyntax
+                    {
+                        Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArgNode] },
+                    })
+                {
+                    continue;
+                }
+
+                if (propertyCall.ArgumentList.Arguments.FirstOrDefault()?.Expression is not LiteralExpressionSyntax literal
+                    || !literal.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    continue;
+                }
+
+                results.Add(new ShadowPropertyConfig(entityName, literal.Token.ValueText, typeArgNode.ToString()));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<ShadowPropertyConfig>>(results, new List<Diagnostic>());
+    }
+
     /// Reads bare `modelBuilder.Ignore<T>()` calls (whole-entity ignore). Distinguished from the
     /// property-level `entity.Ignore(e => e.X)` / `entity.Ignore("X")` overloads by shape alone:
     /// this one is always generic with zero arguments, the property-level one is always

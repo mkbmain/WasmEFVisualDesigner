@@ -350,4 +350,34 @@ public class DiagramModelBuilderTests
         var id = result.Entities.Single().Properties.Single(p => p.Name == "Id");
         Assert.Equal("Identity", id.ValueGenerated);
     }
+
+    [Fact]
+    public void Build_ShadowProperty_AppearsAsIsShadowProperty()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property<string>("CreatedBy");
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var shadow = result.Entities.Single().Properties.Single(p => p.Name == "CreatedBy");
+        Assert.True(shadow.IsShadow);
+        Assert.Equal("string", shadow.ClrType);
+    }
 }
