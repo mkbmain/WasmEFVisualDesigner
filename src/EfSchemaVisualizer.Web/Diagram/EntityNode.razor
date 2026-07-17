@@ -95,6 +95,11 @@
                     <span @ondblclick="() => BeginTypeEdit(property)" title="Double-click to edit type"
                           style="cursor: text; border-bottom: 1px dashed #999;">@property.ClrType@(property.IsNullable ? "?" : "")</span>
                 }
+                @if (property.ValueGenerated is not null)
+                {
+                    <span class="value-generated-badge" title="EF value generation: @property.ValueGenerated"
+                          style="font-size: 0.7em; background: #ddf; border-radius: 3px; padding: 1px 4px; margin-left: 4px;">@property.ValueGenerated</span>
+                }
                 <label style="font-size: 0.8em; margin-left: 4px;">
                     <input type="checkbox" checked="@property.IsNullable"
                            @onchange="e => ToggleNullable(property, (bool)(e.Value ?? false))"
