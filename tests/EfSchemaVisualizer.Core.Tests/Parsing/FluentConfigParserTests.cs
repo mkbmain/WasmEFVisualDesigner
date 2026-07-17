@@ -2160,4 +2160,57 @@ public class FluentConfigParserTests
         Assert.Equal("Person", config.EntityName);
         Assert.Equal("Notes", config.PropertyName);
     }
+
+    // ─── ParseIgnoredEntities ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseIgnoredEntities_BareGenericCall_ReadsEntityTypeName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Ignore<AuditLog>();
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIgnoredEntities(source);
+
+        Assert.Equal(new[] { "AuditLog" }, result);
+    }
+
+    [Fact]
+    public void ParseIgnoredEntities_NoIgnoreCalls_ReturnsEmpty()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => { });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIgnoredEntities(source);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ParseIgnoredEntities_DoesNotConfusePropertyLevelIgnoreWithWholeEntityIgnore()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Ignore(e => e.Notes);
+                    });
+                    modelBuilder.Ignore<AuditLog>();
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIgnoredEntities(source);
+
+        Assert.Equal(new[] { "AuditLog" }, result);
+    }
 }

@@ -166,4 +166,72 @@ public class DiagramModelBuilderTests
         Assert.DoesNotContain(person.Properties, p => p.Name == "Notes");
         Assert.Contains(person.Properties, p => p.Name == "Id");
     }
+
+    [Fact]
+    public void Build_IgnoredEntity_IsDroppedFromDiagram()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+
+            public class AuditLog
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Ignore<AuditLog>();
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.DoesNotContain(result.Entities, e => e.Name == "AuditLog");
+        Assert.Contains(result.Entities, e => e.Name == "Person");
+    }
+
+    [Fact]
+    public void Build_IgnoredEntity_DropsRelationshipsReferencingIt()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public List<AuditLog> Logs { get; set; }
+            }
+
+            public class AuditLog
+            {
+                public int Id { get; set; }
+                public int PersonId { get; set; }
+                public Person Person { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasMany(p => p.Logs).WithOne(a => a.Person).HasForeignKey(a => a.PersonId);
+                    });
+                    modelBuilder.Ignore<AuditLog>();
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.Empty(result.Relationships);
+    }
 }

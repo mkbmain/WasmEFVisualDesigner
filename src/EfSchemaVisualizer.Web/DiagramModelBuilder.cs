@@ -1,3 +1,4 @@
+using System.Linq;
 using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
@@ -29,6 +30,7 @@ public static class DiagramModelBuilder
         var defaultValues = configParser.ParseDefaultValues(configSource);
         var indexes = configParser.ParseIndexes(configSource);
         var ignoredProperties = configParser.ParseIgnoredProperties(configSource);
+        var ignoredEntityNames = configParser.ParseIgnoredEntities(configSource).ToHashSet();
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
         var annotationRelationships = entityParser.ParseRelationships(classSource, entityResult.Value);
         var unrecognizedCalls = configParser.ParseUnrecognizedCalls(configSource);
@@ -48,6 +50,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(unrecognizedCalls);
 
         var entities = entityResult.Value
+            .Where(entity => !ignoredEntityNames.Contains(entity.Name))
             .Select(entity => ModelMerger.ApplyMaxLengths(entity, maxLengths.Value))
             .Select(entity => ModelMerger.ApplyPrecisions(entity, precisions.Value))
             .Select(entity => ModelMerger.ApplyIsRequired(entity, isRequired.Value))
@@ -66,6 +69,7 @@ public static class DiagramModelBuilder
 
         var mergedRelationshipConfigs = fluentRelationships.Value
             .Concat(annotationRelationships.Value.Where(r => !fluentRelationshipKeys.Contains(RelationshipDedupeKey(r))))
+            .Where(r => !ignoredEntityNames.Contains(r.PrincipalEntity) && !ignoredEntityNames.Contains(r.DependentEntity))
             .ToList();
 
         var relationshipModels = ModelMerger.ApplyRelationships(mergedRelationshipConfigs);

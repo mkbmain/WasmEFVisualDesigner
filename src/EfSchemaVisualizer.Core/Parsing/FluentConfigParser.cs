@@ -519,6 +519,38 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<IgnoreConfig>>(results, diagnostics);
     }
 
+    /// Reads bare `modelBuilder.Ignore<T>()` calls (whole-entity ignore). Distinguished from the
+    /// property-level `entity.Ignore(e => e.X)` / `entity.Ignore("X")` overloads by shape alone:
+    /// this one is always generic with zero arguments, the property-level one is always
+    /// non-generic with exactly one argument, so no scope/receiver disambiguation is needed.
+    public IReadOnlyList<string> ParseIgnoredEntities(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<string>();
+
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (invocation.Expression is not MemberAccessExpressionSyntax
+                {
+                    Name: GenericNameSyntax { Identifier.Text: "Ignore", TypeArgumentList.Arguments: [var typeArg] },
+                })
+            {
+                continue;
+            }
+
+            if (invocation.ArgumentList.Arguments.Count != 0)
+            {
+                continue;
+            }
+
+            results.Add(typeArg.ToString());
+        }
+
+        return results.Distinct().ToList();
+    }
+
     public ParseResult<IReadOnlyList<RelationshipConfig>> ParseRelationships(
         string sourceCode, IReadOnlyList<EntityModel> entities)
     {
