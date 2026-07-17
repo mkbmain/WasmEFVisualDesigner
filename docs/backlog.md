@@ -852,21 +852,54 @@ these matter before any new surface is added.
 > item above is the cheap mitigation for all of them; parsing is the real fix,
 > roughly in this order of real-world frequency):
 
-- [ ] **`[found]` `Ignore` is unread — ignored members render as mapped.**
+- [x] **`[found]` `Ignore` is unread — ignored members render as mapped.**
       `entity.Ignore(e => e.X)` and `modelBuilder.Ignore<T>()` are dropped, so
       properties/entities the user explicitly excluded from the model show up
       in the diagram as real columns/tables. Arguably a P0-class wrongness;
       listed here because the fix is a parser addition.
-- [ ] **`[found]` `[Index]` class-level attribute unread.** Very common since
+      **Update:** `FluentConfigParser.ParseIgnoredProperties` reads
+      property-level `entity.Ignore(e => e.X)`/`entity.Ignore("X")` into a new
+      `IgnoreConfig`, folded in via `ModelMerger.ApplyIgnoredProperties`;
+      `FluentConfigParser.ParseIgnoredEntities` reads whole-entity
+      `modelBuilder.Ignore<T>()` (disambiguated from the property-level form
+      purely by call shape — generic+zero-args vs non-generic+one-arg) and
+      `DiagramModelBuilder.Build` drops the matching entity and any
+      relationship referencing it as principal or dependent — see
+      `2026-07-17-ignore-index-valuegen-shadow-props-design.md`. Parse +
+      merge only, no rewriter/write-back.
+- [x] **`[found]` `[Index]` class-level attribute unread.** Very common since
       EF Core 5 (scaffold emits it). Should fold into `EntityModel.Indexes`
       exactly like fluent `HasIndex`, fluent-wins on conflict.
-- [ ] **`[found]` Value generation unread.** `ValueGeneratedOnAdd`/`OnUpdate`/
+      **Update:** `EntityClassParser.ParseIndexAttributes` reads `[Index]`
+      (including `AllowMultiple`, `nameof()`/string-literal property args, and
+      the `IsUnique`/`Name` named args) into the existing `IndexConfig` DTO;
+      `DiagramModelBuilder.Build` merges attribute- and fluent-derived
+      `IndexConfig`s with fluent-wins-on-conflict (same-property-set
+      collisions drop the attribute entry, disjoint sets keep both).
+- [x] **`[found]` Value generation unread.** `ValueGeneratedOnAdd`/`OnUpdate`/
       `Never`, `UseIdentityColumn`. Identity columns are near-universal;
       at minimum surface as a property badge.
-- [ ] **`[found]` Shadow properties dropped.** `entity.Property<string>("CreatedBy")`
+      **Update:** `FluentConfigParser.ParseValueGeneration` reads all five
+      calls into a new `PropertyModel.ValueGenerated` (`string?`, matching the
+      codebase's existing string-vocabulary precedent for display-only EF
+      fields) via a new `ValueGenerationConfig`/`ModelMerger.ApplyValueGeneration`;
+      `EntityNode.razor` shows it as a small read-only badge next to the
+      property's type. No editor.
+- [x] **`[found]` Shadow properties dropped.** `entity.Property<string>("CreatedBy")`
       configures a property with no CLR member; merge finds no match and the
       config vanishes. Model them as properties flagged `IsShadow` (read-only
       rows in the UI until the rewriter learns to create them).
+      **Update:** `FluentConfigParser.ParseShadowProperties` reads generic
+      `Property<T>("Name")` calls into a new `ShadowPropertyConfig`;
+      `ModelMerger.ApplyShadowProperties` synthesizes a `PropertyModel` with
+      `IsShadow: true` for any config whose name doesn't already match a real
+      property (a same-named real property wins, no duplicate); `EntityNode.razor`
+      renders shadow rows as a dimmed, read-only single line with no
+      rename/retype/remove/expand-panel affordances. Whole-branch review
+      flagged one minor cross-task gap: value generation configured on a
+      shadow property never shows a badge, since `ApplyValueGeneration` runs
+      before `ApplyShadowProperties` synthesizes the row — an obscure
+      combination, display-only, not fixed in this slice.
 - [ ] **`[found]` Keyless/view entities unread.** `HasNoKey()`, `ToView(...)`,
       `ToSqlQuery(...)`, `[Keyless]`. A scaffolded database-first project with
       views renders these as ordinary tables missing a key.
