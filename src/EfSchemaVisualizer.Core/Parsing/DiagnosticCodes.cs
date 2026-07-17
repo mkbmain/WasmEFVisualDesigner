@@ -16,6 +16,7 @@ public static class DiagnosticCodes
     public const string UnreadableHasDefaultValueArgument = nameof(UnreadableHasDefaultValueArgument);
     public const string UnreadableHasIndexArgument = nameof(UnreadableHasIndexArgument);
     public const string UnreadableIsUniqueArgument = nameof(UnreadableIsUniqueArgument);
+    public const string UnreadableIgnoreArgument = nameof(UnreadableIgnoreArgument);
     public const string UnresolvableRelationshipTarget = nameof(UnresolvableRelationshipTarget);
     public const string UnreadableHasForeignKeyArgument = nameof(UnreadableHasForeignKeyArgument);
     public const string UnreadableOnDeleteArgument = nameof(UnreadableOnDeleteArgument);

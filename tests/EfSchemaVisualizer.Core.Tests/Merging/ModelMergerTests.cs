@@ -320,4 +320,40 @@ public class ModelMergerTests
 
         Assert.Empty(result);
     }
+
+    // ─── ApplyIgnoredProperties ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyIgnoredProperties_RemovesMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Notes", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var configs = new List<IgnoreConfig>
+        {
+            new("Person", "Notes"),
+            new("Address", "Line1"), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyIgnoredProperties(entity, configs);
+
+        Assert.Single(merged.Properties);
+        Assert.Equal("Id", merged.Properties[0].Name);
+    }
+
+    [Fact]
+    public void ApplyIgnoredProperties_NoMatchingConfig_ReturnsEntityUnchanged()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyIgnoredProperties(entity, new List<IgnoreConfig>());
+
+        Assert.Single(merged.Properties);
+    }
 }

@@ -135,4 +135,35 @@ public class DiagramModelBuilderTests
         Assert.Equal("Blog", relationship.PrincipalEntity);
         Assert.Equal("Post", relationship.DependentEntity);
     }
+
+    [Fact]
+    public void Build_IgnoredProperty_IsDroppedFromDiagram()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Notes { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Ignore(e => e.Notes);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var person = result.Entities.Single();
+        Assert.DoesNotContain(person.Properties, p => p.Name == "Notes");
+        Assert.Contains(person.Properties, p => p.Name == "Id");
+    }
 }

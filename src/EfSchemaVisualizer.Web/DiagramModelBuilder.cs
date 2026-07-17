@@ -28,6 +28,7 @@ public static class DiagramModelBuilder
         var columnTypes = configParser.ParseColumnTypes(configSource);
         var defaultValues = configParser.ParseDefaultValues(configSource);
         var indexes = configParser.ParseIndexes(configSource);
+        var ignoredProperties = configParser.ParseIgnoredProperties(configSource);
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
         var annotationRelationships = entityParser.ParseRelationships(classSource, entityResult.Value);
         var unrecognizedCalls = configParser.ParseUnrecognizedCalls(configSource);
@@ -41,6 +42,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(columnTypes.Diagnostics);
         diagnostics.AddRange(defaultValues.Diagnostics);
         diagnostics.AddRange(indexes.Diagnostics);
+        diagnostics.AddRange(ignoredProperties.Diagnostics);
         diagnostics.AddRange(fluentRelationships.Diagnostics);
         diagnostics.AddRange(annotationRelationships.Diagnostics);
         diagnostics.AddRange(unrecognizedCalls);
@@ -55,6 +57,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyColumnTypes(entity, columnTypes.Value))
             .Select(entity => ModelMerger.ApplyDefaultValues(entity, defaultValues.Value))
             .Select(entity => ModelMerger.ApplyIndexes(entity, indexes.Value))
+            .Select(entity => ModelMerger.ApplyIgnoredProperties(entity, ignoredProperties.Value))
             .ToList();
 
         var fluentRelationshipKeys = fluentRelationships.Value

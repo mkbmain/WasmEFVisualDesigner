@@ -18,6 +18,8 @@ public sealed class FluentConfigParser
         "Property", "HasMaxLength", "HasPrecision", "IsRequired", "HasKey", "ToTable",
         "HasColumnName", "HasColumnType", "HasDefaultValue", "HasIndex", "IsUnique",
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
+        "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
+        "ValueGeneratedNever", "UseIdentityColumn",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -483,6 +485,38 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<IndexConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<IgnoreConfig>> ParseIgnoredProperties(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<IgnoreConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "Ignore"))
+            {
+                var propertyName = FluentSyntaxHelpers.TryReadSinglePropertyNameArgument(call);
+
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableIgnoreArgument,
+                        "Ignore argument could not be read as a property name.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                results.Add(new IgnoreConfig(entityName, propertyName));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<IgnoreConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<RelationshipConfig>> ParseRelationships(

@@ -109,6 +109,25 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyIgnoredProperties(EntityModel entity, IReadOnlyList<IgnoreConfig> configs)
+    {
+        var ignoredNames = configs
+            .Where(c => c.EntityName == entity.Name)
+            .Select(c => c.PropertyName)
+            .ToHashSet();
+
+        if (ignoredNames.Count == 0)
+        {
+            return entity;
+        }
+
+        var updatedProperties = entity.Properties
+            .Where(property => !ignoredNames.Contains(property.Name))
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     /// Builds a property-name-keyed lookup of the configs belonging to `entityName`, in a single
     /// pass over `configs`. Where a property has more than one matching config, the first one
     /// (in list order) wins, matching the `FirstOrDefault` semantics this replaces.

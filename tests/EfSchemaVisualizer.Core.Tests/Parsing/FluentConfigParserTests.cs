@@ -1912,7 +1912,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.Ignore(e => e.Secret);
+                        entity.HasComment("A person entity");
                     });
                 }
             }
@@ -1923,7 +1923,7 @@ public class FluentConfigParserTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
-        Assert.Contains("Ignore", diagnostic.Message);
+        Assert.Contains("HasComment", diagnostic.Message);
     }
 
     [Fact]
@@ -2008,7 +2008,7 @@ public class FluentConfigParserTests
 
                         modelBuilder.Entity<Address>(nested =>
                         {
-                            nested.Ignore(e => e.Secret);
+                            nested.HasComment("An address entity");
                         });
                     });
                 }
@@ -2076,5 +2076,88 @@ public class FluentConfigParserTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Contains("HasComment", diagnostic.Message);
+    }
+
+    // ─── ParseIgnoredProperties ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseIgnoredProperties_LambdaForm_ReadsPropertyName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Ignore(e => e.Notes);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIgnoredProperties(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Notes", config.PropertyName);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIgnoredProperties_StringOverload_ReadsPropertyName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Ignore("Notes");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIgnoredProperties(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Notes", config.PropertyName);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIgnoredProperties_UnresolvableArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Ignore(GetIgnoredPropertyName());
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIgnoredProperties(source);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableIgnoreArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+    }
+
+    [Fact]
+    public void ParseIgnoredProperties_IEntityTypeConfigurationStyle_ReadsPropertyName()
+    {
+        const string source = """
+            class PersonConfig : IEntityTypeConfiguration<Person> {
+                public void Configure(EntityTypeBuilder<Person> builder) {
+                    builder.Ignore(e => e.Notes);
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIgnoredProperties(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Notes", config.PropertyName);
     }
 }

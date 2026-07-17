@@ -197,7 +197,16 @@ internal static class FluentSyntaxHelpers
             return null;
         }
 
-        var argumentExpression = propertyInvocation.ArgumentList.Arguments
+        return TryReadSinglePropertyNameArgument(propertyInvocation);
+    }
+
+    /// Resolves a fluent call's first argument to a property name: `e => e.Name` (expression- or
+    /// single-return-block-bodied, `Simple`/`Parenthesized` lambda), or a string literal `"Name"`.
+    /// Shared by `Property(...)`-name resolution above and any other single-argument fluent call
+    /// keyed by property (e.g. `Ignore(e => e.X)` / `Ignore("X")`).
+    internal static string? TryReadSinglePropertyNameArgument(InvocationExpressionSyntax call)
+    {
+        var argumentExpression = call.ArgumentList.Arguments
             .Select(a => a.Expression)
             .FirstOrDefault();
 
