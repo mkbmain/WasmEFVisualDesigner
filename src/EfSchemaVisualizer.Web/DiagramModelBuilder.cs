@@ -25,6 +25,9 @@ public static class DiagramModelBuilder
         var isRequired = configParser.ParseIsRequired(configSource);
         var keys = configParser.ParseKeys(configSource);
         var tables = configParser.ParseTableMappings(configSource);
+        var views = configParser.ParseViewMappings(configSource);
+        var sqlQueries = configParser.ParseSqlQueries(configSource);
+        var fluentKeylessNames = configParser.ParseKeylessEntities(configSource).ToHashSet();
         var columnNames = configParser.ParseColumnNames(configSource);
         var columnTypes = configParser.ParseColumnTypes(configSource);
         var defaultValues = configParser.ParseDefaultValues(configSource);
@@ -43,6 +46,8 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(isRequired.Diagnostics);
         diagnostics.AddRange(keys.Diagnostics);
         diagnostics.AddRange(tables.Diagnostics);
+        diagnostics.AddRange(views.Diagnostics);
+        diagnostics.AddRange(sqlQueries.Diagnostics);
         diagnostics.AddRange(columnNames.Diagnostics);
         diagnostics.AddRange(columnTypes.Diagnostics);
         diagnostics.AddRange(defaultValues.Diagnostics);
@@ -68,6 +73,11 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyIsRequired(entity, isRequired.Value))
             .Select(entity => ModelMerger.ApplyKeys(entity, keys.Value))
             .Select(entity => ModelMerger.ApplyTableMapping(entity, tables.Value))
+            .Select(entity => ModelMerger.ApplyViewMapping(entity, views.Value))
+            .Select(entity => ModelMerger.ApplySqlQuery(entity, sqlQueries.Value))
+            .Select(entity => entity.IsKeyless || fluentKeylessNames.Contains(entity.Name)
+                ? entity with { IsKeyless = true }
+                : entity)
             .Select(entity => ModelMerger.ApplyColumnNames(entity, columnNames.Value))
             .Select(entity => ModelMerger.ApplyColumnTypes(entity, columnTypes.Value))
             .Select(entity => ModelMerger.ApplyDefaultValues(entity, defaultValues.Value))

@@ -380,4 +380,141 @@ public class DiagramModelBuilderTests
         Assert.True(shadow.IsShadow);
         Assert.Equal("string", shadow.ClrType);
     }
+
+    [Fact]
+    public void Build_ToViewCall_SetsViewNameAndSchema()
+    {
+        const string classSource = """
+            public class PersonView
+            {
+                public string Name { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<PersonView>(entity =>
+                    {
+                        entity.ToView("vPeople", "dbo");
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var entity = result.Entities.Single();
+        Assert.Equal("vPeople", entity.ViewName);
+        Assert.Equal("dbo", entity.Schema);
+    }
+
+    [Fact]
+    public void Build_ToSqlQueryCall_SetsSqlQuery()
+    {
+        const string classSource = """
+            public class PersonView
+            {
+                public string Name { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<PersonView>(entity =>
+                    {
+                        entity.ToSqlQuery("SELECT Name FROM People");
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.Equal("SELECT Name FROM People", result.Entities.Single().SqlQuery);
+    }
+
+    [Fact]
+    public void Build_KeylessViaFluentHasNoKey_SetsIsKeylessTrue()
+    {
+        const string classSource = """
+            public class PersonView
+            {
+                public string Name { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<PersonView>(entity =>
+                    {
+                        entity.HasNoKey();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.True(result.Entities.Single().IsKeyless);
+    }
+
+    [Fact]
+    public void Build_KeylessViaAttributeOnly_SetsIsKeylessTrue()
+    {
+        const string classSource = """
+            [Keyless]
+            public class PersonView
+            {
+                public string Name { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.True(result.Entities.Single().IsKeyless);
+    }
+
+    [Fact]
+    public void Build_KeylessViaBothAttributeAndFluent_StillJustTrue()
+    {
+        const string classSource = """
+            [Keyless]
+            public class PersonView
+            {
+                public string Name { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<PersonView>(entity =>
+                    {
+                        entity.HasNoKey();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.True(result.Entities.Single().IsKeyless);
+    }
 }
