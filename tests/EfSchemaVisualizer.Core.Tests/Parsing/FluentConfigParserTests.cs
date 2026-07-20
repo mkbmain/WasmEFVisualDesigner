@@ -992,6 +992,156 @@ public class FluentConfigParserTests
         Assert.Null(diagnostic.PropertyName);
     }
 
+    private const string ViewMappingSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToView("PeopleView", "dbo");
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.ToView("AddressesView");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseViewMappings_ReadsViewNameOnly_AndViewNameWithSchema()
+    {
+        var result = new FluentConfigParser().ParseViewMappings(ViewMappingSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", ViewName: "PeopleView", Schema: "dbo" });
+        Assert.Contains(result.Value, c => c is { EntityName: "Address", ViewName: "AddressesView", Schema: null });
+    }
+
+    private const string ViewMappingSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string ViewName = "PeopleView";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToView(ViewName);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseViewMappings_NonLiteralArgument_EmitsUnreadableToViewArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseViewMappings(ViewMappingSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableToViewArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
+
+    private const string SqlQuerySource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToSqlQuery("SELECT * FROM People");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSqlQueries_ReadsStringLiteralArgument()
+    {
+        var result = new FluentConfigParser().ParseSqlQueries(SqlQuerySource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("SELECT * FROM People", config.Sql);
+    }
+
+    private const string SqlQuerySourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string Query = "SELECT * FROM People";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToSqlQuery(Query);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSqlQueries_NonLiteralArgument_EmitsUnreadableToSqlQueryArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseSqlQueries(SqlQuerySourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableToSqlQueryArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+    }
+
+    private const string KeylessSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasNoKey();
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeylessEntities_ReadsEntityWithHasNoKeyCall()
+    {
+        var result = new FluentConfigParser().ParseKeylessEntities(KeylessSource);
+
+        Assert.Equal(new[] { "Person" }, result);
+    }
+
+    [Fact]
+    public void ParseKeylessEntities_NoHasNoKeyCalls_ReturnsEmpty()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity => { entity.HasKey(e => e.Id); });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseKeylessEntities(source);
+
+        Assert.Empty(result);
+    }
+
     private const string ColumnNameSource = """
         public class AppDbContext : DbContext
         {
@@ -1963,6 +2113,33 @@ public class FluentConfigParserTests
                         entity.HasIndex(e => e.Email).IsUnique();
                         entity.HasOne(e => e.Manager).WithMany(m => m.Reports).HasForeignKey(e => e.ManagerId).OnDelete(DeleteBehavior.Cascade);
                         entity.ToTable("People");
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_ToViewToSqlQueryHasNoKey_AreNotFlagged()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.ToView("PeopleView");
+                        entity.HasNoKey();
+                    });
+
+                    modelBuilder.Entity<Address>(entity =>
+                    {
+                        entity.ToSqlQuery("SELECT * FROM Addresses");
                     });
                 }
             }

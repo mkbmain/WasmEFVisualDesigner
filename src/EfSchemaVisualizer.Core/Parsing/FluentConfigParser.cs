@@ -19,7 +19,7 @@ public sealed class FluentConfigParser
         "HasColumnName", "HasColumnType", "HasDefaultValue", "HasIndex", "IsUnique",
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
-        "ValueGeneratedNever", "UseIdentityColumn",
+        "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -311,6 +311,114 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<TableConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<ViewConfig>> ParseViewMappings(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<ViewConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var toViewCall in FluentSyntaxHelpers.FindCallsNamed(scope, "ToView"))
+            {
+                var arguments = toViewCall.ArgumentList.Arguments;
+
+                if (arguments.Count == 0
+                    || arguments[0].Expression is not LiteralExpressionSyntax { } viewNameLiteral
+                    || !viewNameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableToViewArgument,
+                        "ToView argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        toViewCall.Span));
+                    continue;
+                }
+
+                string? schema = null;
+                if (arguments.Count >= 2)
+                {
+                    if (arguments[1].Expression is LiteralExpressionSyntax { } schemaLiteral
+                        && schemaLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                    {
+                        schema = schemaLiteral.Token.ValueText;
+                    }
+                    else
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableToViewArgument,
+                            "ToView schema argument is not a string literal and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            toViewCall.Span));
+                        continue;
+                    }
+                }
+
+                results.Add(new ViewConfig(entityName, viewNameLiteral.Token.ValueText, schema));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<ViewConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<SqlQueryConfig>> ParseSqlQueries(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<SqlQueryConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var toSqlQueryCall in FluentSyntaxHelpers.FindCallsNamed(scope, "ToSqlQuery"))
+            {
+                var arg = toSqlQueryCall.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    results.Add(new SqlQueryConfig(entityName, literal.Token.ValueText));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableToSqlQueryArgument,
+                        "ToSqlQuery argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        (arg ?? (SyntaxNode)toSqlQueryCall).Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<SqlQueryConfig>>(results, diagnostics);
+    }
+
+    /// Reads bare `entity.HasNoKey()` calls (no arguments to misparse), so unlike every other
+    /// `Parse*` method here there is nothing that can fail to read — no diagnostic/`ParseResult`
+    /// wrapper is needed, matching `ParseIgnoredEntities`'s precedent for the same reason.
+    public IReadOnlyList<string> ParseKeylessEntities(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<string>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            if (FluentSyntaxHelpers.FindCallsNamed(scope, "HasNoKey").Any())
+            {
+                results.Add(entityName);
+            }
+        }
+
+        return results.Distinct().ToList();
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)
