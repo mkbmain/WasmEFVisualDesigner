@@ -428,6 +428,81 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetViewMapping(string entityName, string? viewName, string? schema)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var normalizedViewName = string.IsNullOrWhiteSpace(viewName) ? null : viewName.Trim();
+        var normalizedSchema = string.IsNullOrWhiteSpace(schema) ? null : schema.Trim();
+
+        if (normalizedViewName == entity.ViewName && normalizedSchema == entity.Schema)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (normalizedViewName is null)
+        {
+            var clearedConfigSource = _configRewriter.RemoveView(ConfigSource, entityName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetView(ConfigSource, entityName, normalizedViewName, normalizedSchema);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetSqlQuery(string entityName, string? sql)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var normalizedSql = string.IsNullOrWhiteSpace(sql) ? null : sql.Trim();
+
+        if (normalizedSql == entity.SqlQuery)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (normalizedSql is null)
+        {
+            var clearedConfigSource = _configRewriter.RemoveSqlQuery(ConfigSource, entityName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetSqlQuery(ConfigSource, entityName, normalizedSql);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetKeyless(string entityName, bool isKeyless)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (isKeyless == entity.IsKeyless)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = isKeyless
+            ? _configRewriter.SetKeyless(ConfigSource, entityName)
+            : _configRewriter.RemoveKeyless(ConfigSource, entityName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     public DiagramEditResult SetColumnName(string entityName, string propertyName, string? columnName)
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
