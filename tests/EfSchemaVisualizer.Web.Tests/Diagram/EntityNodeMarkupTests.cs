@@ -41,6 +41,15 @@ public class EntityNodeMarkupTests
         Assert.Contains("disabled=\"@Node.Entity.IsKeyless\"", markup);
     }
 
+    [Fact]
+    public void CommitSchema_RoutesToSetViewMapping_ForViewOnlyEntities()
+    {
+        var markup = ReadEntityNodeRazorSource();
+
+        Assert.Contains("var isViewOnly = Node.Entity.TableName is null && Node.Entity.ViewName is not null;", markup);
+        Assert.Contains("EditContext.Editor.SetViewMapping(Node.Entity.Name, Node.Entity.ViewName, newSchema)", markup);
+    }
+
     private static string ReadEntityNodeRazorSource()
     {
         var path = Path.Combine(FindRepoRoot(), "src", "EfSchemaVisualizer.Web", "Diagram", "EntityNode.razor");

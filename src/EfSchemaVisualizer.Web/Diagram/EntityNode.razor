@@ -358,11 +358,21 @@
 
     private async Task CommitSchema(string? newSchema)
     {
-        var result = EditContext.Editor.SetTableMapping(Node.Entity.Name, Node.Entity.TableName, newSchema);
+        var isViewOnly = Node.Entity.TableName is null && Node.Entity.ViewName is not null;
+
+        var result = isViewOnly
+            ? EditContext.Editor.SetViewMapping(Node.Entity.Name, Node.Entity.ViewName, newSchema)
+            : EditContext.Editor.SetTableMapping(Node.Entity.Name, Node.Entity.TableName, newSchema);
+
         if (result.Success)
         {
             _tableError = null;
+            _viewError = null;
             await EditContext.NotifyChangedAsync();
+        }
+        else if (isViewOnly)
+        {
+            _viewError = result.Error;
         }
         else
         {
