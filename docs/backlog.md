@@ -900,9 +900,21 @@ these matter before any new surface is added.
       shadow property never shows a badge, since `ApplyValueGeneration` runs
       before `ApplyShadowProperties` synthesizes the row — an obscure
       combination, display-only, not fixed in this slice.
-- [ ] **`[found]` Keyless/view entities unread.** `HasNoKey()`, `ToView(...)`,
+- [x] **`[found]` Keyless/view entities unread.** `HasNoKey()`, `ToView(...)`,
       `ToSqlQuery(...)`, `[Keyless]`. A scaffolded database-first project with
       views renders these as ordinary tables missing a key.
+      **Update:** `FluentConfigParser.ParseViewMappings`/`ParseSqlQueries`/
+      `ParseKeylessEntities` and `EntityClassParser`'s `[Keyless]` attribute
+      handling feed `EntityModel.ViewName`/`Schema`/`SqlQuery`/`IsKeyless`;
+      `OnModelCreatingRewriter.SetView`/`RemoveView`/`SetSqlQuery`/
+      `RemoveSqlQuery`/`SetKeyless`/`RemoveKeyless` write it back, with
+      `SetKeyless`/`SetKey` enforcing `HasNoKey`/`HasKey` mutual exclusion
+      (a hard EF invariant) — see
+      `2026-07-20-keyless-view-entities-design.md`. `ToTable`/`ToView` are
+      deliberately not cross-cleared. `DiagramEditor.SetViewMapping`/
+      `SetSqlQuery`/`SetKeyless` and new `EntityNode.razor` header fields
+      (View, SQL query, Keyless checkbox, which also disables the
+      per-property primary-key toggle) complete the edit path.
 - [ ] **`[found]` Concurrency tokens unread.** `IsRowVersion()`,
       `IsConcurrencyToken()`, `[Timestamp]`, `[ConcurrencyCheck]`.
 - [ ] **`[found]` Alternate keys unread.** `HasAlternateKey(...)` — also a
