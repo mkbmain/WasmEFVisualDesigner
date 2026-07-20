@@ -1400,6 +1400,159 @@ public class OnModelCreatingRewriterTests
         Assert.Equal(SourceWithEntityConfiguredNoTable, result);
     }
 
+    private const string ViewMappingSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToView("PeopleView", "dbo");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetView_ExistingCall_MutatesArguments()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetView(ViewMappingSource, entityName: "Person", viewName: "PersonsView", schema: "sales");
+
+        Assert.Contains("entity.ToView(\"PersonsView\", \"sales\")", result);
+        Assert.DoesNotContain("ToView(\"PeopleView\", \"dbo\")", result);
+    }
+
+    [Fact]
+    public void SetView_ExistingCall_MutatesFromSchemaToNoSchema()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetView(ViewMappingSource, entityName: "Person", viewName: "PersonsView", schema: null);
+
+        Assert.Contains("entity.ToView(\"PersonsView\")", result);
+        Assert.DoesNotContain("ToView(\"PeopleView\", \"dbo\")", result);
+    }
+
+    private const string SourceWithEntityConfiguredNoViewOrSqlQuery = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetView_EntityConfiguredWithoutToView_InsertsStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetView(SourceWithEntityConfiguredNoViewOrSqlQuery, entityName: "Person", viewName: "PeopleView", schema: "dbo");
+
+        Assert.Contains("entity.ToView(\"PeopleView\", \"dbo\")", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void SetView_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetView(ViewMappingSource, entityName: "Vehicle", viewName: "VehiclesView", schema: null);
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.ToView(\"VehiclesView\")", result);
+
+        var configs = new FluentConfigParser().ParseViewMappings(result).Value;
+        Assert.Contains(configs, c => c is { EntityName: "Vehicle", ViewName: "VehiclesView", Schema: null });
+        Assert.Contains(configs, c => c is { EntityName: "Person", ViewName: "PeopleView", Schema: "dbo" });
+    }
+
+    [Fact]
+    public void RemoveView_ExistingCall_RemovesStatementEntirely()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveView(ViewMappingSource, entityName: "Person");
+
+        Assert.DoesNotContain("ToView", result);
+    }
+
+    [Fact]
+    public void RemoveView_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveView(SourceWithEntityConfiguredNoViewOrSqlQuery, entityName: "Person");
+
+        Assert.Equal(SourceWithEntityConfiguredNoViewOrSqlQuery, result);
+    }
+
+    private const string SqlQueryMappingSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToSqlQuery("SELECT * FROM People");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetSqlQuery_ExistingCall_MutatesArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetSqlQuery(SqlQueryMappingSource, entityName: "Person", sql: "SELECT Id, Name FROM People");
+
+        Assert.Contains("entity.ToSqlQuery(\"SELECT Id, Name FROM People\")", result);
+        Assert.DoesNotContain("SELECT * FROM People", result);
+    }
+
+    [Fact]
+    public void SetSqlQuery_EntityConfiguredWithoutToSqlQuery_InsertsStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetSqlQuery(SourceWithEntityConfiguredNoViewOrSqlQuery, entityName: "Person", sql: "SELECT * FROM People");
+
+        Assert.Contains("entity.ToSqlQuery(\"SELECT * FROM People\")", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void SetSqlQuery_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetSqlQuery(SqlQueryMappingSource, entityName: "Vehicle", sql: "SELECT * FROM Vehicles");
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.ToSqlQuery(\"SELECT * FROM Vehicles\")", result);
+
+        var configs = new FluentConfigParser().ParseSqlQueries(result).Value;
+        Assert.Contains(configs, c => c.EntityName == "Vehicle" && c.Sql == "SELECT * FROM Vehicles");
+        Assert.Contains(configs, c => c.EntityName == "Person" && c.Sql == "SELECT * FROM People");
+    }
+
+    [Fact]
+    public void RemoveSqlQuery_ExistingCall_RemovesStatementEntirely()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveSqlQuery(SqlQueryMappingSource, entityName: "Person");
+
+        Assert.DoesNotContain("ToSqlQuery", result);
+    }
+
+    [Fact]
+    public void RemoveSqlQuery_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveSqlQuery(SourceWithEntityConfiguredNoViewOrSqlQuery, entityName: "Person");
+
+        Assert.Equal(SourceWithEntityConfiguredNoViewOrSqlQuery, result);
+    }
+
     private const string ColumnNameSource = """
         public class AppDbContext : DbContext
         {

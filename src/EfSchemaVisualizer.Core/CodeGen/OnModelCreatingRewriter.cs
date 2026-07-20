@@ -915,6 +915,224 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetView(string sourceCode, string entityName, string viewName, string? schema)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingToViewCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToView"))
+            .FirstOrDefault();
+
+        if (existingToViewCall is not null)
+        {
+            return MutateExistingView(root, existingToViewCall, viewName, schema);
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertViewStatement(root, existingScope, viewName, schema);
+        }
+
+        return InsertViewEntityBlock(root, entityName, viewName, schema);
+    }
+
+    private static string MutateExistingView(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string viewName, string? schema)
+    {
+        var newCall = targetCall.WithArgumentList(BuildToViewArgumentList(viewName, schema));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertViewStatement(CompilationUnitSyntax root, SyntaxNode scope, string viewName, string? schema)
+    {
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+
+        var newStatement = BuildToViewStatement(blockReceiverName, viewName, schema);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertViewEntityBlock(CompilationUnitSyntax root, string entityName, string viewName, string? schema)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var viewStatement = BuildToViewStatement("entity", viewName, schema);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(viewStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildToViewStatement(string blockReceiverName, string viewName, string? schema)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("ToView")),
+                BuildToViewArgumentList(viewName, schema)));
+    }
+
+    private static ArgumentListSyntax BuildToViewArgumentList(string viewName, string? schema)
+    {
+        var viewNameArg = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(viewName)));
+
+        if (schema is null)
+        {
+            return SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(viewNameArg));
+        }
+
+        var schemaArg = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(schema)));
+
+        return SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[] { viewNameArg, schemaArg }));
+    }
+
+    public string RemoveView(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingToViewCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToView"))
+            .FirstOrDefault();
+
+        if (existingToViewCall is null || existingToViewCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string SetSqlQuery(string sourceCode, string entityName, string sql)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToSqlQuery"))
+            .FirstOrDefault();
+
+        if (existingCall is not null)
+        {
+            return MutateExistingSqlQuery(root, existingCall, sql);
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertSqlQueryStatement(root, existingScope, sql);
+        }
+
+        return InsertSqlQueryEntityBlock(root, entityName, sql);
+    }
+
+    private static string MutateExistingSqlQuery(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string sql)
+    {
+        var newArgument = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(sql)));
+
+        var newCall = targetCall.WithArgumentList(
+            targetCall.ArgumentList.WithArguments(
+                SyntaxFactory.SingletonSeparatedList(newArgument)));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.ToFullString();
+    }
+
+    private static string InsertSqlQueryStatement(CompilationUnitSyntax root, SyntaxNode scope, string sql)
+    {
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+
+        var newStatement = BuildToSqlQueryStatement(blockReceiverName, sql);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertSqlQueryEntityBlock(CompilationUnitSyntax root, string entityName, string sql)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var sqlQueryStatement = BuildToSqlQueryStatement("entity", sql);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(sqlQueryStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildToSqlQueryStatement(string blockReceiverName, string sql)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("ToSqlQuery")),
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.LiteralExpression(
+                                SyntaxKind.StringLiteralExpression,
+                                SyntaxFactory.Literal(sql)))))));
+    }
+
+    public string RemoveSqlQuery(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToSqlQuery"))
+            .FirstOrDefault();
+
+        if (existingCall is null || existingCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
