@@ -70,6 +70,20 @@ public static class ModelMerger
         return config is null ? entity : entity with { TableName = config.TableName, Schema = config.Schema };
     }
 
+    public static EntityModel ApplyViewMapping(EntityModel entity, IReadOnlyList<ViewConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { ViewName = config.ViewName, Schema = config.Schema };
+    }
+
+    public static EntityModel ApplySqlQuery(EntityModel entity, IReadOnlyList<SqlQueryConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { SqlQuery = config.Sql };
+    }
+
     public static EntityModel ApplyColumnNames(EntityModel entity, IReadOnlyList<ColumnNameConfig> configs)
     {
         var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);

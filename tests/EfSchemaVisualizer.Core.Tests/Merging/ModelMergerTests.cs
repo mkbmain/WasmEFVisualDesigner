@@ -228,6 +228,59 @@ public class ModelMergerTests
     }
 
     [Fact]
+    public void ApplyViewMapping_SetsViewNameAndSchema_OnMatchingEntity()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var configs = new List<ViewConfig>
+        {
+            new("Person", "PeopleView", "dbo"),
+            new("Address", "AddressesView", null), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyViewMapping(entity, configs);
+
+        Assert.Equal("PeopleView", merged.ViewName);
+        Assert.Equal("dbo", merged.Schema);
+    }
+
+    [Fact]
+    public void ApplyViewMapping_NoMatchingConfig_LeavesViewNameNull()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplyViewMapping(entity, new List<ViewConfig>());
+
+        Assert.Null(merged.ViewName);
+    }
+
+    [Fact]
+    public void ApplySqlQuery_SetsSqlQuery_OnMatchingEntity()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var configs = new List<SqlQueryConfig>
+        {
+            new("Person", "SELECT * FROM People"),
+            new("Address", "SELECT * FROM Addresses"), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplySqlQuery(entity, configs);
+
+        Assert.Equal("SELECT * FROM People", merged.SqlQuery);
+    }
+
+    [Fact]
+    public void ApplySqlQuery_NoMatchingConfig_LeavesSqlQueryNull()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplySqlQuery(entity, new List<SqlQueryConfig>());
+
+        Assert.Null(merged.SqlQuery);
+    }
+
+    [Fact]
     public void ApplyColumnNames_SetsColumnNameOnMatchingProperty_LeavesOthersUntouched()
     {
         var entity = new EntityModel("Person", new List<PropertyModel>

@@ -14,6 +14,8 @@ public static class DiagnosticCodes
     public const string UnreadableHasColumnNameArgument = nameof(UnreadableHasColumnNameArgument);
     public const string UnreadableHasColumnTypeArgument = nameof(UnreadableHasColumnTypeArgument);
     public const string UnreadableHasDefaultValueArgument = nameof(UnreadableHasDefaultValueArgument);
+    public const string UnreadableToViewArgument = nameof(UnreadableToViewArgument);
+    public const string UnreadableToSqlQueryArgument = nameof(UnreadableToSqlQueryArgument);
     public const string UnreadableHasIndexArgument = nameof(UnreadableHasIndexArgument);
     public const string UnreadableIsUniqueArgument = nameof(UnreadableIsUniqueArgument);
     public const string UnreadableIgnoreArgument = nameof(UnreadableIgnoreArgument);
