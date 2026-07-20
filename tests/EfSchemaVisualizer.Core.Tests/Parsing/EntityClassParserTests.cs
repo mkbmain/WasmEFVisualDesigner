@@ -547,6 +547,39 @@ public class EntityClassParserTests
     }
 
     [Fact]
+    public void Parse_KeylessAttribute_SetsIsKeylessTrue()
+    {
+        const string source = """
+            [Keyless]
+            public class PersonView
+            {
+                public string Name { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.True(entity.IsKeyless);
+    }
+
+    [Fact]
+    public void Parse_NoKeylessAttribute_IsKeylessFalse()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.False(entity.IsKeyless);
+    }
+
+    [Fact]
     public void Parse_KeyAttribute_SetsSinglePropertyKey()
     {
         const string source = """

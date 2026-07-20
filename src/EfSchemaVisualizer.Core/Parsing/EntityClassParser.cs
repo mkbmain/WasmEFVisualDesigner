@@ -86,13 +86,15 @@ public sealed class EntityClassParser
 
         var keyPropertyNames = ResolveKeyPropertyNames(mappedProperties);
         var (tableName, schema) = ParseTableAttribute(typeDeclaration.AttributeLists);
+        var isKeyless = FindAttribute(typeDeclaration.AttributeLists, "Keyless") is not null;
 
         return new EntityModel(
             typeDeclaration.Identifier.Text,
             properties,
             keyPropertyNames,
             TableName: tableName,
-            Schema: schema);
+            Schema: schema,
+            IsKeyless: isKeyless);
     }
 
     private static IReadOnlyList<string> ResolveKeyPropertyNames(List<PropertyDeclarationSyntax> mappedProperties)
