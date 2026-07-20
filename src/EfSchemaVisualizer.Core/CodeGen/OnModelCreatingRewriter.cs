@@ -356,7 +356,9 @@ public sealed class OnModelCreatingRewriter
 
     public string SetKey(string sourceCode, string entityName, IReadOnlyList<string> propertyNames)
     {
-        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var withoutKeyless = RemoveKeyless(sourceCode, entityName);
+
+        var tree = CSharpSyntaxTree.ParseText(withoutKeyless);
         var root = tree.GetCompilationUnitRoot();
 
         var scopes = FindConfigScopes(root, entityName);
@@ -464,6 +466,93 @@ public sealed class OnModelCreatingRewriter
             .FirstOrDefault();
 
         if (existingHasKeyCall is null || existingHasKeyCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string SetKeyless(string sourceCode, string entityName)
+    {
+        var withoutKey = RemoveKey(sourceCode, entityName);
+
+        var tree = CSharpSyntaxTree.ParseText(withoutKey);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingHasNoKeyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasNoKey"))
+            .FirstOrDefault();
+
+        if (existingHasNoKeyCall is not null)
+        {
+            return withoutKey;
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertKeylessStatement(root, existingScope);
+        }
+
+        return InsertKeylessEntityBlock(root, entityName);
+    }
+
+    private static string InsertKeylessStatement(CompilationUnitSyntax root, SyntaxNode scope)
+    {
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+
+        var newStatement = BuildHasNoKeyStatement(blockReceiverName);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertKeylessEntityBlock(CompilationUnitSyntax root, string entityName)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var keylessStatement = BuildHasNoKeyStatement("entity");
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(keylessStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildHasNoKeyStatement(string blockReceiverName)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("HasNoKey")),
+                SyntaxFactory.ArgumentList()));
+    }
+
+    public string RemoveKeyless(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingHasNoKeyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasNoKey"))
+            .FirstOrDefault();
+
+        if (existingHasNoKeyCall is null || existingHasNoKeyCall.Parent is not ExpressionStatementSyntax statement)
         {
             return sourceCode;
         }

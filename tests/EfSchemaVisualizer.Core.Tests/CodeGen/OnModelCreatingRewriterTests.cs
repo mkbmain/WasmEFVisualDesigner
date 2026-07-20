@@ -499,6 +499,77 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void SetKeyless_EntityConfiguredWithoutHasNoKey_InsertsStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKeyless(SourceWithEntityConfiguredNoKey, entityName: "Person");
+
+        Assert.Contains("entity.HasNoKey()", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void SetKeyless_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKeyless(SourceWithSingleKey, entityName: "Vehicle");
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>", result);
+        Assert.Contains("entity.HasNoKey()", result);
+    }
+
+    [Fact]
+    public void SetKeyless_ExistingHasKeyCall_RemovesItAndInsertsHasNoKey()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKeyless(SourceWithSingleKey, entityName: "Person");
+
+        Assert.DoesNotContain("HasKey", result);
+        Assert.Contains("entity.HasNoKey()", result);
+    }
+
+    private const string SourceWithHasNoKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasNoKey();
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RemoveKeyless_ExistingCall_RemovesStatementEntirely()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveKeyless(SourceWithHasNoKey, entityName: "Person");
+
+        Assert.DoesNotContain("HasNoKey", result);
+    }
+
+    [Fact]
+    public void RemoveKeyless_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveKeyless(SourceWithEntityConfiguredNoKey, entityName: "Person");
+
+        Assert.Equal(SourceWithEntityConfiguredNoKey, result);
+    }
+
+    [Fact]
+    public void SetKey_ExistingHasNoKeyCall_RemovesItAndInsertsHasKey()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithHasNoKey, entityName: "Person", propertyNames: new List<string> { "Id" });
+
+        Assert.DoesNotContain("HasNoKey", result);
+        Assert.Contains("entity.HasKey(e => e.Id)", result);
+    }
+
+    [Fact]
     public void RemoveMaxLength_ExistingCall_StripsHasMaxLengthLeavesBarePropertyCall()
     {
         var result = new OnModelCreatingRewriter()
