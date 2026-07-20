@@ -23,6 +23,24 @@ public class EntityNodeMarkupTests
         Assert.Contains("shadow-property", markup);
     }
 
+    [Fact]
+    public void EntityHeader_RendersViewAndSqlQueryAndKeylessFields()
+    {
+        var markup = ReadEntityNodeRazorSource();
+
+        Assert.Contains("CommitViewName", markup);
+        Assert.Contains("CommitSqlQuery", markup);
+        Assert.Contains("CommitKeyless", markup);
+    }
+
+    [Fact]
+    public void PrimaryKeyCheckbox_IsDisabled_WhenEntityIsKeyless()
+    {
+        var markup = ReadEntityNodeRazorSource();
+
+        Assert.Contains("disabled=\"@Node.Entity.IsKeyless\"", markup);
+    }
+
     private static string ReadEntityNodeRazorSource()
     {
         var path = Path.Combine(FindRepoRoot(), "src", "EfSchemaVisualizer.Web", "Diagram", "EntityNode.razor");

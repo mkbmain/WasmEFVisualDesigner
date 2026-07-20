@@ -49,6 +49,37 @@
                @onpointerdown:stopPropagation="true"
                @onmousedown:stopPropagation="true" />
     </div>
+    <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
+        <span title="Database view name (.ToView). Mutually exclusive with Table in EF, but not enforced here.">View:</span>
+        <input style="width: 80px;" value="@Node.Entity.ViewName" placeholder="(none)"
+               title="Database view name (.ToView). Mutually exclusive with Table in EF, but not enforced here."
+               @onchange="e => CommitViewName(e.Value?.ToString())"
+               @onpointerdown:stopPropagation="true"
+               @onmousedown:stopPropagation="true" />
+        <label style="margin-left: 8px;">
+            <input type="checkbox" checked="@Node.Entity.IsKeyless"
+                   @onchange="e => CommitKeyless((bool)(e.Value ?? false))"
+                   @onpointerdown:stopPropagation="true"
+                   @onmousedown:stopPropagation="true" />
+            Keyless (no primary key)
+        </label>
+    </div>
+    <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
+        <span title="Raw SQL query source (.ToSqlQuery).">SQL query:</span>
+        <input style="width: 200px;" value="@Node.Entity.SqlQuery" placeholder="(none)"
+               title="Raw SQL query source (.ToSqlQuery)."
+               @onchange="e => CommitSqlQuery(e.Value?.ToString())"
+               @onpointerdown:stopPropagation="true"
+               @onmousedown:stopPropagation="true" />
+    </div>
+    @if (_viewError is not null)
+    {
+        <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_viewError</div>
+    }
+    @if (_sqlQueryError is not null)
+    {
+        <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_sqlQueryError</div>
+    }
     @if (_tableError is not null)
     {
         <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_tableError</div>
@@ -131,6 +162,7 @@
                         <div style="margin: 4px 0 4px 16px; padding: 4px 8px; background: #f7f7f7; border-left: 2px solid #ccc;">
                             <label style="font-size: 0.8em; display: block;">
                                 <input type="checkbox" checked="@Node.Entity.KeyPropertyNames.Contains(property.Name)"
+                                       disabled="@Node.Entity.IsKeyless"
                                        @onchange="e => ToggleKey(property, (bool)(e.Value ?? false))"
                                        @onpointerdown:stopPropagation="true"
                                        @onmousedown:stopPropagation="true" />
@@ -336,6 +368,52 @@
         {
             _tableError = result.Error;
         }
+    }
+
+    private string? _viewError;
+
+    private async Task CommitViewName(string? newViewName)
+    {
+        var result = EditContext.Editor.SetViewMapping(Node.Entity.Name, newViewName, Node.Entity.Schema);
+        if (result.Success)
+        {
+            _viewError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _viewError = result.Error;
+        }
+    }
+
+    private string? _sqlQueryError;
+
+    private async Task CommitSqlQuery(string? newSql)
+    {
+        var result = EditContext.Editor.SetSqlQuery(Node.Entity.Name, newSql);
+        if (result.Success)
+        {
+            _sqlQueryError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _sqlQueryError = result.Error;
+        }
+    }
+
+    private async Task CommitKeyless(bool isKeyless)
+    {
+        var result = EditContext.Editor.SetKeyless(Node.Entity.Name, isKeyless);
+        if (!result.Success)
+        {
+            // SetKeyless only fails on an unknown entity, which can't happen from this UI
+            // (the checkbox only renders for an entity already in the diagram) — nothing
+            // to surface, matching how ToggleKey's analogous failure path is handled.
+            return;
+        }
+
+        await EditContext.NotifyChangedAsync();
     }
 
     private string? _editingPropertyName;
