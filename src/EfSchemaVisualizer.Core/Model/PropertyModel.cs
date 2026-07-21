@@ -17,4 +17,5 @@ public sealed record PropertyModel(
     bool IsConcurrencyToken = false,
     string? Comment = null,
     bool? IsUnicode = null,
-    bool? IsFixedLength = null);
+    bool? IsFixedLength = null,
+    string? Collation = null);

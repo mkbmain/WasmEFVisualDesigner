@@ -3192,4 +3192,81 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Code", diagnostic.PropertyName);
     }
+
+    // ─── ParseCollations ──────────────────────────────────────────────────────────
+
+    private const string CollationSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).UseCollation("SQL_Latin1_General_CP1_CI_AS");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseCollations_ReadsCollationArgument()
+    {
+        var result = new FluentConfigParser().ParseCollations(CollationSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Name", config.PropertyName);
+        Assert.Equal("SQL_Latin1_General_CP1_CI_AS", config.Collation);
+    }
+
+    private const string CollationSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string Collation = "SQL_Latin1_General_CP1_CI_AS";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).UseCollation(Collation);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseCollations_NonLiteralArgument_EmitsUnreadableUseCollationArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseCollations(CollationSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableUseCollationArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Name", diagnostic.PropertyName);
+    }
+
+    [Fact]
+    public void ParseCollations_UnresolvablePropertyName_EmitsDiagnosticAndSkips()
+    {
+        var result = new FluentConfigParser().ParseCollations("""
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.UseCollation("SQL_Latin1_General_CP1_CI_AS");
+                    });
+                }
+            }
+            """);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnresolvablePropertyName, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
 }

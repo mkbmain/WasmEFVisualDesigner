@@ -126,6 +126,19 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyCollations(EntityModel entity, IReadOnlyList<CollationConfig> configs)
+    {
+        var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var config)
+                ? property with { Collation = config.Collation }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     public static EntityModel ApplyTableMapping(EntityModel entity, IReadOnlyList<TableConfig> configs)
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);

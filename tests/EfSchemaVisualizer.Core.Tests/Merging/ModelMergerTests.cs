@@ -726,4 +726,24 @@ public class ModelMergerTests
         Assert.Null(merged.Properties.Single(p => p.Name == "Id").IsFixedLength);
         Assert.True(merged.Properties.Single(p => p.Name == "Code").IsFixedLength);
     }
+
+    // ─── ApplyCollations ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyCollations_SetsCollationOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyCollations(entity, new List<CollationConfig>
+        {
+            new("Person", "Name", "SQL_Latin1_General_CP1_CI_AS"),
+        });
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").Collation);
+        Assert.Equal("SQL_Latin1_General_CP1_CI_AS", merged.Properties.Single(p => p.Name == "Name").Collation);
+    }
 }

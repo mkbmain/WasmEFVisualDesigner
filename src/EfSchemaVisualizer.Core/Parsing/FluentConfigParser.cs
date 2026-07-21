@@ -21,7 +21,7 @@ public sealed class FluentConfigParser
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
-        "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment",
+        "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -648,6 +648,52 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<FixedLengthConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<CollationConfig>> ParseCollations(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<CollationConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "UseCollation"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which property this UseCollation call configures.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    results.Add(new CollationConfig(entityName, propertyName, literal.Token.ValueText));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableUseCollationArgument,
+                        "UseCollation argument is not a string literal and could not be read.",
+                        entityName,
+                        propertyName,
+                        (arg ?? (SyntaxNode)call).Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<CollationConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)

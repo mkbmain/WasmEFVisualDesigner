@@ -29,6 +29,7 @@ public static class DiagramModelBuilder
         var comments = configParser.ParseComments(configSource);
         var unicodeFlags = configParser.ParseUnicodeFlags(configSource);
         var fixedLengthFlags = configParser.ParseFixedLengthFlags(configSource);
+        var collations = configParser.ParseCollations(configSource);
         var tables = configParser.ParseTableMappings(configSource);
         var views = configParser.ParseViewMappings(configSource);
         var sqlQueries = configParser.ParseSqlQueries(configSource);
@@ -57,6 +58,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(comments.Properties.Diagnostics);
         diagnostics.AddRange(unicodeFlags.Diagnostics);
         diagnostics.AddRange(fixedLengthFlags.Diagnostics);
+        diagnostics.AddRange(collations.Diagnostics);
         diagnostics.AddRange(tables.Diagnostics);
         diagnostics.AddRange(views.Diagnostics);
         diagnostics.AddRange(sqlQueries.Diagnostics);
@@ -91,6 +93,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyPropertyComments(entity, comments.Properties.Value))
             .Select(entity => ModelMerger.ApplyUnicodeFlags(entity, unicodeFlags.Value))
             .Select(entity => ModelMerger.ApplyFixedLengthFlags(entity, fixedLengthFlags.Value))
+            .Select(entity => ModelMerger.ApplyCollations(entity, collations.Value))
             .Select(entity => ModelMerger.ApplyTableMapping(entity, tables.Value))
             .Select(entity => ModelMerger.ApplyViewMapping(entity, views.Value))
             .Select(entity => ModelMerger.ApplySqlQuery(entity, sqlQueries.Value))
