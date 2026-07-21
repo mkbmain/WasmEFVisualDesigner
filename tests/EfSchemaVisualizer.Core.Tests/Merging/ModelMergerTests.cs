@@ -151,6 +151,27 @@ public class ModelMergerTests
     }
 
     [Fact]
+    public void ApplyIndexes_PropagatesFilterIsDescendingAndIncludeProperties()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Email", "string", IsNullable: true, MaxLength: null)
+        });
+        var configs = new List<IndexConfig>
+        {
+            new("Person", new List<string> { "Email" }, IsUnique: true, Name: "IX_Person_Email",
+                Filter: "[Email] IS NOT NULL", IsDescending: new[] { true }, IncludeProperties: new[] { "FirstName" })
+        };
+
+        var result = ModelMerger.ApplyIndexes(entity, configs);
+
+        var index = Assert.Single(result.Indexes);
+        Assert.Equal("[Email] IS NOT NULL", index.Filter);
+        Assert.Equal(new[] { true }, index.IsDescending);
+        Assert.Equal(new[] { "FirstName" }, index.IncludeProperties);
+    }
+
+    [Fact]
     public void ApplyIndexes_CollectsAllMatchingConfigsForSameEntity()
     {
         var entity = new EntityModel("Person", new List<PropertyModel>());

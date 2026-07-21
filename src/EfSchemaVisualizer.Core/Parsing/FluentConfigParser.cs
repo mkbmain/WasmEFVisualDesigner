@@ -17,6 +17,7 @@ public sealed class FluentConfigParser
     {
         "Property", "HasMaxLength", "HasPrecision", "IsRequired", "HasKey", "HasAlternateKey", "ToTable",
         "HasColumnName", "HasColumnType", "HasDefaultValue", "HasIndex", "IsUnique",
+        "HasFilter", "IsDescending", "IncludeProperties",
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
@@ -617,11 +618,17 @@ public sealed class FluentConfigParser
                     continue;
                 }
 
-                var (isUnique, isUniqueDiag) = TryReadIsUnique(hasIndexCall, entityName);
-                if (isUniqueDiag is not null)
-                    diagnostics.Add(isUniqueDiag);
+                var extras = ReadIndexExtras(hasIndexCall, entityName);
+                diagnostics.AddRange(extras.Diagnostics);
 
-                results.Add(new IndexConfig(entityName, indexArgs.Value.PropertyNames, isUnique, indexArgs.Value.Name));
+                results.Add(new IndexConfig(
+                    entityName,
+                    indexArgs.Value.PropertyNames,
+                    extras.IsUnique,
+                    indexArgs.Value.Name,
+                    extras.Filter,
+                    extras.IsDescending,
+                    extras.IncludeProperties));
             }
         }
 
@@ -1074,35 +1081,134 @@ public sealed class FluentConfigParser
             : null;
     }
 
-    private static (bool IsUnique, Diagnostic? Diagnostic) TryReadIsUnique(
-        InvocationExpressionSyntax hasIndexCall, string entityName)
+    private sealed record IndexExtras(
+        bool IsUnique,
+        string? Filter,
+        IReadOnlyList<bool>? IsDescending,
+        IReadOnlyList<string>? IncludeProperties,
+        IReadOnlyList<Diagnostic> Diagnostics);
+
+    /// Walks every call chained onto a `HasIndex(...)` invocation (in any order — EF allows
+    /// `IsUnique`/`HasFilter`/`IsDescending`/`IncludeProperties` in any sequence) and reads each
+    /// recognized one. Unreadable arguments are reported as diagnostics but don't stop the walk.
+    private static IndexExtras ReadIndexExtras(InvocationExpressionSyntax hasIndexCall, string entityName)
     {
-        SyntaxNode? cursor = hasIndexCall.Parent;
-        while (cursor is not null && cursor is not StatementSyntax)
+        var isUnique = false;
+        string? filter = null;
+        IReadOnlyList<bool>? isDescending = null;
+        IReadOnlyList<string>? includeProperties = null;
+        var diagnostics = new List<Diagnostic>();
+
+        FluentSyntaxHelpers.WalkChainedTail(hasIndexCall, chained =>
         {
-            if (cursor is MemberAccessExpressionSyntax { Name.Identifier.Text: "IsUnique" }
-                && cursor.Parent is InvocationExpressionSyntax isUniqueInvocation)
+            if (chained.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var methodName })
+                return;
+
+            switch (methodName)
             {
-                var arg = isUniqueInvocation.ArgumentList.Arguments.FirstOrDefault();
-                if (arg is null)
-                    return (true, null);
+                case "IsUnique":
+                    {
+                        var arg = chained.ArgumentList.Arguments.FirstOrDefault();
+                        if (arg is null)
+                        {
+                            isUnique = true;
+                            break;
+                        }
 
-                if (arg.Expression is LiteralExpressionSyntax literal
-                    && (literal.IsKind(SyntaxKind.TrueLiteralExpression)
-                        || literal.IsKind(SyntaxKind.FalseLiteralExpression)))
-                    return (literal.IsKind(SyntaxKind.TrueLiteralExpression), null);
+                        if (arg.Expression is LiteralExpressionSyntax literal
+                            && (literal.IsKind(SyntaxKind.TrueLiteralExpression) || literal.IsKind(SyntaxKind.FalseLiteralExpression)))
+                        {
+                            isUnique = literal.IsKind(SyntaxKind.TrueLiteralExpression);
+                            break;
+                        }
 
-                return (false, new Diagnostic(
-                    DiagnosticCodes.UnreadableIsUniqueArgument,
-                    "IsUnique argument is not a boolean literal and could not be read.",
-                    entityName,
-                    PropertyName: null,
-                    arg.Span));
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableIsUniqueArgument,
+                            "IsUnique argument is not a boolean literal and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            arg.Span));
+                        break;
+                    }
+
+                case "HasFilter":
+                    {
+                        var arg = chained.ArgumentList.Arguments.FirstOrDefault();
+                        if (arg?.Expression is LiteralExpressionSyntax { RawKind: (int)SyntaxKind.StringLiteralExpression } literal)
+                        {
+                            filter = literal.Token.ValueText;
+                            break;
+                        }
+
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableHasFilterArgument,
+                            "HasFilter argument is not a string literal and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            (arg ?? (SyntaxNode)chained).Span));
+                        break;
+                    }
+
+                case "IsDescending":
+                    {
+                        var arguments = chained.ArgumentList.Arguments;
+                        if (arguments.Count == 0)
+                        {
+                            isDescending = Array.Empty<bool>();
+                            break;
+                        }
+
+                        var values = new List<bool>();
+                        var allLiteral = true;
+                        foreach (var arg in arguments)
+                        {
+                            if (arg.Expression is LiteralExpressionSyntax literal
+                                && (literal.IsKind(SyntaxKind.TrueLiteralExpression) || literal.IsKind(SyntaxKind.FalseLiteralExpression)))
+                            {
+                                values.Add(literal.IsKind(SyntaxKind.TrueLiteralExpression));
+                            }
+                            else
+                            {
+                                allLiteral = false;
+                                break;
+                            }
+                        }
+
+                        if (allLiteral)
+                        {
+                            isDescending = values;
+                            break;
+                        }
+
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableIsDescendingArgument,
+                            "IsDescending argument(s) are not boolean literals and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            chained.ArgumentList.Span));
+                        break;
+                    }
+
+                case "IncludeProperties":
+                    {
+                        var names = FluentSyntaxHelpers.TryReadPropertyNameList(chained);
+                        if (names is not null)
+                        {
+                            includeProperties = names;
+                            break;
+                        }
+
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableIncludePropertiesArgument,
+                            "IncludeProperties argument(s) could not be read as property name(s).",
+                            entityName,
+                            PropertyName: null,
+                            chained.ArgumentList.Span));
+                        break;
+                    }
             }
+        });
 
-            cursor = cursor.Parent;
-        }
-
-        return (false, null);
+        return new IndexExtras(isUnique, filter, isDescending, includeProperties, diagnostics);
     }
 }

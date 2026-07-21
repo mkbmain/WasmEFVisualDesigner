@@ -57,7 +57,7 @@ public static class ModelMerger
     {
         var indexes = configs
             .Where(c => c.EntityName == entity.Name)
-            .Select(c => new IndexModel(c.PropertyNames, c.IsUnique, c.Name))
+            .Select(c => new IndexModel(c.PropertyNames, c.IsUnique, c.Name, c.Filter, c.IsDescending, c.IncludeProperties))
             .ToList();
 
         return entity with { Indexes = indexes };

@@ -327,7 +327,9 @@ public sealed class DiagramEditor
         }
 
         var withoutOldIndex = _configRewriter.RemoveIndex(ConfigSource, entityName, index.PropertyNames);
-        var withNewIndex = _configRewriter.SetIndex(withoutOldIndex, entityName, newPropertyNames, index.IsUnique, index.Name);
+        var withNewIndex = _configRewriter.SetIndex(
+            withoutOldIndex, entityName, newPropertyNames, index.IsUnique, index.Name,
+            index.Filter, index.IsDescending, index.IncludeProperties);
         Apply(ClassSource, withNewIndex);
         return DiagramEditResult.Ok();
     }
@@ -351,7 +353,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.SetIndex(ConfigSource, entityName, propertyNames, isUnique, index.Name);
+        var newConfigSource = _configRewriter.SetIndex(
+            ConfigSource, entityName, propertyNames, isUnique, index.Name,
+            index.Filter, index.IsDescending, index.IncludeProperties);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -376,7 +380,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.SetIndex(ConfigSource, entityName, propertyNames, index.IsUnique, normalizedName);
+        var newConfigSource = _configRewriter.SetIndex(
+            ConfigSource, entityName, propertyNames, index.IsUnique, normalizedName,
+            index.Filter, index.IsDescending, index.IncludeProperties);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }

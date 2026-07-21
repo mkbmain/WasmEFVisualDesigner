@@ -958,11 +958,31 @@ these matter before any new surface is added.
       `2026-07-21-alternate-keys-design.md` — and `HasPrincipalKey` remains
       listed in the README's unsupported EF Core features section. 549/549
       tests green across all three test projects.
-- [ ] **`[found]` Index extras unread.** `HasFilter(...)`, `IsDescending(...)`,
+- [x] **`[found]` Index extras unread.** `HasFilter(...)`, `IsDescending(...)`,
       `IncludeProperties(...)` chained after a parsed `HasIndex` are dropped
       on index rewrite (the rewriter re-emits the canonical chain without
       them) — meaning an index *edit* can silently strip them. The parse gap
       doubles as an edit-path data-loss risk.
+      **Update:** `FluentConfigParser.ParseIndexes` now walks the whole
+      `HasIndex(...)` chain tail (any order, since EF allows
+      `IsUnique`/`HasFilter`/`IsDescending`/`IncludeProperties` in any
+      sequence) via a new `ReadIndexExtras` helper built on the existing
+      `FluentSyntaxHelpers.WalkChainedTail`, folding results into three new
+      `IndexConfig`/`IndexModel` fields (`Filter`, `IsDescending`,
+      `IncludeProperties`); unreadable arguments get their own diagnostics
+      (`UnreadableHasFilterArgument`/`UnreadableIsDescendingArgument`/
+      `UnreadableIncludePropertiesArgument`) and the three call names were
+      added to `RecognizedCallNames` so they stop tripping
+      `UnrecognizedConfigCall`. `OnModelCreatingRewriter.SetIndex` gained
+      matching optional parameters and now re-emits all three on every
+      mutate/insert path; `DiagramEditor.ToggleIndexMembership`/
+      `SetIndexUnique`/`RenameIndex` now pass the current model's
+      `Filter`/`IsDescending`/`IncludeProperties` through on every edit,
+      closing the actual data-loss bug (previously, toggling unique or
+      renaming an index via the diagram silently dropped these three).
+      No UI to edit these three directly yet (parse/merge/rewrite-preserve
+      only, matching the precedent set by relationships/value-generation).
+      565/565 tests green across all three test projects.
 - [ ] **`[found]` Data seeding (`HasData`) unread.** Harmless to the diagram,
       but an entity remove/rename leaves orphaned seed data behind; at minimum
       warn.

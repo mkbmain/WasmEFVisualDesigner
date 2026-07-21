@@ -987,6 +987,196 @@ public class FluentConfigParserTests
         Assert.Empty(result.Diagnostics);
     }
 
+    [Fact]
+    public void ParseIndexes_HasFilter_ReadsFilterExpression()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).HasFilter("[Email] IS NOT NULL");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("[Email] IS NOT NULL", config.Filter);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_HasFilter_NonStringLiteralArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).HasFilter(someVariable);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Null(config.Filter);
+        var diag = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasFilterArgument, diag.Code);
+    }
+
+    [Fact]
+    public void ParseIndexes_IsDescending_BareCall_ReadsEmptyList()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsDescending();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Empty(config.IsDescending!);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_IsDescending_PerColumnBooleans_ReadsInOrder()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => new { e.LastName, e.FirstName }).IsDescending(true, false);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { true, false }, config.IsDescending);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_IsDescending_NonBoolLiteralArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IsDescending(someVariable);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Null(config.IsDescending);
+        var diag = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableIsDescendingArgument, diag.Code);
+    }
+
+    [Fact]
+    public void ParseIndexes_IncludeProperties_LambdaAnonymousObject_ReadsPropertyNames()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IncludeProperties(e => new { e.FirstName, e.LastName });
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "FirstName", "LastName" }, config.IncludeProperties);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_IncludeProperties_StringParams_ReadsPropertyNames()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IncludeProperties("FirstName", "LastName");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(new[] { "FirstName", "LastName" }, config.IncludeProperties);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseIndexes_IncludeProperties_UnreadableArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).IncludeProperties(someVariable);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Null(config.IncludeProperties);
+        var diag = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableIncludePropertiesArgument, diag.Code);
+    }
+
+    [Fact]
+    public void ParseIndexes_AllExtrasChainedTogetherInAnyOrder_AllRead()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email)
+                            .IsUnique()
+                            .HasFilter("[Email] IS NOT NULL")
+                            .IncludeProperties(e => e.FirstName)
+                            .IsDescending(true);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.True(config.IsUnique);
+        Assert.Equal("[Email] IS NOT NULL", config.Filter);
+        Assert.Equal(new[] { "FirstName" }, config.IncludeProperties);
+        Assert.Equal(new[] { true }, config.IsDescending);
+        Assert.Empty(result.Diagnostics);
+    }
+
     private const string PrecisionSource = """
         public class AppDbContext : DbContext
         {
@@ -2216,7 +2406,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.HasIndex(e => e.Email).IsUnique().HasFilter("[Email] IS NOT NULL");
+                        entity.HasIndex(e => e.Email).IsUnique().HasComment("note");
                     });
                 }
             }
@@ -2225,7 +2415,7 @@ public class FluentConfigParserTests
         var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
 
         var diagnostic = Assert.Single(diagnostics);
-        Assert.Contains("HasFilter", diagnostic.Message);
+        Assert.Contains("HasComment", diagnostic.Message);
     }
 
     [Fact]
@@ -2240,7 +2430,7 @@ public class FluentConfigParserTests
                     {
                         entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
                         entity.HasKey(e => e.Id);
-                        entity.HasIndex(e => e.Email).IsUnique();
+                        entity.HasIndex(e => e.Email).IsUnique().HasFilter("[Email] IS NOT NULL").IncludeProperties(e => e.FirstName).IsDescending(true);
                         entity.HasOne(e => e.Manager).WithMany(m => m.Reports).HasForeignKey(e => e.ManagerId).OnDelete(DeleteBehavior.Cascade);
                         entity.ToTable("People");
                     });

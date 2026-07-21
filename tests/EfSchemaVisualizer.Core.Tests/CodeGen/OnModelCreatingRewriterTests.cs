@@ -1371,6 +1371,78 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void SetIndex_PassingFilter_EmitsHasFilterCall()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(
+            source, "Person", new[] { "Email" }, isUnique: false, filter: "[Email] IS NOT NULL");
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal("[Email] IS NOT NULL", config.Filter);
+    }
+
+    [Fact]
+    public void SetIndex_PassingIsDescendingAndIncludeProperties_EmitsBothCalls()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(
+            source, "Person", new[] { "Email" }, isUnique: false,
+            isDescending: new[] { true }, includeProperties: new[] { "FirstName" });
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.Equal(new[] { true }, config.IsDescending);
+        Assert.Equal(new[] { "FirstName" }, config.IncludeProperties);
+    }
+
+    [Fact]
+    public void SetIndex_MutatingUniquenessOnly_PreservesFilterIsDescendingAndIncludeProperties()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email)
+                            .HasFilter("[Email] IS NOT NULL")
+                            .IncludeProperties(e => e.FirstName)
+                            .IsDescending(true);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter().SetIndex(
+            source, "Person", new[] { "Email" }, isUnique: true,
+            filter: "[Email] IS NOT NULL", isDescending: new[] { true }, includeProperties: new[] { "FirstName" });
+
+        var configs = new FluentConfigParser().ParseIndexes(result);
+        var config = Assert.Single(configs.Value);
+        Assert.True(config.IsUnique);
+        Assert.Equal("[Email] IS NOT NULL", config.Filter);
+        Assert.Equal(new[] { true }, config.IsDescending);
+        Assert.Equal(new[] { "FirstName" }, config.IncludeProperties);
+    }
+
+    [Fact]
     public void RemoveIndex_RemovesStatementIncludingIsUniqueChain()
     {
         const string source = """

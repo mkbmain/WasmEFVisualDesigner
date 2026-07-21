@@ -2003,7 +2003,15 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    public string SetIndex(string sourceCode, string entityName, IReadOnlyList<string> propertyNames, bool isUnique, string? name = null)
+    public string SetIndex(
+        string sourceCode,
+        string entityName,
+        IReadOnlyList<string> propertyNames,
+        bool isUnique,
+        string? name = null,
+        string? filter = null,
+        IReadOnlyList<bool>? isDescending = null,
+        IReadOnlyList<string>? includeProperties = null)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
@@ -2020,17 +2028,17 @@ public sealed class OnModelCreatingRewriter
 
         if (existingHasIndexCall is not null)
         {
-            return MutateExistingIndex(root, existingHasIndexCall, propertyNames, isUnique, name);
+            return MutateExistingIndex(root, existingHasIndexCall, propertyNames, isUnique, name, filter, isDescending, includeProperties);
         }
 
         var existingScope = scopes.FirstOrDefault();
 
         if (existingScope is not null)
         {
-            return InsertIndexStatement(root, existingScope, propertyNames, isUnique, name);
+            return InsertIndexStatement(root, existingScope, propertyNames, isUnique, name, filter, isDescending, includeProperties);
         }
 
-        return InsertIndexEntityBlock(root, entityName, propertyNames, isUnique, name);
+        return InsertIndexEntityBlock(root, entityName, propertyNames, isUnique, name, filter, isDescending, includeProperties);
     }
 
     private static string MutateExistingIndex(
@@ -2038,11 +2046,14 @@ public sealed class OnModelCreatingRewriter
         InvocationExpressionSyntax hasIndexCall,
         IReadOnlyList<string> propertyNames,
         bool isUnique,
-        string? name)
+        string? name,
+        string? filter,
+        IReadOnlyList<bool>? isDescending,
+        IReadOnlyList<string>? includeProperties)
     {
         var blockReceiverName = ((MemberAccessExpressionSyntax)hasIndexCall.Expression).Expression.ToString();
         var existingStatement = hasIndexCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
-        var newStatement = BuildHasIndexStatement(blockReceiverName, propertyNames, isUnique, name);
+        var newStatement = BuildHasIndexStatement(blockReceiverName, propertyNames, isUnique, name, filter, isDescending, includeProperties);
 
         var newRoot = root.ReplaceNode(existingStatement, newStatement);
         return newRoot.NormalizeWhitespace().ToFullString();
@@ -2053,11 +2064,14 @@ public sealed class OnModelCreatingRewriter
         SyntaxNode scope,
         IReadOnlyList<string> propertyNames,
         bool isUnique,
-        string? name)
+        string? name,
+        string? filter,
+        IReadOnlyList<bool>? isDescending,
+        IReadOnlyList<string>? includeProperties)
     {
         var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
 
-        var newStatement = BuildHasIndexStatement(blockReceiverName, propertyNames, isUnique, name);
+        var newStatement = BuildHasIndexStatement(blockReceiverName, propertyNames, isUnique, name, filter, isDescending, includeProperties);
         var newBlock = block.AddStatements(newStatement);
 
         var newRoot = root.ReplaceNode(block, newBlock);
@@ -2069,7 +2083,10 @@ public sealed class OnModelCreatingRewriter
         string entityName,
         IReadOnlyList<string> propertyNames,
         bool isUnique,
-        string? name)
+        string? name,
+        string? filter,
+        IReadOnlyList<bool>? isDescending,
+        IReadOnlyList<string>? includeProperties)
     {
         var method = FindOnModelCreatingMethod(root);
 
@@ -2078,7 +2095,7 @@ public sealed class OnModelCreatingRewriter
 
         var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
 
-        var indexStatement = BuildHasIndexStatement("entity", propertyNames, isUnique, name);
+        var indexStatement = BuildHasIndexStatement("entity", propertyNames, isUnique, name, filter, isDescending, includeProperties);
         var entityBlockStatement = BuildEntityInvocationStatement(
             modelBuilderParamName, entityName, SyntaxFactory.Block(indexStatement));
 
@@ -2091,7 +2108,10 @@ public sealed class OnModelCreatingRewriter
         string blockReceiverName,
         IReadOnlyList<string> propertyNames,
         bool isUnique,
-        string? name)
+        string? name,
+        string? filter,
+        IReadOnlyList<bool>? isDescending,
+        IReadOnlyList<string>? includeProperties)
     {
         ExpressionSyntax expression = SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(
@@ -2102,15 +2122,50 @@ public sealed class OnModelCreatingRewriter
 
         if (isUnique)
         {
-            expression = SyntaxFactory.InvocationExpression(
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    expression,
-                    SyntaxFactory.IdentifierName("IsUnique")),
-                SyntaxFactory.ArgumentList());
+            expression = ChainBareCall(expression, "IsUnique");
+        }
+
+        if (filter is not null)
+        {
+            expression = ChainCall(expression, "HasFilter", SyntaxFactory.Argument(
+                SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(filter))));
+        }
+
+        if (includeProperties is { Count: > 0 })
+        {
+            expression = ChainCall(expression, "IncludeProperties", BuildHasIndexArgumentList(includeProperties, name: null).Arguments.ToArray());
+        }
+
+        if (isDescending is not null)
+        {
+            var boolArgs = isDescending
+                .Select(d => SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
+                    d ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression)))
+                .ToArray();
+            expression = ChainCall(expression, "IsDescending", boolArgs);
         }
 
         return SyntaxFactory.ExpressionStatement(expression);
+    }
+
+    private static ExpressionSyntax ChainBareCall(ExpressionSyntax expression, string methodName)
+    {
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                expression,
+                SyntaxFactory.IdentifierName(methodName)),
+            SyntaxFactory.ArgumentList());
+    }
+
+    private static ExpressionSyntax ChainCall(ExpressionSyntax expression, string methodName, params ArgumentSyntax[] arguments)
+    {
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                expression,
+                SyntaxFactory.IdentifierName(methodName)),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
     }
 
     private static ArgumentListSyntax BuildHasIndexArgumentList(IReadOnlyList<string> propertyNames, string? name)
