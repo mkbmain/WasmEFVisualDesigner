@@ -293,12 +293,20 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<AlternateKeyConfig>>(results, diagnostics);
     }
 
-    public ParseResult<IReadOnlyList<TableConfig>> ParseTableMappings(string sourceCode)
+    /// Reads both `ToTable("Name"[, "schema"])` and the config-lambda overloads
+    /// (`ToTable(b => b.IsTemporal())`, `ToTable("Name", b => b.IsTemporal())`) in one pass, since
+    /// both read the same call name — a second full walk of every `ToTable` call would be
+    /// redundant. Only `IsTemporal()` is recognized inside a config lambda; any other builder
+    /// configuration inside it is not read and produces no diagnostic (same scope cut as
+    /// `SplitToTable`'s builder-lambda internals), but a known table name (two-arg overload) is
+    /// still captured even when the lambda's other configuration isn't understood.
+    public ParseResult<(IReadOnlyList<TableConfig> Tables, IReadOnlyList<TemporalConfig> Temporal)> ParseTableMappings(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
-        var results = new List<TableConfig>();
+        var tables = new List<TableConfig>();
+        var temporal = new List<TemporalConfig>();
         var diagnostics = new List<Diagnostic>();
 
         foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
@@ -307,8 +315,28 @@ public sealed class FluentConfigParser
             {
                 var arguments = toTableCall.ArgumentList.Arguments;
 
-                if (arguments.Count == 0
-                    || arguments[0].Expression is not LiteralExpressionSyntax { } tableNameLiteral
+                if (arguments.Count == 0)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableToTableArgument,
+                        "ToTable argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        toTableCall.Span));
+                    continue;
+                }
+
+                if (arguments.Count == 1 && arguments[0].Expression is AnonymousFunctionExpressionSyntax singleLambda)
+                {
+                    if (ContainsIsTemporalCall(singleLambda))
+                    {
+                        temporal.Add(new TemporalConfig(entityName));
+                    }
+
+                    continue;
+                }
+
+                if (arguments[0].Expression is not LiteralExpressionSyntax { } tableNameLiteral
                     || !tableNameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
                 {
                     diagnostics.Add(new Diagnostic(
@@ -321,7 +349,15 @@ public sealed class FluentConfigParser
                 }
 
                 string? schema = null;
-                if (arguments.Count >= 2)
+
+                if (arguments.Count >= 2 && arguments[1].Expression is AnonymousFunctionExpressionSyntax pairedLambda)
+                {
+                    if (ContainsIsTemporalCall(pairedLambda))
+                    {
+                        temporal.Add(new TemporalConfig(entityName));
+                    }
+                }
+                else if (arguments.Count >= 2)
                 {
                     if (arguments[1].Expression is LiteralExpressionSyntax { } schemaLiteral
                         && schemaLiteral.IsKind(SyntaxKind.StringLiteralExpression))
@@ -340,11 +376,18 @@ public sealed class FluentConfigParser
                     }
                 }
 
-                results.Add(new TableConfig(entityName, tableNameLiteral.Token.ValueText, schema));
+                tables.Add(new TableConfig(entityName, tableNameLiteral.Token.ValueText, schema));
             }
         }
 
-        return new ParseResult<IReadOnlyList<TableConfig>>(results, diagnostics);
+        return new ParseResult<(IReadOnlyList<TableConfig>, IReadOnlyList<TemporalConfig>)>((tables, temporal), diagnostics);
+    }
+
+    private static bool ContainsIsTemporalCall(AnonymousFunctionExpressionSyntax lambda)
+    {
+        return lambda.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(invocation => invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "IsTemporal" });
     }
 
     public ParseResult<IReadOnlyList<ViewConfig>> ParseViewMappings(string sourceCode)

@@ -1788,7 +1788,7 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
         Assert.Contains("entity.ToTable(\"Vehicles\")", result);
 
-        var configs = new FluentConfigParser().ParseTableMappings(result).Value;
+        var configs = new FluentConfigParser().ParseTableMappings(result).Value.Tables;
         Assert.Contains(configs, c => c is { EntityName: "Vehicle", TableName: "Vehicles", Schema: null });
         Assert.Contains(configs, c => c is { EntityName: "Person", TableName: "People", Schema: "dbo" });
     }

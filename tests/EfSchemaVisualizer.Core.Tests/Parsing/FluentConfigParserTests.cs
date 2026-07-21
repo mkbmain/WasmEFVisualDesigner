@@ -1280,9 +1280,9 @@ public class FluentConfigParserTests
         var result = new FluentConfigParser().ParseTableMappings(TableMappingSource);
 
         Assert.Empty(result.Diagnostics);
-        Assert.Equal(2, result.Value.Count);
-        Assert.Contains(result.Value, c => c is { EntityName: "Person", TableName: "People", Schema: "dbo" });
-        Assert.Contains(result.Value, c => c is { EntityName: "Address", TableName: "Addresses", Schema: null });
+        Assert.Equal(2, result.Value.Tables.Count);
+        Assert.Contains(result.Value.Tables, c => c is { EntityName: "Person", TableName: "People", Schema: "dbo" });
+        Assert.Contains(result.Value.Tables, c => c is { EntityName: "Address", TableName: "Addresses", Schema: null });
     }
 
     private const string TableMappingSourceWithNonLiteralArg = """
@@ -1305,11 +1305,85 @@ public class FluentConfigParserTests
     {
         var result = new FluentConfigParser().ParseTableMappings(TableMappingSourceWithNonLiteralArg);
 
-        Assert.Empty(result.Value);
+        Assert.Empty(result.Value.Tables);
+        Assert.Empty(result.Value.Temporal);
         var diagnostic = Assert.Single(result.Diagnostics);
         Assert.Equal(DiagnosticCodes.UnreadableToTableArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
+    }
+
+    private const string TemporalSourceSingleArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToTable(b => b.IsTemporal());
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseTableMappings_ToTableWithSingleArgTemporalLambda_ReadsTemporalConfig_NoTableConfig()
+    {
+        var result = new FluentConfigParser().ParseTableMappings(TemporalSourceSingleArg);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Empty(result.Value.Tables);
+        var temporal = Assert.Single(result.Value.Temporal);
+        Assert.Equal("Person", temporal.EntityName);
+    }
+
+    private const string TemporalSourceTwoArgs = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToTable("People", b => b.IsTemporal());
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseTableMappings_ToTableWithTableNameAndTemporalLambda_ReadsBothTableAndTemporalConfig()
+    {
+        var result = new FluentConfigParser().ParseTableMappings(TemporalSourceTwoArgs);
+
+        Assert.Empty(result.Diagnostics);
+        var table = Assert.Single(result.Value.Tables);
+        Assert.Equal("Person", table.EntityName);
+        Assert.Equal("People", table.TableName);
+        var temporal = Assert.Single(result.Value.Temporal);
+        Assert.Equal("Person", temporal.EntityName);
+    }
+
+    private const string NonTemporalConfigLambdaSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToTable(b => b.ExcludeFromMigrations());
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseTableMappings_ToTableConfigLambdaWithoutIsTemporal_ReadsNeitherTableNorTemporalConfig_NoDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseTableMappings(NonTemporalConfigLambdaSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Empty(result.Value.Tables);
+        Assert.Empty(result.Value.Temporal);
     }
 
     private const string ViewMappingSource = """
@@ -2287,7 +2361,7 @@ public class FluentConfigParserTests
         var result = new FluentConfigParser().ParseTableMappings(source);
 
         Assert.Empty(result.Diagnostics);
-        var config = Assert.Single(result.Value);
+        var config = Assert.Single(result.Value.Tables);
         Assert.Equal("Person", config.EntityName);
         Assert.Equal("People", config.TableName);
         Assert.Equal("dbo", config.Schema);

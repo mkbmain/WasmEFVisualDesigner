@@ -100,7 +100,7 @@ public class RoundTripFuzzTests
         var blogKey = parser.ParseKeys(ConfigSource).Value.Single(c => c.EntityName == "Blog");
         AssertOnlyLineEndingsDiffer(ConfigSource, rewriter.SetKey(ConfigSource, "Blog", blogKey.PropertyNames));
 
-        var table = parser.ParseTableMappings(ConfigSource).Value.Single(c => c.EntityName == "Blog");
+        var table = parser.ParseTableMappings(ConfigSource).Value.Tables.Single(c => c.EntityName == "Blog");
         AssertOnlyLineEndingsDiffer(ConfigSource, rewriter.SetTable(ConfigSource, "Blog", table.TableName, table.Schema));
 
         var index = parser.ParseIndexes(ConfigSource).Value.Single(c => c.EntityName == "Blog");

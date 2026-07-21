@@ -16,7 +16,8 @@ public sealed record EntityModel(
     bool HasQueryFilter = false,
     string? Comment = null,
     bool IsJson = false,
-    string? JsonColumnName = null)
+    string? JsonColumnName = null,
+    bool IsTemporal = false)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();

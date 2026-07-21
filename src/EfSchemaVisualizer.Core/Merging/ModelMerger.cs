@@ -153,6 +153,13 @@ public static class ModelMerger
         return config is null ? entity : entity with { TableName = config.TableName, Schema = config.Schema };
     }
 
+    public static EntityModel ApplyTemporal(EntityModel entity, IReadOnlyList<TemporalConfig> configs)
+    {
+        return configs.Any(c => c.EntityName == entity.Name)
+            ? entity with { IsTemporal = true }
+            : entity;
+    }
+
     public static EntityModel ApplyViewMapping(EntityModel entity, IReadOnlyList<ViewConfig> configs)
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
