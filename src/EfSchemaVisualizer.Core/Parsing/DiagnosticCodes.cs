@@ -17,6 +17,7 @@ public static class DiagnosticCodes
     public const string UnreadableToViewArgument = nameof(UnreadableToViewArgument);
     public const string UnreadableToSqlQueryArgument = nameof(UnreadableToSqlQueryArgument);
     public const string UnreadableHasIndexArgument = nameof(UnreadableHasIndexArgument);
+    public const string UnreadableHasAlternateKeyArgument = nameof(UnreadableHasAlternateKeyArgument);
     public const string UnreadableIsUniqueArgument = nameof(UnreadableIsUniqueArgument);
     public const string UnreadableIgnoreArgument = nameof(UnreadableIgnoreArgument);
     public const string UnresolvableRelationshipTarget = nameof(UnresolvableRelationshipTarget);

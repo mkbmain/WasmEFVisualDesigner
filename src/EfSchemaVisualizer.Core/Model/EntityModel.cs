@@ -11,8 +11,10 @@ public sealed record EntityModel(
     string? Schema = null,
     bool IsKeyless = false,
     string? ViewName = null,
-    string? SqlQuery = null)
+    string? SqlQuery = null,
+    IReadOnlyList<IReadOnlyList<string>>? AlternateKeys = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();
+    public IReadOnlyList<IReadOnlyList<string>> AlternateKeys { get; init; } = AlternateKeys ?? new List<IReadOnlyList<string>>();
 }
