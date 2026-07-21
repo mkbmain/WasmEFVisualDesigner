@@ -35,6 +35,7 @@ public static class DiagramModelBuilder
         var indexAttributes = entityParser.ParseIndexAttributes(classSource);
         var ignoredProperties = configParser.ParseIgnoredProperties(configSource);
         var valueGeneration = configParser.ParseValueGeneration(configSource);
+        var concurrencyTokens = configParser.ParseConcurrencyTokens(configSource);
         var shadowProperties = configParser.ParseShadowProperties(configSource);
         var ignoredEntityNames = configParser.ParseIgnoredEntities(configSource).ToHashSet();
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
@@ -55,6 +56,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(indexAttributes.Diagnostics);
         diagnostics.AddRange(ignoredProperties.Diagnostics);
         diagnostics.AddRange(valueGeneration.Diagnostics);
+        diagnostics.AddRange(concurrencyTokens.Diagnostics);
         diagnostics.AddRange(shadowProperties.Diagnostics);
         diagnostics.AddRange(fluentRelationships.Diagnostics);
         diagnostics.AddRange(annotationRelationships.Diagnostics);
@@ -83,6 +85,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyDefaultValues(entity, defaultValues.Value))
             .Select(entity => ModelMerger.ApplyIndexes(entity, mergedIndexConfigs))
             .Select(entity => ModelMerger.ApplyValueGeneration(entity, valueGeneration.Value))
+            .Select(entity => ModelMerger.ApplyConcurrencyTokens(entity, concurrencyTokens.Value))
             .Select(entity => ModelMerger.ApplyIgnoredProperties(entity, ignoredProperties.Value))
             .Select(entity => ModelMerger.ApplyShadowProperties(entity, shadowProperties.Value))
             .ToList();

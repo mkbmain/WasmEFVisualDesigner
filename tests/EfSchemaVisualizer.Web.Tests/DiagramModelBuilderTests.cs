@@ -1,4 +1,5 @@
 using System.Linq;
+using EfSchemaVisualizer.Core.Parsing;
 using EfSchemaVisualizer.Web;
 using Xunit;
 
@@ -349,6 +350,92 @@ public class DiagramModelBuilderTests
 
         var id = result.Entities.Single().Properties.Single(p => p.Name == "Id");
         Assert.Equal("Identity", id.ValueGenerated);
+    }
+
+    [Fact]
+    public void Build_IsRowVersionCall_SetsIsRowVersionOnProperty()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public byte[] RowVersion { get; set; } = System.Array.Empty<byte>();
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.RowVersion).IsRowVersion();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var rowVersion = result.Entities.Single().Properties.Single(p => p.Name == "RowVersion");
+        Assert.True(rowVersion.IsRowVersion);
+        Assert.False(rowVersion.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public void Build_TimestampAttribute_SetsIsRowVersionOnProperty()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [Timestamp]
+                public byte[] RowVersion { get; set; } = System.Array.Empty<byte>();
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.True(result.Entities.Single().Properties.Single(p => p.Name == "RowVersion").IsRowVersion);
+    }
+
+    [Fact]
+    public void Build_IsRowVersionCallNotFlaggedAsUnrecognized()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public byte[] RowVersion { get; set; } = System.Array.Empty<byte>();
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.RowVersion).IsRowVersion();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCodes.UnrecognizedConfigCall);
     }
 
     [Fact]
