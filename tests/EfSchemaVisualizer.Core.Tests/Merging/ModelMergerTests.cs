@@ -199,6 +199,53 @@ public class ModelMergerTests
         Assert.Equal(new[] { "Id" }, result.KeyPropertyNames);
     }
 
+    // ─── ApplyAlternateKeys ─────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyAlternateKeys_PopulatesAlternateKeysFromMatchingConfig()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Email", "string", IsNullable: true, MaxLength: null)
+        });
+        var configs = new List<AlternateKeyConfig>
+        {
+            new("Person", new List<string> { "Email" })
+        };
+
+        var result = ModelMerger.ApplyAlternateKeys(entity, configs);
+
+        var alternateKey = Assert.Single(result.AlternateKeys);
+        Assert.Equal(new[] { "Email" }, alternateKey);
+    }
+
+    [Fact]
+    public void ApplyAlternateKeys_CollectsAllMatchingConfigsForSameEntity()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+        var configs = new List<AlternateKeyConfig>
+        {
+            new("Person", new List<string> { "Email" }),
+            new("Person", new List<string> { "TenantId", "Ssn" })
+        };
+
+        var result = ModelMerger.ApplyAlternateKeys(entity, configs);
+
+        Assert.Equal(2, result.AlternateKeys.Count);
+        Assert.Equal(new[] { "Email" }, result.AlternateKeys[0]);
+        Assert.Equal(new[] { "TenantId", "Ssn" }, result.AlternateKeys[1]);
+    }
+
+    [Fact]
+    public void ApplyAlternateKeys_NoMatchingConfig_LeavesAlternateKeysEmpty()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var result = ModelMerger.ApplyAlternateKeys(entity, new List<AlternateKeyConfig>());
+
+        Assert.Empty(result.AlternateKeys);
+    }
+
     [Fact]
     public void ApplyTableMapping_SetsTableNameAndSchema_OnMatchingEntity()
     {

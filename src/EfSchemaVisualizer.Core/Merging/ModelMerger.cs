@@ -63,6 +63,16 @@ public static class ModelMerger
         return entity with { Indexes = indexes };
     }
 
+    public static EntityModel ApplyAlternateKeys(EntityModel entity, IReadOnlyList<AlternateKeyConfig> configs)
+    {
+        var alternateKeys = configs
+            .Where(c => c.EntityName == entity.Name)
+            .Select(c => c.PropertyNames)
+            .ToList();
+
+        return entity with { AlternateKeys = alternateKeys };
+    }
+
     public static EntityModel ApplyTableMapping(EntityModel entity, IReadOnlyList<TableConfig> configs)
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);

@@ -324,6 +324,37 @@ public class DiagramModelBuilderTests
     }
 
     [Fact]
+    public void Build_ParsesAlternateKey_IntoEntityModel()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Email { get; set; } = "";
+            }
+            """;
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                        entity.HasAlternateKey(e => e.Email);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var person = result.Entities.Single(e => e.Name == "Person");
+        var alternateKey = Assert.Single(person.AlternateKeys);
+        Assert.Equal(new[] { "Email" }, alternateKey);
+    }
+
+    [Fact]
     public void Build_UseIdentityColumn_SetsValueGeneratedOnProperty()
     {
         const string classSource = """
