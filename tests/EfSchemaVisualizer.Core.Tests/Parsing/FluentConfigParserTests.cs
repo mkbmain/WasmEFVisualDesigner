@@ -575,6 +575,136 @@ public class FluentConfigParserTests
         Assert.Empty(result.Value);
     }
 
+    // ─── ParseAlternateKeys ──────────────────────────────────────────────────────
+
+    private const string SourceWithSingleAndCompositeAlternateKeys = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasAlternateKey(e => e.Email);
+                });
+
+                modelBuilder.Entity<OrderLine>(entity =>
+                {
+                    entity.HasAlternateKey(e => new { e.OrderId, e.LineNumber });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseAlternateKeys_ReadsSingleAndCompositeLambdaKeys_AcrossMultipleEntities()
+    {
+        var result = new FluentConfigParser().ParseAlternateKeys(SourceWithSingleAndCompositeAlternateKeys);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Email" }));
+        Assert.Contains(result.Value, c => c.EntityName == "OrderLine" && c.PropertyNames.SequenceEqual(new[] { "OrderId", "LineNumber" }));
+    }
+
+    private const string SourceWithMultipleAlternateKeysOnOneEntity = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasAlternateKey(e => e.Email);
+                    entity.HasAlternateKey(e => e.Ssn);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseAlternateKeys_MultipleCallsOnOneEntity_AreAllRead()
+    {
+        var result = new FluentConfigParser().ParseAlternateKeys(SourceWithMultipleAlternateKeysOnOneEntity);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Email" }));
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Ssn" }));
+    }
+
+    private const string SourceWithStringAlternateKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasAlternateKey("Email");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseAlternateKeys_StringOverload_IsRead()
+    {
+        var result = new FluentConfigParser().ParseAlternateKeys(SourceWithStringAlternateKey);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Email" }));
+    }
+
+    private const string SourceWithExplicitNameAnonymousAlternateKeyMember = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasAlternateKey(e => new { Key = e.Email });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseAlternateKeys_ExplicitNameAnonymousMember_EmitsUnreadableHasAlternateKeyArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseAlternateKeys(SourceWithExplicitNameAnonymousAlternateKeyMember);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasAlternateKeyArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
+
+    private const string SourceWithAlternateKeyOnConfigurationClass = """
+        public class PersonConfig : IEntityTypeConfiguration<Person>
+        {
+            public void Configure(EntityTypeBuilder<Person> builder)
+            {
+                builder.HasAlternateKey(e => e.Email);
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseAlternateKeys_EntityTypeConfigurationStyle_IsRead()
+    {
+        var result = new FluentConfigParser().ParseAlternateKeys(SourceWithAlternateKeyOnConfigurationClass);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Email" }));
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_HasAlternateKey_IsNotFlagged()
+    {
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(SourceWithSingleAndCompositeAlternateKeys);
+
+        Assert.Empty(diagnostics);
+    }
+
     // ─── ParseIndexes ────────────────────────────────────────────────────────────
 
     [Fact]

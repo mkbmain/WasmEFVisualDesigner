@@ -15,7 +15,7 @@ public sealed class FluentConfigParser
     /// config scope whose name isn't in this set is flagged by <see cref="ParseUnrecognizedCalls"/>.
     private static readonly HashSet<string> RecognizedCallNames = new()
     {
-        "Property", "HasMaxLength", "HasPrecision", "IsRequired", "HasKey", "ToTable",
+        "Property", "HasMaxLength", "HasPrecision", "IsRequired", "HasKey", "HasAlternateKey", "ToTable",
         "HasColumnName", "HasColumnType", "HasDefaultValue", "HasIndex", "IsUnique",
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
@@ -258,6 +258,38 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<KeyConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<AlternateKeyConfig>> ParseAlternateKeys(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<AlternateKeyConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var hasAlternateKeyCall in FluentSyntaxHelpers.FindCallsNamed(scope, "HasAlternateKey"))
+            {
+                var propertyNames = FluentSyntaxHelpers.TryReadPropertyNameList(hasAlternateKeyCall);
+
+                if (propertyNames is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasAlternateKeyArgument,
+                        "HasAlternateKey argument(s) could not be read as property name(s).",
+                        entityName,
+                        PropertyName: null,
+                        hasAlternateKeyCall.Span));
+                    continue;
+                }
+
+                results.Add(new AlternateKeyConfig(entityName, propertyNames));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<AlternateKeyConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<TableConfig>> ParseTableMappings(string sourceCode)
