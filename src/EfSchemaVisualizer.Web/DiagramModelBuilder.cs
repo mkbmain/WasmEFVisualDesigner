@@ -25,6 +25,7 @@ public static class DiagramModelBuilder
         var isRequired = configParser.ParseIsRequired(configSource);
         var keys = configParser.ParseKeys(configSource);
         var alternateKeys = configParser.ParseAlternateKeys(configSource);
+        var queryFilters = configParser.ParseQueryFilters(configSource);
         var tables = configParser.ParseTableMappings(configSource);
         var views = configParser.ParseViewMappings(configSource);
         var sqlQueries = configParser.ParseSqlQueries(configSource);
@@ -48,6 +49,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(isRequired.Diagnostics);
         diagnostics.AddRange(keys.Diagnostics);
         diagnostics.AddRange(alternateKeys.Diagnostics);
+        diagnostics.AddRange(queryFilters.Diagnostics);
         diagnostics.AddRange(tables.Diagnostics);
         diagnostics.AddRange(views.Diagnostics);
         diagnostics.AddRange(sqlQueries.Diagnostics);
@@ -77,6 +79,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyIsRequired(entity, isRequired.Value))
             .Select(entity => ModelMerger.ApplyKeys(entity, keys.Value))
             .Select(entity => ModelMerger.ApplyAlternateKeys(entity, alternateKeys.Value))
+            .Select(entity => ModelMerger.ApplyQueryFilters(entity, queryFilters.Value))
             .Select(entity => ModelMerger.ApplyTableMapping(entity, tables.Value))
             .Select(entity => ModelMerger.ApplyViewMapping(entity, views.Value))
             .Select(entity => ModelMerger.ApplySqlQuery(entity, sqlQueries.Value))

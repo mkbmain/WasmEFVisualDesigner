@@ -73,6 +73,13 @@ public static class ModelMerger
         return entity with { AlternateKeys = alternateKeys };
     }
 
+    public static EntityModel ApplyQueryFilters(EntityModel entity, IReadOnlyList<QueryFilterConfig> configs)
+    {
+        return configs.Any(c => c.EntityName == entity.Name)
+            ? entity with { HasQueryFilter = true }
+            : entity;
+    }
+
     public static EntityModel ApplyTableMapping(EntityModel entity, IReadOnlyList<TableConfig> configs)
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);

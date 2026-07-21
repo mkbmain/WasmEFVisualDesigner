@@ -618,4 +618,38 @@ public class ModelMergerTests
 
         Assert.Single(merged.Properties);
     }
+
+    // ─── ApplyQueryFilters ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyQueryFilters_SetsFlagWhenEntityMatches_LeavesOtherEntitiesUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<QueryFilterConfig>
+        {
+            new("Person"),
+            new("Address"), // different entity, must not affect Person's own flag beyond matching
+        };
+
+        var merged = ModelMerger.ApplyQueryFilters(entity, configs);
+
+        Assert.True(merged.HasQueryFilter);
+    }
+
+    [Fact]
+    public void ApplyQueryFilters_NoMatchingConfig_LeavesFlagFalse()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyQueryFilters(entity, new List<QueryFilterConfig> { new("Address") });
+
+        Assert.False(merged.HasQueryFilter);
+    }
 }

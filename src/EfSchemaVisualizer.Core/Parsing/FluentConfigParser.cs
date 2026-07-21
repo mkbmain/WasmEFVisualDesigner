@@ -21,7 +21,7 @@ public sealed class FluentConfigParser
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
-        "IsRowVersion", "IsConcurrencyToken",
+        "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -453,6 +453,29 @@ public sealed class FluentConfigParser
         }
 
         return results.Distinct().ToList();
+    }
+
+    /// Reads bare `entity.HasQueryFilter(expr)` calls — presence only. The predicate expression
+    /// itself can't be meaningfully read or fail to read, so there's nothing an
+    /// "unreadable argument" diagnostic could report; matches `ParseKeylessEntities`'s reasoning
+    /// for the same no-`ParseResult`-wrapper shape, but returns the DTO (not a bare string list)
+    /// to match every other `Parse*` method's return shape.
+    public ParseResult<IReadOnlyList<QueryFilterConfig>> ParseQueryFilters(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<QueryFilterConfig>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            if (FluentSyntaxHelpers.FindCallsNamed(scope, "HasQueryFilter").Any())
+            {
+                results.Add(new QueryFilterConfig(entityName));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<QueryFilterConfig>>(results, new List<Diagnostic>());
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)

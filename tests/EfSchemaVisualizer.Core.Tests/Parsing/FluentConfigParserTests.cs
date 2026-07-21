@@ -2526,7 +2526,7 @@ public class FluentConfigParserTests
             {
                 protected override void OnModelCreating(ModelBuilder modelBuilder)
                 {
-                    modelBuilder.Entity<Person>().HasQueryFilter(e => !e.IsDeleted);
+                    modelBuilder.Entity<Person>().HasConversion(e => e.ToString());
                 }
             }
             """;
@@ -2534,7 +2534,7 @@ public class FluentConfigParserTests
         var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
 
         var diagnostic = Assert.Single(diagnostics);
-        Assert.Contains("HasQueryFilter", diagnostic.Message);
+        Assert.Contains("HasConversion", diagnostic.Message);
     }
 
     [Fact]
@@ -2943,5 +2943,48 @@ public class FluentConfigParserTests
         Assert.Equal("Person", config.EntityName);
         Assert.Equal("LastModified", config.PropertyName);
         Assert.Equal("DateTime", config.ClrType);
+    }
+
+    // ─── ParseQueryFilters ────────────────────────────────────────────────────────
+
+    private const string QueryFilterSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasQueryFilter(e => !e.IsDeleted);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseQueryFilters_ReadsEntityWithHasQueryFilterCall()
+    {
+        var result = new FluentConfigParser().ParseQueryFilters(QueryFilterSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+    }
+
+    [Fact]
+    public void ParseQueryFilters_NoHasQueryFilterCalls_ReturnsEmpty()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity => { entity.HasKey(e => e.Id); });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseQueryFilters(source);
+
+        Assert.Empty(result.Value);
     }
 }
