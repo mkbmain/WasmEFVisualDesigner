@@ -22,6 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
+        "SplitToTable",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -774,6 +775,43 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<JsonConfig>>(results, diagnostics);
+    }
+
+    /// Only the secondary table name is read; the builder lambda's per-property table assignment
+    /// is not modeled (same scope cut as `ToTable(b => b.IsTemporal())`'s config-lambda internals).
+    /// `FindCallsNamed` finds every `SplitToTable` call in the scope regardless of how many are
+    /// chained, so an entity split across three or more tables yields one config per call.
+    public ParseResult<IReadOnlyList<SplitToTableConfig>> ParseSplitTables(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<SplitToTableConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "SplitToTable"))
+            {
+                var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    results.Add(new SplitToTableConfig(entityName, literal.Token.ValueText));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableSplitToTableArgument,
+                        "SplitToTable table name argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        (arg ?? (SyntaxNode)call).Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<SplitToTableConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)

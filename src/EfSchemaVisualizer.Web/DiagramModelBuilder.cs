@@ -31,6 +31,7 @@ public static class DiagramModelBuilder
         var fixedLengthFlags = configParser.ParseFixedLengthFlags(configSource);
         var collations = configParser.ParseCollations(configSource);
         var jsonMappings = configParser.ParseJsonMappings(configSource);
+        var splitTables = configParser.ParseSplitTables(configSource);
         var tables = configParser.ParseTableMappings(configSource);
         var views = configParser.ParseViewMappings(configSource);
         var sqlQueries = configParser.ParseSqlQueries(configSource);
@@ -61,6 +62,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(fixedLengthFlags.Diagnostics);
         diagnostics.AddRange(collations.Diagnostics);
         diagnostics.AddRange(jsonMappings.Diagnostics);
+        diagnostics.AddRange(splitTables.Diagnostics);
         diagnostics.AddRange(tables.Diagnostics);
         diagnostics.AddRange(views.Diagnostics);
         diagnostics.AddRange(sqlQueries.Diagnostics);
@@ -97,6 +99,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyFixedLengthFlags(entity, fixedLengthFlags.Value))
             .Select(entity => ModelMerger.ApplyCollations(entity, collations.Value))
             .Select(entity => ModelMerger.ApplyJsonMappings(entity, jsonMappings.Value))
+            .Select(entity => ModelMerger.ApplySplitTables(entity, splitTables.Value))
             .Select(entity => ModelMerger.ApplyTableMapping(entity, tables.Value.Tables))
             .Select(entity => ModelMerger.ApplyTemporal(entity, tables.Value.Temporal))
             .Select(entity => ModelMerger.ApplyViewMapping(entity, views.Value))

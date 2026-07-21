@@ -774,4 +774,31 @@ public class ModelMergerTests
         Assert.False(merged.IsJson);
         Assert.Null(merged.JsonColumnName);
     }
+
+    // ─── ApplySplitTables ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplySplitTables_SetsSplitTablesFromMatchingConfigs_LeavesOtherEntitiesUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplySplitTables(entity, new List<SplitToTableConfig>
+        {
+            new("Person", "PersonDetails"),
+            new("Person", "PersonStats"),
+            new("Address", "AddressExtra"),
+        });
+
+        Assert.Equal(new[] { "PersonDetails", "PersonStats" }, merged.SplitTables);
+    }
+
+    [Fact]
+    public void ApplySplitTables_NoMatchingConfig_LeavesSplitTablesEmpty()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplySplitTables(entity, new List<SplitToTableConfig> { new("Address", "AddressExtra") });
+
+        Assert.Empty(merged.SplitTables);
+    }
 }

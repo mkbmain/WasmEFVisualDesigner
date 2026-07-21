@@ -3400,4 +3400,84 @@ public class FluentConfigParserTests
         Assert.Equal("Address", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
+
+    // ─── ParseSplitTables ──────────────────────────────────────────────────────────
+
+    private const string SplitToTableSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.SplitToTable("PersonDetails", tableBuilder =>
+                    {
+                        tableBuilder.Property(e => e.Bio);
+                    });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSplitTables_ReadsSecondaryTableName()
+    {
+        var result = new FluentConfigParser().ParseSplitTables(SplitToTableSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("PersonDetails", config.TableName);
+    }
+
+    private const string SplitToTableSourceMultiple = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.SplitToTable("PersonDetails", tb => { tb.Property(e => e.Bio); })
+                        .SplitToTable("PersonStats", tb => { tb.Property(e => e.LoginCount); });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSplitTables_MultipleCalls_ReadsAllSecondaryTableNames()
+    {
+        var result = new FluentConfigParser().ParseSplitTables(SplitToTableSourceMultiple);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", TableName: "PersonDetails" });
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", TableName: "PersonStats" });
+    }
+
+    private const string SplitToTableSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string TableName = "PersonDetails";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.SplitToTable(TableName, tb => { tb.Property(e => e.Bio); });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSplitTables_NonLiteralArgument_EmitsUnreadableSplitToTableArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseSplitTables(SplitToTableSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableSplitToTableArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+    }
 }

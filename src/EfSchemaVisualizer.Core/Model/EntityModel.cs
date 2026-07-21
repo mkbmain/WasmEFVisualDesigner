@@ -17,9 +17,11 @@ public sealed record EntityModel(
     string? Comment = null,
     bool IsJson = false,
     string? JsonColumnName = null,
-    bool IsTemporal = false)
+    bool IsTemporal = false,
+    IReadOnlyList<string>? SplitTables = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();
     public IReadOnlyList<IReadOnlyList<string>> AlternateKeys { get; init; } = AlternateKeys ?? new List<IReadOnlyList<string>>();
+    public IReadOnlyList<string> SplitTables { get; init; } = SplitTables ?? new List<string>();
 }

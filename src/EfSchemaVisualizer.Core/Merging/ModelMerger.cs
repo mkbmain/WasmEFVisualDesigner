@@ -160,6 +160,16 @@ public static class ModelMerger
             : entity;
     }
 
+    public static EntityModel ApplySplitTables(EntityModel entity, IReadOnlyList<SplitToTableConfig> configs)
+    {
+        var tableNames = configs
+            .Where(c => c.EntityName == entity.Name)
+            .Select(c => c.TableName)
+            .ToList();
+
+        return tableNames.Count == 0 ? entity : entity with { SplitTables = tableNames };
+    }
+
     public static EntityModel ApplyViewMapping(EntityModel entity, IReadOnlyList<ViewConfig> configs)
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
