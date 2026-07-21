@@ -624,6 +624,58 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetRowVersion(string entityName, string propertyName, bool isRowVersion)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (isRowVersion == property.IsRowVersion)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = isRowVersion
+            ? _configRewriter.SetRowVersion(ConfigSource, entityName, propertyName)
+            : _configRewriter.RemoveRowVersion(ConfigSource, entityName, propertyName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetConcurrencyToken(string entityName, string propertyName, bool isConcurrencyToken)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (isConcurrencyToken == property.IsConcurrencyToken)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = isConcurrencyToken
+            ? _configRewriter.SetConcurrencyToken(ConfigSource, entityName, propertyName)
+            : _configRewriter.RemoveConcurrencyToken(ConfigSource, entityName, propertyName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     public DiagramEditResult SetPrecision(string entityName, string propertyName, int? precision, int? scale)
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);

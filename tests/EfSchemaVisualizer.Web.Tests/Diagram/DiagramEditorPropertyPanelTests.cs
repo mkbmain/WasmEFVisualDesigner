@@ -80,6 +80,87 @@ public class DiagramEditorPropertyPanelTests
         Assert.DoesNotContain("IsRequired", editor.ConfigSource);
     }
 
+    [Fact]
+    public void SetRowVersion_SetToTrue_InsertsIsRowVersion()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetRowVersion("Person", "Name", true);
+
+        Assert.True(result.Success);
+        Assert.True(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").IsRowVersion);
+        Assert.Contains("IsRowVersion()", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetRowVersion_SetToFalse_WhenAlreadyFalse_IsNoOp()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetRowVersion("Person", "Name", false);
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain("IsRowVersion", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetRowVersion_ClearingExistingFlag_RemovesIsRowVersion()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetRowVersion("Person", "Name", true);
+
+        var result = editor.SetRowVersion("Person", "Name", false);
+
+        Assert.True(result.Success);
+        Assert.False(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").IsRowVersion);
+        Assert.DoesNotContain("IsRowVersion", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetRowVersion_UnknownEntity_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetRowVersion("DoesNotExist", "Name", true);
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void SetConcurrencyToken_SetToTrue_InsertsIsConcurrencyToken()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetConcurrencyToken("Person", "Name", true);
+
+        Assert.True(result.Success);
+        Assert.True(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").IsConcurrencyToken);
+        Assert.Contains("IsConcurrencyToken()", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetConcurrencyToken_ClearingExistingFlag_RemovesIsConcurrencyToken()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetConcurrencyToken("Person", "Name", true);
+
+        var result = editor.SetConcurrencyToken("Person", "Name", false);
+
+        Assert.True(result.Success);
+        Assert.False(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").IsConcurrencyToken);
+        Assert.DoesNotContain("IsConcurrencyToken", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetConcurrencyToken_UnknownProperty_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetConcurrencyToken("Person", "DoesNotExist", true);
+
+        Assert.False(result.Success);
+    }
+
     private const string RelationshipClassSource = """
         public class Blog
         {
