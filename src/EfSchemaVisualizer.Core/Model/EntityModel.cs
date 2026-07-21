@@ -13,7 +13,8 @@ public sealed record EntityModel(
     string? ViewName = null,
     string? SqlQuery = null,
     IReadOnlyList<IReadOnlyList<string>>? AlternateKeys = null,
-    bool HasQueryFilter = false)
+    bool HasQueryFilter = false,
+    string? Comment = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();

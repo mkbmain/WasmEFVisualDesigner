@@ -21,7 +21,7 @@ public sealed class FluentConfigParser
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
-        "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter",
+        "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -476,6 +476,72 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<QueryFilterConfig>>(results, new List<Diagnostic>());
+    }
+
+    /// `HasComment` is legal chained directly onto the entity receiver (entity-level comment) or
+    /// onto a `.Property(...)` call (property-level comment). `GetPropertyNameFor` returning null
+    /// is the existing signal, used elsewhere, for "this call isn't property-scoped" — reused here
+    /// to route each call to the right result list instead of guessing from call shape.
+    public (ParseResult<IReadOnlyList<EntityCommentConfig>> Entities, ParseResult<IReadOnlyList<PropertyCommentConfig>> Properties)
+        ParseComments(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityResults = new List<EntityCommentConfig>();
+        var entityDiagnostics = new List<Diagnostic>();
+        var propertyResults = new List<PropertyCommentConfig>();
+        var propertyDiagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasComment"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+                var arg = call.ArgumentList.Arguments.FirstOrDefault();
+                var isReadableLiteral = arg?.Expression is LiteralExpressionSyntax literal
+                    && literal.IsKind(SyntaxKind.StringLiteralExpression);
+
+                if (propertyName is null)
+                {
+                    if (isReadableLiteral)
+                    {
+                        entityResults.Add(new EntityCommentConfig(
+                            entityName, ((LiteralExpressionSyntax)arg!.Expression).Token.ValueText));
+                    }
+                    else
+                    {
+                        entityDiagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableHasCommentArgument,
+                            "HasComment argument is not a string literal and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            (arg ?? (SyntaxNode)call).Span));
+                    }
+                }
+                else
+                {
+                    if (isReadableLiteral)
+                    {
+                        propertyResults.Add(new PropertyCommentConfig(
+                            entityName, propertyName, ((LiteralExpressionSyntax)arg!.Expression).Token.ValueText));
+                    }
+                    else
+                    {
+                        propertyDiagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableHasCommentArgument,
+                            "HasComment argument is not a string literal and could not be read.",
+                            entityName,
+                            propertyName,
+                            (arg ?? (SyntaxNode)call).Span));
+                    }
+                }
+            }
+        }
+
+        return (
+            new ParseResult<IReadOnlyList<EntityCommentConfig>>(entityResults, entityDiagnostics),
+            new ParseResult<IReadOnlyList<PropertyCommentConfig>>(propertyResults, propertyDiagnostics));
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)

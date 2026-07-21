@@ -80,6 +80,26 @@ public static class ModelMerger
             : entity;
     }
 
+    public static EntityModel ApplyEntityComments(EntityModel entity, IReadOnlyList<EntityCommentConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { Comment = config.Comment };
+    }
+
+    public static EntityModel ApplyPropertyComments(EntityModel entity, IReadOnlyList<PropertyCommentConfig> configs)
+    {
+        var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var config)
+                ? property with { Comment = config.Comment }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     public static EntityModel ApplyTableMapping(EntityModel entity, IReadOnlyList<TableConfig> configs)
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);

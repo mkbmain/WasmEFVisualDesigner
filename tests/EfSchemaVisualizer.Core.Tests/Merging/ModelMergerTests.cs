@@ -652,4 +652,38 @@ public class ModelMergerTests
 
         Assert.False(merged.HasQueryFilter);
     }
+
+    // ─── ApplyEntityComments / ApplyPropertyComments ──────────────────────────────
+
+    [Fact]
+    public void ApplyEntityComments_SetsCommentWhenEntityMatches()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplyEntityComments(entity, new List<EntityCommentConfig>
+        {
+            new("Person", "People in the system."),
+            new("Address", "Should not apply."),
+        });
+
+        Assert.Equal("People in the system.", merged.Comment);
+    }
+
+    [Fact]
+    public void ApplyPropertyComments_SetsCommentOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyPropertyComments(entity, new List<PropertyCommentConfig>
+        {
+            new("Person", "Name", "Full display name."),
+        });
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").Comment);
+        Assert.Equal("Full display name.", merged.Properties.Single(p => p.Name == "Name").Comment);
+    }
 }

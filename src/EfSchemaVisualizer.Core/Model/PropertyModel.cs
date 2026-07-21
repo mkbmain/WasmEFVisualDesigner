@@ -14,4 +14,5 @@ public sealed record PropertyModel(
     string? ValueGenerated = null,
     bool IsShadow = false,
     bool IsRowVersion = false,
-    bool IsConcurrencyToken = false);
+    bool IsConcurrencyToken = false,
+    string? Comment = null);

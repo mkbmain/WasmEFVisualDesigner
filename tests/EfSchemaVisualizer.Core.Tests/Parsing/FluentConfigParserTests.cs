@@ -2382,7 +2382,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.HasComment("A person entity");
+                        entity.HasConversion(typeof(string));
                     });
                 }
             }
@@ -2393,7 +2393,7 @@ public class FluentConfigParserTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
-        Assert.Contains("HasComment", diagnostic.Message);
+        Assert.Contains("HasConversion", diagnostic.Message);
     }
 
     [Fact]
@@ -2406,7 +2406,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.HasIndex(e => e.Email).IsUnique().HasComment("note");
+                        entity.HasIndex(e => e.Email).IsUnique().HasConversion(typeof(string));
                     });
                 }
             }
@@ -2415,7 +2415,7 @@ public class FluentConfigParserTests
         var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
 
         var diagnostic = Assert.Single(diagnostics);
-        Assert.Contains("HasComment", diagnostic.Message);
+        Assert.Contains("HasConversion", diagnostic.Message);
     }
 
     [Fact]
@@ -2505,7 +2505,7 @@ public class FluentConfigParserTests
 
                         modelBuilder.Entity<Address>(nested =>
                         {
-                            nested.HasComment("An address entity");
+                            nested.HasConversion(typeof(string));
                         });
                     });
                 }
@@ -2563,7 +2563,7 @@ public class FluentConfigParserTests
             {
                 public void Configure(EntityTypeBuilder<Person> builder)
                 {
-                    builder.HasComment("legacy table");
+                    builder.HasConversion(typeof(string));
                 }
             }
             """;
@@ -2572,7 +2572,7 @@ public class FluentConfigParserTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal("Person", diagnostic.EntityName);
-        Assert.Contains("HasComment", diagnostic.Message);
+        Assert.Contains("HasConversion", diagnostic.Message);
     }
 
     // ─── ParseIgnoredProperties ────────────────────────────────────────────────────
@@ -2986,5 +2986,67 @@ public class FluentConfigParserTests
         var result = new FluentConfigParser().ParseQueryFilters(source);
 
         Assert.Empty(result.Value);
+    }
+
+    // ─── ParseComments ─────────────────────────────────────────────────────────
+
+    private const string CommentSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasComment("People in the system.");
+                    entity.Property(e => e.Name).HasComment("Full display name.");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseComments_ReadsEntityAndPropertyComments()
+    {
+        var (entities, properties) = new FluentConfigParser().ParseComments(CommentSource);
+
+        Assert.Empty(entities.Diagnostics);
+        Assert.Empty(properties.Diagnostics);
+
+        var entityConfig = Assert.Single(entities.Value);
+        Assert.Equal("Person", entityConfig.EntityName);
+        Assert.Equal("People in the system.", entityConfig.Comment);
+
+        var propertyConfig = Assert.Single(properties.Value);
+        Assert.Equal("Person", propertyConfig.EntityName);
+        Assert.Equal("Name", propertyConfig.PropertyName);
+        Assert.Equal("Full display name.", propertyConfig.Comment);
+    }
+
+    private const string CommentSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string Note = "Full display name.";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasComment(Note);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseComments_NonLiteralPropertyArgument_EmitsUnreadableHasCommentArgumentDiagnostic()
+    {
+        var (entities, properties) = new FluentConfigParser().ParseComments(CommentSourceWithNonLiteralArg);
+
+        Assert.Empty(entities.Value);
+        Assert.Empty(properties.Value);
+        var diagnostic = Assert.Single(properties.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasCommentArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Name", diagnostic.PropertyName);
     }
 }
