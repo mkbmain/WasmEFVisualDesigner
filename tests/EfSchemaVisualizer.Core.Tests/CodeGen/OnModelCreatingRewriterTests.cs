@@ -644,6 +644,101 @@ public class OnModelCreatingRewriterTests
         Assert.Equal(SourceWithSingleKey, result);
     }
 
+    private const string SourceWithSingleAlternateKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.HasAlternateKey(e => e.Email);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void AddAlternateKey_EntityWithoutOne_InsertsStatementAtEndOfBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddAlternateKey(SourceWithSingleKey, entityName: "Person", propertyNames: new List<string> { "Guid" });
+
+        Assert.Contains("entity.HasKey(e => e.Id);", result);
+        Assert.Contains("entity.HasAlternateKey(e => e.Guid)", result);
+
+        var configs = new FluentConfigParser().ParseAlternateKeys(result).Value;
+        Assert.Contains(configs, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "Guid" }));
+    }
+
+    [Fact]
+    public void AddAlternateKey_SecondAlternateKeyOnSameEntity_AddsBothWithoutRemovingFirst()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddAlternateKey(SourceWithSingleAlternateKey, entityName: "Person", propertyNames: new List<string> { "Ssn" });
+
+        var configs = new FluentConfigParser().ParseAlternateKeys(result).Value;
+        Assert.Equal(2, configs.Count);
+        Assert.Contains(configs, c => c.PropertyNames.SequenceEqual(new[] { "Email" }));
+        Assert.Contains(configs, c => c.PropertyNames.SequenceEqual(new[] { "Ssn" }));
+    }
+
+    [Fact]
+    public void AddAlternateKey_CompositePropertySet_WritesAnonymousObjectLambda()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddAlternateKey(SourceWithSingleKey, entityName: "Person", propertyNames: new List<string> { "TenantId", "Guid" });
+
+        Assert.Contains("entity.HasAlternateKey(e => new { e.TenantId, e.Guid })", result);
+    }
+
+    [Fact]
+    public void AddAlternateKey_AlreadyConfigured_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddAlternateKey(SourceWithSingleAlternateKey, entityName: "Person", propertyNames: new List<string> { "Email" });
+
+        Assert.Equal(SourceWithSingleAlternateKey, result);
+    }
+
+    [Fact]
+    public void AddAlternateKey_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddAlternateKey(SourceWithSingleKey, entityName: "Vehicle", propertyNames: new List<string> { "Vin" });
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>", result);
+        Assert.Contains("entity.HasAlternateKey(e => e.Vin)", result);
+    }
+
+    [Fact]
+    public void RemoveAlternateKey_ExistingCall_RemovesStatementEntirely()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveAlternateKey(SourceWithSingleAlternateKey, entityName: "Person", propertyNames: new List<string> { "Email" });
+
+        Assert.DoesNotContain("HasAlternateKey", result);
+        Assert.Contains("entity.HasKey(e => e.Id);", result);
+    }
+
+    [Fact]
+    public void RemoveAlternateKey_NoMatchingPropertySet_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveAlternateKey(SourceWithSingleAlternateKey, entityName: "Person", propertyNames: new List<string> { "Ssn" });
+
+        Assert.Equal(SourceWithSingleAlternateKey, result);
+    }
+
+    [Fact]
+    public void RemoveAlternateKey_EntityHasNoConfigAtAll_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveAlternateKey(SourceWithSingleKey, entityName: "Vehicle", propertyNames: new List<string> { "Vin" });
+
+        Assert.Equal(SourceWithSingleKey, result);
+    }
+
     [Fact]
     public void SetKeyless_EntityConfiguredWithoutHasNoKey_InsertsStatementAtEndOfBlock()
     {

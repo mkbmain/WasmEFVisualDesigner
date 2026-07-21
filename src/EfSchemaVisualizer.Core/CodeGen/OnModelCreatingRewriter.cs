@@ -474,6 +474,93 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string AddAlternateKey(string sourceCode, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var alreadyExists = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasAlternateKey"))
+            .Any(call => FluentSyntaxHelpers.TryReadPropertyNameList(call) is { } existing
+                && existing.SequenceEqual(propertyNames));
+
+        if (alreadyExists)
+        {
+            return sourceCode;
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertAlternateKeyStatement(root, existingScope, propertyNames);
+        }
+
+        return InsertAlternateKeyEntityBlock(root, entityName, propertyNames);
+    }
+
+    private static string InsertAlternateKeyStatement(CompilationUnitSyntax root, SyntaxNode scope, IReadOnlyList<string> propertyNames)
+    {
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+
+        var newStatement = BuildHasAlternateKeyStatement(blockReceiverName, propertyNames);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertAlternateKeyEntityBlock(CompilationUnitSyntax root, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var alternateKeyStatement = BuildHasAlternateKeyStatement("entity", propertyNames);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(alternateKeyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildHasAlternateKeyStatement(string blockReceiverName, IReadOnlyList<string> propertyNames)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("HasAlternateKey")),
+                BuildHasKeyArgumentList(propertyNames)));
+    }
+
+    public string RemoveAlternateKey(string sourceCode, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasAlternateKey"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.TryReadPropertyNameList(call) is { } existing
+                && existing.SequenceEqual(propertyNames));
+
+        if (existingCall is null || existingCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string SetKeyless(string sourceCode, string entityName)
     {
         var withoutKey = RemoveKey(sourceCode, entityName);
