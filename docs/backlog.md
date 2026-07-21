@@ -931,9 +931,24 @@ these matter before any new surface is added.
       SetRowVersion`/`SetConcurrencyToken`, and two checkboxes ("Row version",
       "Concurrency token") in `EntityNode.razor`'s property expand panel — see
       `2026-07-21-concurrency-tokens-design.md`.
-- [ ] **`[found]` Alternate keys unread.** `HasAlternateKey(...)` — also a
+- [x] **`[found]` Alternate keys unread.** `HasAlternateKey(...)` — also a
       valid `HasForeignKey` principal target, so its absence can make parsed
       relationships subtly wrong.
+      **Update:** `FluentConfigParser.ParseAlternateKeys` reads
+      `HasAlternateKey(...)` calls (lambda, composite, and string-param forms)
+      into a new `AlternateKeyConfig` (property-set name list); `EntityModel.
+      AlternateKeys` stores these as a list of lists (since an entity can have
+      multiple alternate keys); `ModelMerger.ApplyAlternateKeys` performs
+      full-replace merge per entity (matching by property-set identity).
+      Write-back: `OnModelCreatingRewriter.AddAlternateKey`/`RemoveAlternateKey`
+      (both no-op-safe, reusing `BuildHasKeyArgumentList` for argument
+      generation), `DiagramEditor.AddAlternateKey`/`ToggleAlternateKeyMembership`/
+      `RemoveAlternateKey` (mirroring the `HasIndex` pattern), and a new
+      "Alternate keys:" section in `EntityNode.razor`'s property expand panel
+      with membership checkboxes, remove button, and "+ New alternate key"
+      button (no name/unique fields, since `HasAlternateKey` omits both).
+      `HasPrincipalKey` and relationship cross-referencing remain explicitly
+      out of scope — see `2026-07-21-alternate-keys-design.md`.
 - [ ] **`[found]` Index extras unread.** `HasFilter(...)`, `IsDescending(...)`,
       `IncludeProperties(...)` chained after a parsed `HasIndex` are dropped
       on index rewrite (the rewriter re-emits the canonical chain without
