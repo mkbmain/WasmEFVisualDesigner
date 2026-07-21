@@ -51,6 +51,7 @@ public class RoundTripFuzzTests
                     // Server-generated timestamp; HasDefaultValueSql is not modeled by the parser.
                     entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
                     entity.HasIndex(e => e.Url).IsUnique();
+                    entity.HasAlternateKey(e => e.Url);
                 });
 
                 modelBuilder.Entity<Post>(entity =>
@@ -105,6 +106,9 @@ public class RoundTripFuzzTests
         var index = parser.ParseIndexes(ConfigSource).Value.Single(c => c.EntityName == "Blog");
         AssertOnlyLineEndingsDiffer(ConfigSource, rewriter.SetIndex(ConfigSource, "Blog", index.PropertyNames, index.IsUnique, index.Name));
 
+        var alternateKey = parser.ParseAlternateKeys(ConfigSource).Value.Single(c => c.EntityName == "Blog");
+        Assert.Equal(ConfigSource, rewriter.AddAlternateKey(ConfigSource, "Blog", alternateKey.PropertyNames));
+
         var postTitleMaxLength = parser.ParseMaxLengths(ConfigSource).Value.Single(c => c is { EntityName: "Post", PropertyName: "Title" });
         Assert.Equal(ConfigSource, rewriter.RewriteMaxLength(ConfigSource, "Post", "Title", postTitleMaxLength.MaxLength));
 
@@ -137,6 +141,7 @@ public class RoundTripFuzzTests
         var blogBlockAfter = ExtractEntityBlock(renamedConfigSource, "Blog");
         AssertOnlyLineEndingsDiffer(blogBlockBefore, blogBlockAfter);
         Assert.Contains("HasDefaultValueSql(\"GETUTCDATE()\")", blogBlockAfter);
+        Assert.Contains("HasAlternateKey(e => e.Url)", blogBlockAfter);
 
         // ...and Post's other, unrelated config lines are untouched too.
         Assert.Contains("entity.HasKey(e => e.PostId);", renamedConfigSource);
