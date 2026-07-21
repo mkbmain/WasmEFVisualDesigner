@@ -12,4 +12,6 @@ public sealed record PropertyModel(
     string? ColumnType = null,
     string? DefaultValueLiteral = null,
     string? ValueGenerated = null,
-    bool IsShadow = false);
+    bool IsShadow = false,
+    bool IsRowVersion = false,
+    bool IsConcurrencyToken = false);

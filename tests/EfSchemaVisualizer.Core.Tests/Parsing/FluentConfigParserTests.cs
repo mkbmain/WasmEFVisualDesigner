@@ -2458,6 +2458,113 @@ public class FluentConfigParserTests
         Assert.Equal("Identity", config.Mode);
     }
 
+    // ─── ParseConcurrencyTokens ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseConcurrencyTokens_IsRowVersionCall_SetsIsRowVersionOnly()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.RowVersion).IsRowVersion();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseConcurrencyTokens(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("RowVersion", config.PropertyName);
+        Assert.True(config.IsRowVersion);
+        Assert.False(config.IsConcurrencyToken);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseConcurrencyTokens_IsConcurrencyTokenCall_SetsIsConcurrencyTokenOnly()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.Version).IsConcurrencyToken();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseConcurrencyTokens(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Version", config.PropertyName);
+        Assert.False(config.IsRowVersion);
+        Assert.True(config.IsConcurrencyToken);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseConcurrencyTokens_BothCallsOnSameProperty_SetsBothFlags()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseConcurrencyTokens(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("RowVersion", config.PropertyName);
+        Assert.True(config.IsRowVersion);
+        Assert.True(config.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public void ParseConcurrencyTokens_NoConcurrencyCalls_ReturnsEmpty()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseConcurrencyTokens(source);
+
+        Assert.Empty(result.Value);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseConcurrencyTokens_IEntityTypeConfigurationStyle_ReadsFlags()
+    {
+        const string source = """
+            class PersonConfig : IEntityTypeConfiguration<Person> {
+                public void Configure(EntityTypeBuilder<Person> builder) {
+                    builder.Property(e => e.RowVersion).IsRowVersion();
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseConcurrencyTokens(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("RowVersion", config.PropertyName);
+        Assert.True(config.IsRowVersion);
+    }
+
     // ─── ParseShadowProperties ─────────────────────────────────────────────────────
 
     [Fact]

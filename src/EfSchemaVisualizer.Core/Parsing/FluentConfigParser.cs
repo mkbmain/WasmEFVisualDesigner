@@ -20,6 +20,7 @@ public sealed class FluentConfigParser
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
+        "IsRowVersion", "IsConcurrencyToken",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -669,6 +670,49 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<ValueGenerationConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<ConcurrencyTokenConfig>> ParseConcurrencyTokens(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var diagnostics = new List<Diagnostic>();
+        var flagsByProperty = new Dictionary<(string EntityName, string PropertyName), (bool IsRowVersion, bool IsConcurrencyToken)>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var (callName, marksRowVersion) in new[] { ("IsRowVersion", true), ("IsConcurrencyToken", false) })
+            {
+                foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+                {
+                    var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                    if (propertyName is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnresolvablePropertyName,
+                            $"Could not resolve the property configured by '{callName}'.",
+                            entityName,
+                            PropertyName: null,
+                            call.Span));
+                        continue;
+                    }
+
+                    var key = (entityName, propertyName);
+                    var existing = flagsByProperty.GetValueOrDefault(key);
+                    flagsByProperty[key] = marksRowVersion
+                        ? (true, existing.IsConcurrencyToken)
+                        : (existing.IsRowVersion, true);
+                }
+            }
+        }
+
+        var results = flagsByProperty
+            .Select(kvp => new ConcurrencyTokenConfig(kvp.Key.EntityName, kvp.Key.PropertyName, kvp.Value.IsRowVersion, kvp.Value.IsConcurrencyToken))
+            .ToList();
+
+        return new ParseResult<IReadOnlyList<ConcurrencyTokenConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<ShadowPropertyConfig>> ParseShadowProperties(string sourceCode)
