@@ -418,6 +418,41 @@ public class EntityClassParserTests
     }
 
     [Fact]
+    public void Parse_InversePropertyAttribute_SetsInverseProperty()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+                [InverseProperty("Blog")]
+                public List<Post> Posts { get; set; } = new();
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var property = result.Value.Single().Properties.Single(p => p.Name == "Posts");
+        Assert.Equal("Blog", property.InverseProperty);
+    }
+
+    [Fact]
+    public void Parse_NoInversePropertyAttribute_LeavesInversePropertyNull()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+                public List<Post> Posts { get; set; } = new();
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var property = result.Value.Single().Properties.Single(p => p.Name == "Posts");
+        Assert.Null(property.InverseProperty);
+    }
+
+    [Fact]
     public void Parse_NoConcurrencyAttributes_LeavesBothFlagsFalse()
     {
         const string source = """

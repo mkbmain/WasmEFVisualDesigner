@@ -18,4 +18,5 @@ public sealed record PropertyModel(
     string? Comment = null,
     bool? IsUnicode = null,
     bool? IsFixedLength = null,
-    string? Collation = null);
+    string? Collation = null,
+    string? InverseProperty = null);

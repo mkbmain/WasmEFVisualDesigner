@@ -257,6 +257,10 @@ public sealed class EntityClassParser
         bool isRowVersion = FindAttribute(attributeLists, "Timestamp") is not null;
         bool isConcurrencyToken = FindAttribute(attributeLists, "ConcurrencyCheck") is not null;
 
+        string? inverseProperty = FindAttribute(attributeLists, "InverseProperty") is { } inversePropertyAttr
+            ? TryReadStringArg(GetPositionalArg(inversePropertyAttr, 0))
+            : null;
+
         return new PropertyModel(
             property.Identifier.Text,
             clrType,
@@ -268,7 +272,8 @@ public sealed class EntityClassParser
             columnName,
             columnType,
             IsRowVersion: isRowVersion,
-            IsConcurrencyToken: isConcurrencyToken);
+            IsConcurrencyToken: isConcurrencyToken,
+            InverseProperty: inverseProperty);
     }
 
     private static bool IsMappedInstanceProperty(PropertyDeclarationSyntax property)
