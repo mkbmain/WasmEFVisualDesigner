@@ -1012,12 +1012,31 @@ these matter before any new surface is added.
       leaving stale `HasData` member-initializer references is a related but
       distinct gap, out of scope here (the item was scoped to entity
       remove/rename). 567/567 tests green across all three test projects.
-- [ ] **`[found]` Smaller unread config:** `HasQueryFilter`, `HasComment`,
+- [x] **`[found]` Smaller unread config:** `HasQueryFilter`, `HasComment`,
       `IsUnicode`/`IsFixedLength`, `UseCollation`, `ToJson`, temporal tables
       (`ToTable(b => b.IsTemporal())`), table/entity splitting
       (`SplitToTable`), `[InverseProperty]`, `[DeleteBehavior]`. Individually
       niche; the Priority 1 diagnostic covers them collectively until any
       earns a parser.
+      **Update:** All eight real constructs now parse + merge into
+      `EntityModel`/`PropertyModel` (`HasQueryFilter` →
+      `EntityModel.HasQueryFilter`; `HasComment` (entity + property) →
+      `EntityModel.Comment`/`PropertyModel.Comment`; `IsUnicode`/
+      `IsFixedLength` → `PropertyModel.IsUnicode`/`IsFixedLength`;
+      `UseCollation` → `PropertyModel.Collation`; `ToJson` →
+      `EntityModel.IsJson`/`JsonColumnName`; `ToTable(b => b.IsTemporal())` →
+      `EntityModel.IsTemporal`; `SplitToTable` (secondary table name only,
+      not the builder lambda's per-property assignment) →
+      `EntityModel.SplitTables`; `[InverseProperty]` →
+      `PropertyModel.InverseProperty`) — see
+      `2026-07-21-smaller-unread-config-design.md`. All are recognized by
+      `FluentConfigParser.RecognizedCallNames` so they no longer trip
+      `UnrecognizedConfigCall`. `[DeleteBehavior]` is not a real EF Core
+      attribute and was dropped from scope. Parse + merge only, matching the
+      precedent set by relationships/value-generation — no rewriter,
+      `DiagramEditor` method, or diagram UI for any of the eight. Round-trip
+      fuzz corpus extended to cover all eight together. 603/603 tests green
+      across all three test projects.
 
 ## Priority 4 — App-level features
 
