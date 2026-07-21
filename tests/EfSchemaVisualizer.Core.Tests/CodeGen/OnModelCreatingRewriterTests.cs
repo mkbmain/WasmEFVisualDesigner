@@ -395,6 +395,152 @@ public class OnModelCreatingRewriterTests
         Assert.Equal(SourceWithIsRequiredCalls, result);
     }
 
+    private const string SourceWithUnconfiguredRowVersionProperty = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                    entity.Property(e => e.RowVersion);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetRowVersion_PropertyExistsWithoutCall_AppendsBareIsRowVersionCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetRowVersion(SourceWithUnconfiguredRowVersionProperty, entityName: "Person", propertyName: "RowVersion");
+
+        Assert.Contains("entity.Property(e => e.RowVersion).IsRowVersion()", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void SetRowVersion_CallAlreadyPresent_IsIdempotentNoOp()
+    {
+        var once = new OnModelCreatingRewriter()
+            .SetRowVersion(SourceWithUnconfiguredRowVersionProperty, entityName: "Person", propertyName: "RowVersion");
+
+        var twice = new OnModelCreatingRewriter()
+            .SetRowVersion(once, entityName: "Person", propertyName: "RowVersion");
+
+        Assert.Equal(once, twice);
+    }
+
+    [Fact]
+    public void SetRowVersion_PropertyNeverMentioned_InsertsNewStatementAtEndOfBlock()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter()
+            .SetRowVersion(source, entityName: "Person", propertyName: "RowVersion");
+
+        Assert.Contains("entity.Property(e => e.RowVersion).IsRowVersion()", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
+
+    [Fact]
+    public void SetRowVersion_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetRowVersion(SourceWithUnconfiguredRowVersionProperty, entityName: "Vehicle", propertyName: "RowVersion");
+
+        Assert.Contains("modelBuilder.Entity<Vehicle>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.RowVersion).IsRowVersion()", result);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result); // Person untouched
+    }
+
+    [Fact]
+    public void RemoveRowVersion_ExistingCall_StripsCallLeavesBarePropertyCall()
+    {
+        var withCall = new OnModelCreatingRewriter()
+            .SetRowVersion(SourceWithUnconfiguredRowVersionProperty, entityName: "Person", propertyName: "RowVersion");
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveRowVersion(withCall, entityName: "Person", propertyName: "RowVersion");
+
+        Assert.Contains("entity.Property(e => e.RowVersion);", result);
+        Assert.DoesNotContain("IsRowVersion", result);
+    }
+
+    [Fact]
+    public void RemoveRowVersion_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveRowVersion(SourceWithUnconfiguredRowVersionProperty, entityName: "Person", propertyName: "RowVersion");
+
+        Assert.Equal(SourceWithUnconfiguredRowVersionProperty, result);
+    }
+
+    private const string SourceWithUnconfiguredConcurrencyTokenProperty = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Version);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetConcurrencyToken_PropertyExistsWithoutCall_AppendsBareIsConcurrencyTokenCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetConcurrencyToken(SourceWithUnconfiguredConcurrencyTokenProperty, entityName: "Person", propertyName: "Version");
+
+        Assert.Contains("entity.Property(e => e.Version).IsConcurrencyToken()", result);
+    }
+
+    [Fact]
+    public void RemoveConcurrencyToken_ExistingCall_StripsCallLeavesBarePropertyCall()
+    {
+        var withCall = new OnModelCreatingRewriter()
+            .SetConcurrencyToken(SourceWithUnconfiguredConcurrencyTokenProperty, entityName: "Person", propertyName: "Version");
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveConcurrencyToken(withCall, entityName: "Person", propertyName: "Version");
+
+        Assert.Contains("entity.Property(e => e.Version);", result);
+        Assert.DoesNotContain("IsConcurrencyToken", result);
+    }
+
+    [Fact]
+    public void SetRowVersionAndSetConcurrencyToken_OnSameProperty_AreIndependent()
+    {
+        var withRowVersion = new OnModelCreatingRewriter()
+            .SetRowVersion(SourceWithUnconfiguredRowVersionProperty, entityName: "Person", propertyName: "RowVersion");
+
+        var withBoth = new OnModelCreatingRewriter()
+            .SetConcurrencyToken(withRowVersion, entityName: "Person", propertyName: "RowVersion");
+
+        Assert.Contains("IsRowVersion()", withBoth);
+        Assert.Contains("IsConcurrencyToken()", withBoth);
+
+        var withoutRowVersion = new OnModelCreatingRewriter()
+            .RemoveRowVersion(withBoth, entityName: "Person", propertyName: "RowVersion");
+
+        Assert.DoesNotContain("IsRowVersion", withoutRowVersion);
+        Assert.Contains("IsConcurrencyToken()", withoutRowVersion);
+    }
+
     private const string SourceWithSingleKey = """
         public class AppDbContext : DbContext
         {

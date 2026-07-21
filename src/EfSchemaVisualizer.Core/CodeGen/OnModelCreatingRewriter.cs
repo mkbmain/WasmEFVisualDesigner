@@ -1690,6 +1690,130 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetRowVersion(string sourceCode, string entityName, string propertyName) =>
+        SetBareMarkerCall(sourceCode, entityName, propertyName, "IsRowVersion");
+
+    public string RemoveRowVersion(string sourceCode, string entityName, string propertyName) =>
+        RemoveBareMarkerCall(sourceCode, entityName, propertyName, "IsRowVersion");
+
+    public string SetConcurrencyToken(string sourceCode, string entityName, string propertyName) =>
+        SetBareMarkerCall(sourceCode, entityName, propertyName, "IsConcurrencyToken");
+
+    public string RemoveConcurrencyToken(string sourceCode, string entityName, string propertyName) =>
+        RemoveBareMarkerCall(sourceCode, entityName, propertyName, "IsConcurrencyToken");
+
+    /// Idempotently ensures a bare, no-argument fluent call (e.g. `.IsRowVersion()`) is chained onto
+    /// the given property's `.Property(...)` call. Shared by SetRowVersion/SetConcurrencyToken since
+    /// both are structurally identical bare property-scoped markers.
+    private static string SetBareMarkerCall(string sourceCode, string entityName, string propertyName, string callName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is not null)
+        {
+            return sourceCode;
+        }
+
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            var markerCall = BuildBareMarkerCall(existingPropertyCall, callName);
+            var newRoot = root.ReplaceNode(existingPropertyCall, markerCall);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            var (block, blockReceiverName) = GetScopeBlockAndReceiver(existingScope);
+            var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(existingScope);
+
+            var newStatement = BuildBareMarkerPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, callName);
+            var newBlock = block.AddStatements(newStatement);
+
+            var newRoot = root.ReplaceNode(block, newBlock);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var method = FindOnModelCreatingMethod(root);
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var propertyStatement = BuildBareMarkerPropertyStatement("entity", "e", propertyName, callName);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(propertyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var finalRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return finalRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static InvocationExpressionSyntax BuildBareMarkerCall(ExpressionSyntax propertyCallExpression, string callName)
+    {
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                propertyCallExpression,
+                SyntaxFactory.IdentifierName(callName)),
+            SyntaxFactory.ArgumentList());
+    }
+
+    private static ExpressionStatementSyntax BuildBareMarkerPropertyStatement(
+        string blockReceiverName, string propertyLambdaParam, string propertyName, string callName)
+    {
+        var propertyCall = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("Property")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.SimpleLambdaExpression(
+                            SyntaxFactory.Parameter(SyntaxFactory.Identifier(propertyLambdaParam)),
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName(propertyLambdaParam),
+                                SyntaxFactory.IdentifierName(propertyName)))))));
+
+        return SyntaxFactory.ExpressionStatement(BuildBareMarkerCall(propertyCall, callName));
+    }
+
+    /// Removes a bare, no-argument fluent call (e.g. `.IsRowVersion()`) chained onto a property's
+    /// `.Property(...)` call, unwrapping back to the bare property call. No-ops if absent.
+    private static string RemoveBareMarkerCall(string sourceCode, string entityName, string propertyName, string callName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is null)
+        {
+            return sourceCode;
+        }
+
+        var propertyCallExpression = ((MemberAccessExpressionSyntax)existingCall.Expression).Expression;
+
+        var newRoot = root.ReplaceNode(existingCall, propertyCallExpression);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string RenameEntityReferences(string sourceCode, string oldEntityName, string newEntityName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
