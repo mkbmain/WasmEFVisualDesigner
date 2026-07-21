@@ -187,6 +187,20 @@
                                     </select>
                                 </label>
                                 <label style="display: block;">
+                                    <input type="checkbox" checked="@property.IsRowVersion"
+                                           @onchange="e => CommitRowVersion(property, (bool)(e.Value ?? false))"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                    Row version
+                                </label>
+                                <label style="display: block;">
+                                    <input type="checkbox" checked="@property.IsConcurrencyToken"
+                                           @onchange="e => CommitConcurrencyToken(property, (bool)(e.Value ?? false))"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                    Concurrency token
+                                </label>
+                                <label style="display: block;">
                                     Column name:
                                     <input style="width: 100px;" value="@property.ColumnName" placeholder="(same as property)"
                                            @onchange="e => CommitColumnName(property, e.Value?.ToString())"
@@ -662,6 +676,34 @@
         };
 
         var result = EditContext.Editor.SetRequiredOverride(Node.Entity.Name, property.Name, newIsRequired);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitRowVersion(PropertyModel property, bool newIsRowVersion)
+    {
+        var result = EditContext.Editor.SetRowVersion(Node.Entity.Name, property.Name, newIsRowVersion);
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitConcurrencyToken(PropertyModel property, bool newIsConcurrencyToken)
+    {
+        var result = EditContext.Editor.SetConcurrencyToken(Node.Entity.Name, property.Name, newIsConcurrencyToken);
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);

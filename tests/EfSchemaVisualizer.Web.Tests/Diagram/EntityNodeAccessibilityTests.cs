@@ -32,6 +32,17 @@ public class EntityNodeAccessibilityTests
         Assert.Empty(titledButtonsMissingAriaLabel);
     }
 
+    [Fact]
+    public void PropertyExpandPanel_HasRowVersionAndConcurrencyTokenCheckboxes()
+    {
+        var markup = ReadEntityNodeRazorSource();
+
+        Assert.Contains("CommitRowVersion", markup);
+        Assert.Contains("CommitConcurrencyToken", markup);
+        Assert.Contains("Row version", markup);
+        Assert.Contains("Concurrency token", markup);
+    }
+
     private static string ReadEntityNodeRazorSource()
     {
         var path = Path.Combine(FindRepoRoot(), "src", "EfSchemaVisualizer.Web", "Diagram", "EntityNode.razor");
