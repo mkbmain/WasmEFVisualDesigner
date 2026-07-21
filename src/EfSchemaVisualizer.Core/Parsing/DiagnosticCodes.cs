@@ -25,6 +25,7 @@ public static class DiagnosticCodes
     public const string UnreadableIsDescendingArgument = nameof(UnreadableIsDescendingArgument);
     public const string UnreadableIncludePropertiesArgument = nameof(UnreadableIncludePropertiesArgument);
     public const string UnreadableUseCollationArgument = nameof(UnreadableUseCollationArgument);
+    public const string UnreadableToJsonArgument = nameof(UnreadableToJsonArgument);
     public const string UnreadableIgnoreArgument = nameof(UnreadableIgnoreArgument);
     public const string UnresolvableRelationshipTarget = nameof(UnresolvableRelationshipTarget);
     public const string UnreadableHasForeignKeyArgument = nameof(UnreadableHasForeignKeyArgument);

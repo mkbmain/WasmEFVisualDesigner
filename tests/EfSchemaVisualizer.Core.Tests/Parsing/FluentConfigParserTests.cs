@@ -3269,4 +3269,61 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Null(diagnostic.PropertyName);
     }
+
+    // ─── ParseJsonMappings ────────────────────────────────────────────────────────
+
+    private const string JsonSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToJson();
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.ToJson("address_json");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseJsonMappings_ReadsBareCall_AndCallWithColumnName()
+    {
+        var result = new FluentConfigParser().ParseJsonMappings(JsonSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", ColumnName: null });
+        Assert.Contains(result.Value, c => c is { EntityName: "Address", ColumnName: "address_json" });
+    }
+
+    private const string JsonSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string ColumnName = "address_json";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.ToJson(ColumnName);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseJsonMappings_NonLiteralArgument_EmitsUnreadableToJsonArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseJsonMappings(JsonSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableToJsonArgument, diagnostic.Code);
+        Assert.Equal("Address", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
 }

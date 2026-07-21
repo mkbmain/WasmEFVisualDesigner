@@ -139,6 +139,13 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyJsonMappings(EntityModel entity, IReadOnlyList<JsonConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { IsJson = true, JsonColumnName = config.ColumnName };
+    }
+
     public static EntityModel ApplyTableMapping(EntityModel entity, IReadOnlyList<TableConfig> configs)
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);

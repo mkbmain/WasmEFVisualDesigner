@@ -746,4 +746,32 @@ public class ModelMergerTests
         Assert.Null(merged.Properties.Single(p => p.Name == "Id").Collation);
         Assert.Equal("SQL_Latin1_General_CP1_CI_AS", merged.Properties.Single(p => p.Name == "Name").Collation);
     }
+
+    // ─── ApplyJsonMappings ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyJsonMappings_SetsIsJsonAndColumnName_WhenEntityMatches()
+    {
+        var entity = new EntityModel("Address", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplyJsonMappings(entity, new List<JsonConfig>
+        {
+            new("Address", "address_json"),
+            new("Person", null),
+        });
+
+        Assert.True(merged.IsJson);
+        Assert.Equal("address_json", merged.JsonColumnName);
+    }
+
+    [Fact]
+    public void ApplyJsonMappings_NoMatchingConfig_LeavesIsJsonFalse()
+    {
+        var entity = new EntityModel("Address", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplyJsonMappings(entity, new List<JsonConfig> { new("Person", null) });
+
+        Assert.False(merged.IsJson);
+        Assert.Null(merged.JsonColumnName);
+    }
 }

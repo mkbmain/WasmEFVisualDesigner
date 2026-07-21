@@ -21,7 +21,7 @@ public sealed class FluentConfigParser
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
-        "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation",
+        "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -694,6 +694,43 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<CollationConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<JsonConfig>> ParseJsonMappings(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<JsonConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "ToJson"))
+            {
+                var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg is null)
+                {
+                    results.Add(new JsonConfig(entityName, null));
+                }
+                else if (arg.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    results.Add(new JsonConfig(entityName, literal.Token.ValueText));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableToJsonArgument,
+                        "ToJson argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        arg.Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<JsonConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)
