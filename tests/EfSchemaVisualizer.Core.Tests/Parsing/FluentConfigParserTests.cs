@@ -3049,4 +3049,53 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Name", diagnostic.PropertyName);
     }
+
+    private const string UnicodeSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsUnicode();
+                    entity.Property(e => e.Code).IsUnicode(false);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUnicodeFlags_ReadsBareCallAsTrue_AndExplicitBoolArgument()
+    {
+        var result = new FluentConfigParser().ParseUnicodeFlags(UnicodeSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", IsUnicode: true });
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Code", IsUnicode: false });
+    }
+
+    private const string UnicodeSourceWithNonBoolArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).IsUnicode(1);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUnicodeFlags_NonBooleanArgument_EmitsUnreadableIsUnicodeArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseUnicodeFlags(UnicodeSourceWithNonBoolArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableIsUnicodeArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Name", diagnostic.PropertyName);
+    }
 }

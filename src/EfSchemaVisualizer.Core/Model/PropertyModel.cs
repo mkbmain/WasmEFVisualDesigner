@@ -15,4 +15,5 @@ public sealed record PropertyModel(
     bool IsShadow = false,
     bool IsRowVersion = false,
     bool IsConcurrencyToken = false,
-    string? Comment = null);
+    string? Comment = null,
+    bool? IsUnicode = null);

@@ -27,6 +27,7 @@ public static class DiagramModelBuilder
         var alternateKeys = configParser.ParseAlternateKeys(configSource);
         var queryFilters = configParser.ParseQueryFilters(configSource);
         var comments = configParser.ParseComments(configSource);
+        var unicodeFlags = configParser.ParseUnicodeFlags(configSource);
         var tables = configParser.ParseTableMappings(configSource);
         var views = configParser.ParseViewMappings(configSource);
         var sqlQueries = configParser.ParseSqlQueries(configSource);
@@ -53,6 +54,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(queryFilters.Diagnostics);
         diagnostics.AddRange(comments.Entities.Diagnostics);
         diagnostics.AddRange(comments.Properties.Diagnostics);
+        diagnostics.AddRange(unicodeFlags.Diagnostics);
         diagnostics.AddRange(tables.Diagnostics);
         diagnostics.AddRange(views.Diagnostics);
         diagnostics.AddRange(sqlQueries.Diagnostics);
@@ -85,6 +87,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyQueryFilters(entity, queryFilters.Value))
             .Select(entity => ModelMerger.ApplyEntityComments(entity, comments.Entities.Value))
             .Select(entity => ModelMerger.ApplyPropertyComments(entity, comments.Properties.Value))
+            .Select(entity => ModelMerger.ApplyUnicodeFlags(entity, unicodeFlags.Value))
             .Select(entity => ModelMerger.ApplyTableMapping(entity, tables.Value))
             .Select(entity => ModelMerger.ApplyViewMapping(entity, views.Value))
             .Select(entity => ModelMerger.ApplySqlQuery(entity, sqlQueries.Value))

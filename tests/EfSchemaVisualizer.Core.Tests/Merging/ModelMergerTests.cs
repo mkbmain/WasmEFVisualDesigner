@@ -686,4 +686,24 @@ public class ModelMergerTests
         Assert.Null(merged.Properties.Single(p => p.Name == "Id").Comment);
         Assert.Equal("Full display name.", merged.Properties.Single(p => p.Name == "Name").Comment);
     }
+
+    // ─── ApplyUnicodeFlags ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyUnicodeFlags_SetsFlagOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyUnicodeFlags(entity, new List<UnicodeConfig>
+        {
+            new("Person", "Name", false),
+        });
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").IsUnicode);
+        Assert.False(merged.Properties.Single(p => p.Name == "Name").IsUnicode);
+    }
 }

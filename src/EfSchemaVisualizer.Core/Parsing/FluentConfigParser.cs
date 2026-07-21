@@ -15,7 +15,7 @@ public sealed class FluentConfigParser
     /// config scope whose name isn't in this set is flagged by <see cref="ParseUnrecognizedCalls"/>.
     private static readonly HashSet<string> RecognizedCallNames = new()
     {
-        "Property", "HasMaxLength", "HasPrecision", "IsRequired", "HasKey", "HasAlternateKey", "ToTable",
+        "Property", "HasMaxLength", "HasPrecision", "IsRequired", "IsUnicode", "HasKey", "HasAlternateKey", "ToTable",
         "HasColumnName", "HasColumnType", "HasDefaultValue", "HasIndex", "IsUnique",
         "HasFilter", "IsDescending", "IncludeProperties",
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
@@ -542,6 +542,59 @@ public sealed class FluentConfigParser
         return (
             new ParseResult<IReadOnlyList<EntityCommentConfig>>(entityResults, entityDiagnostics),
             new ParseResult<IReadOnlyList<PropertyCommentConfig>>(propertyResults, propertyDiagnostics));
+    }
+
+    public ParseResult<IReadOnlyList<UnicodeConfig>> ParseUnicodeFlags(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<UnicodeConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "IsUnicode"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which property this IsUnicode call configures.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg is null)
+                {
+                    results.Add(new UnicodeConfig(entityName, propertyName, IsUnicode: true));
+                    continue;
+                }
+
+                if (arg.Expression is LiteralExpressionSyntax literal
+                    && (literal.IsKind(SyntaxKind.TrueLiteralExpression) || literal.IsKind(SyntaxKind.FalseLiteralExpression)))
+                {
+                    results.Add(new UnicodeConfig(entityName, propertyName, literal.IsKind(SyntaxKind.TrueLiteralExpression)));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableIsUnicodeArgument,
+                        "IsUnicode argument is not a boolean literal and could not be read.",
+                        entityName,
+                        propertyName,
+                        arg.Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<UnicodeConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)
