@@ -706,4 +706,24 @@ public class ModelMergerTests
         Assert.Null(merged.Properties.Single(p => p.Name == "Id").IsUnicode);
         Assert.False(merged.Properties.Single(p => p.Name == "Name").IsUnicode);
     }
+
+    // ─── ApplyFixedLengthFlags ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyFixedLengthFlags_SetsFlagOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("Code", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var merged = ModelMerger.ApplyFixedLengthFlags(entity, new List<FixedLengthConfig>
+        {
+            new("Person", "Code", true),
+        });
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").IsFixedLength);
+        Assert.True(merged.Properties.Single(p => p.Name == "Code").IsFixedLength);
+    }
 }

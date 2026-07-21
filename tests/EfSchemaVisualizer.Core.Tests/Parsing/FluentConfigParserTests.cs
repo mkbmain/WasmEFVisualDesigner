@@ -3098,4 +3098,98 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
         Assert.Equal("Name", diagnostic.PropertyName);
     }
+
+    // ─── ParseFixedLengthFlags ────────────────────────────────────────────────────
+
+    private const string FixedLengthSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Code).IsFixedLength();
+                    entity.Property(e => e.Name).IsFixedLength(false);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseFixedLengthFlags_ReadsBareCallAsTrue_AndExplicitBoolArgument()
+    {
+        var result = new FluentConfigParser().ParseFixedLengthFlags(FixedLengthSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Code", IsFixedLength: true });
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Name", IsFixedLength: false });
+    }
+
+    [Fact]
+    public void ParseFixedLengthFlags_ReadsBareCallAsTrue_AndExplicitTrueArgument()
+    {
+        var result = new FluentConfigParser().ParseFixedLengthFlags("""
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Code).IsFixedLength(true);
+                    });
+                }
+            }
+            """);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains(result.Value, c => c is { EntityName: "Person", PropertyName: "Code", IsFixedLength: true });
+    }
+
+    [Fact]
+    public void ParseFixedLengthFlags_UnresolvablePropertyName_EmitsDiagnosticAndSkips()
+    {
+        var result = new FluentConfigParser().ParseFixedLengthFlags("""
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.IsFixedLength();
+                    });
+                }
+            }
+            """);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnresolvablePropertyName, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Null(diagnostic.PropertyName);
+    }
+
+    private const string FixedLengthSourceWithNonBoolArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Code).IsFixedLength(1);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseFixedLengthFlags_NonBooleanArgument_EmitsUnreadableIsFixedLengthArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseFixedLengthFlags(FixedLengthSourceWithNonBoolArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableIsFixedLengthArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Code", diagnostic.PropertyName);
+    }
 }
