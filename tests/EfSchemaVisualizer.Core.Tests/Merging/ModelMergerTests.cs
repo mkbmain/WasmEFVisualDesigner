@@ -433,6 +433,67 @@ public class ModelMergerTests
         Assert.Null(merged.Properties.Single(p => p.Name == "Name").ValueGenerated);
     }
 
+    // ─── ApplyConcurrencyTokens ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyConcurrencyTokens_SetsFlagsOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("RowVersion", "byte[]", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: true, MaxLength: null),
+        });
+
+        var configs = new List<ConcurrencyTokenConfig>
+        {
+            new("Person", "RowVersion", IsRowVersion: true, IsConcurrencyToken: false),
+            new("Address", "Line1", IsRowVersion: true, IsConcurrencyToken: false), // different entity, must not affect Person
+        };
+
+        var merged = ModelMerger.ApplyConcurrencyTokens(entity, configs);
+
+        var rowVersion = merged.Properties.Single(p => p.Name == "RowVersion");
+        Assert.True(rowVersion.IsRowVersion);
+        Assert.False(rowVersion.IsConcurrencyToken);
+        Assert.False(merged.Properties.Single(p => p.Name == "Name").IsRowVersion);
+    }
+
+    [Fact]
+    public void ApplyConcurrencyTokens_BothFlagsOnSameConfig_SetsBoth()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("RowVersion", "byte[]", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<ConcurrencyTokenConfig>
+        {
+            new("Person", "RowVersion", IsRowVersion: true, IsConcurrencyToken: true),
+        };
+
+        var merged = ModelMerger.ApplyConcurrencyTokens(entity, configs);
+
+        var rowVersion = merged.Properties.Single(p => p.Name == "RowVersion");
+        Assert.True(rowVersion.IsRowVersion);
+        Assert.True(rowVersion.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public void ApplyConcurrencyTokens_AttributeSeededTrue_NotDowngradedByAbsentFluentConfig()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("RowVersion", "byte[]", IsNullable: false, MaxLength: null, IsRowVersion: true),
+        });
+
+        var merged = ModelMerger.ApplyConcurrencyTokens(entity, new List<ConcurrencyTokenConfig>());
+
+        Assert.True(merged.Properties.Single(p => p.Name == "RowVersion").IsRowVersion);
+    }
+
     // ─── ApplyShadowProperties ─────────────────────────────────────────────────────
 
     [Fact]

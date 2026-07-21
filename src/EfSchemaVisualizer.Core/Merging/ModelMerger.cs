@@ -155,6 +155,23 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyConcurrencyTokens(EntityModel entity, IReadOnlyList<ConcurrencyTokenConfig> configs)
+    {
+        var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var config)
+                ? property with
+                {
+                    IsRowVersion = property.IsRowVersion || config.IsRowVersion,
+                    IsConcurrencyToken = property.IsConcurrencyToken || config.IsConcurrencyToken,
+                }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     public static EntityModel ApplyShadowProperties(EntityModel entity, IReadOnlyList<ShadowPropertyConfig> configs)
     {
         var existingNames = entity.Properties.Select(p => p.Name).ToHashSet();
