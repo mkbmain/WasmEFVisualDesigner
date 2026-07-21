@@ -117,6 +117,26 @@ public class DiagramEditorPropertyPanelTests
     }
 
     [Fact]
+    public void SetRowVersion_ClearingAttributeSourcedFlag_FailsWithClearMessage()
+    {
+        const string classSourceWithTimestamp = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [Timestamp]
+                public byte[] Name { get; set; } = System.Array.Empty<byte>();
+            }
+            """;
+
+        var editor = new DiagramEditor(classSourceWithTimestamp, ConfigSource);
+
+        var result = editor.SetRowVersion("Person", "Name", false);
+
+        Assert.False(result.Success);
+        Assert.True(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").IsRowVersion);
+    }
+
+    [Fact]
     public void SetRowVersion_UnknownEntity_Fails()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);
@@ -149,6 +169,26 @@ public class DiagramEditorPropertyPanelTests
         Assert.True(result.Success);
         Assert.False(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").IsConcurrencyToken);
         Assert.DoesNotContain("IsConcurrencyToken", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetConcurrencyToken_ClearingAttributeSourcedFlag_FailsWithClearMessage()
+    {
+        const string classSourceWithConcurrencyCheck = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [ConcurrencyCheck]
+                public string Name { get; set; } = "";
+            }
+            """;
+
+        var editor = new DiagramEditor(classSourceWithConcurrencyCheck, ConfigSource);
+
+        var result = editor.SetConcurrencyToken("Person", "Name", false);
+
+        Assert.False(result.Success);
+        Assert.True(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").IsConcurrencyToken);
     }
 
     [Fact]

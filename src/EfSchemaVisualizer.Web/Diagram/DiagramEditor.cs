@@ -643,9 +643,20 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = isRowVersion
-            ? _configRewriter.SetRowVersion(ConfigSource, entityName, propertyName)
-            : _configRewriter.RemoveRowVersion(ConfigSource, entityName, propertyName);
+        if (!isRowVersion)
+        {
+            var clearedConfigSource = _configRewriter.RemoveRowVersion(ConfigSource, entityName, propertyName);
+            if (clearedConfigSource == ConfigSource)
+            {
+                return DiagramEditResult.Fail(
+                    $"'{propertyName}' is marked as a row version by a [Timestamp] attribute on the class; remove the attribute to clear it.");
+            }
+
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetRowVersion(ConfigSource, entityName, propertyName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -669,9 +680,20 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = isConcurrencyToken
-            ? _configRewriter.SetConcurrencyToken(ConfigSource, entityName, propertyName)
-            : _configRewriter.RemoveConcurrencyToken(ConfigSource, entityName, propertyName);
+        if (!isConcurrencyToken)
+        {
+            var clearedConfigSource = _configRewriter.RemoveConcurrencyToken(ConfigSource, entityName, propertyName);
+            if (clearedConfigSource == ConfigSource)
+            {
+                return DiagramEditResult.Fail(
+                    $"'{propertyName}' is marked as a concurrency token by a [ConcurrencyCheck] attribute on the class; remove the attribute to clear it.");
+            }
+
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetConcurrencyToken(ConfigSource, entityName, propertyName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
