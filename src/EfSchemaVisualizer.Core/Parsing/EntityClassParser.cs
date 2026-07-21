@@ -254,6 +254,9 @@ public sealed class EntityClassParser
             scale = TryReadIntArg(GetPositionalArg(precisionAttr, 1));
         }
 
+        bool isRowVersion = FindAttribute(attributeLists, "Timestamp") is not null;
+        bool isConcurrencyToken = FindAttribute(attributeLists, "ConcurrencyCheck") is not null;
+
         return new PropertyModel(
             property.Identifier.Text,
             clrType,
@@ -263,7 +266,9 @@ public sealed class EntityClassParser
             precision,
             scale,
             columnName,
-            columnType);
+            columnType,
+            IsRowVersion: isRowVersion,
+            IsConcurrencyToken: isConcurrencyToken);
     }
 
     private static bool IsMappedInstanceProperty(PropertyDeclarationSyntax property)

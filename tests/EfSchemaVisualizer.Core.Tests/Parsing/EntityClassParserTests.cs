@@ -380,6 +380,62 @@ public class EntityClassParserTests
     }
 
     [Fact]
+    public void Parse_TimestampAttribute_SetsIsRowVersion()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [Timestamp]
+                public byte[] RowVersion { get; set; } = System.Array.Empty<byte>();
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var property = result.Value.Single().Properties.Single(p => p.Name == "RowVersion");
+        Assert.True(property.IsRowVersion);
+        Assert.False(property.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public void Parse_ConcurrencyCheckAttribute_SetsIsConcurrencyToken()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                [ConcurrencyCheck]
+                public int Version { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var property = result.Value.Single().Properties.Single(p => p.Name == "Version");
+        Assert.False(property.IsRowVersion);
+        Assert.True(property.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public void Parse_NoConcurrencyAttributes_LeavesBothFlagsFalse()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Name { get; set; } = "";
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var property = result.Value.Single().Properties.Single(p => p.Name == "Name");
+        Assert.False(property.IsRowVersion);
+        Assert.False(property.IsConcurrencyToken);
+    }
+
+    [Fact]
     public void Parse_MaxLengthAttribute_SetsMaxLength()
     {
         const string source = """
