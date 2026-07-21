@@ -65,6 +65,66 @@ public class RoundTripFuzzTests
         }
         """;
 
+    private const string PriorityThreeConfigSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasQueryFilter(e => e.Url != null);
+                    entity.SplitToTable("BlogStats", tb => { tb.Property(e => e.Rating); });
+                    entity.ToTable(b => b.IsTemporal());
+                });
+
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.Property(e => e.Title).HasMaxLength(200);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void PriorityThreeConstructs_AreReadIntoTheModel_NotFlaggedAsUnrecognized()
+    {
+        var parser = new FluentConfigParser();
+
+        var queryFilters = parser.ParseQueryFilters(PriorityThreeConfigSource).Value;
+        Assert.Contains(queryFilters, c => c.EntityName == "Blog");
+
+        var splitTables = parser.ParseSplitTables(PriorityThreeConfigSource).Value;
+        Assert.Contains(splitTables, c => c is { EntityName: "Blog", TableName: "BlogStats" });
+
+        var tables = parser.ParseTableMappings(PriorityThreeConfigSource).Value;
+        Assert.Contains(tables.Temporal, c => c.EntityName == "Blog");
+
+        var unrecognized = parser.ParseUnrecognizedCalls(PriorityThreeConfigSource);
+        Assert.Empty(unrecognized);
+    }
+
+    [Fact]
+    public void RenamingUnrelatedEntitysProperty_LeavesPriorityThreeConstructsOnBlogUntouched()
+    {
+        var modelRewriter = new OnModelCreatingRewriter();
+
+        var renamedConfigSource = modelRewriter.RenamePropertyReferences(
+            PriorityThreeConfigSource, "Post", "Title", "Headline");
+
+        Assert.Contains("entity.Property(e => e.Headline)", renamedConfigSource);
+
+        var parser = new FluentConfigParser();
+
+        var queryFilters = parser.ParseQueryFilters(renamedConfigSource).Value;
+        Assert.Contains(queryFilters, c => c.EntityName == "Blog");
+
+        var splitTables = parser.ParseSplitTables(renamedConfigSource).Value;
+        Assert.Contains(splitTables, c => c is { EntityName: "Blog", TableName: "BlogStats" });
+
+        var tables = parser.ParseTableMappings(renamedConfigSource).Value;
+        Assert.Contains(tables.Temporal, c => c.EntityName == "Blog");
+    }
+
     [Fact]
     public void UnsupportedHasDefaultValueSql_IsNotReadIntoTheModel()
     {
