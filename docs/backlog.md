@@ -936,19 +936,28 @@ these matter before any new surface is added.
       relationships subtly wrong.
       **Update:** `FluentConfigParser.ParseAlternateKeys` reads
       `HasAlternateKey(...)` calls (lambda, composite, and string-param forms)
-      into a new `AlternateKeyConfig` (property-set name list); `EntityModel.
-      AlternateKeys` stores these as a list of lists (since an entity can have
-      multiple alternate keys); `ModelMerger.ApplyAlternateKeys` performs
-      full-replace merge per entity (matching by property-set identity).
-      Write-back: `OnModelCreatingRewriter.AddAlternateKey`/`RemoveAlternateKey`
-      (both no-op-safe, reusing `BuildHasKeyArgumentList` for argument
-      generation), `DiagramEditor.AddAlternateKey`/`ToggleAlternateKeyMembership`/
-      `RemoveAlternateKey` (mirroring the `HasIndex` pattern), and a new
-      "Alternate keys:" section in `EntityNode.razor`'s property expand panel
-      with membership checkboxes, remove button, and "+ New alternate key"
-      button (no name/unique fields, since `HasAlternateKey` omits both).
-      `HasPrincipalKey` and relationship cross-referencing remain explicitly
-      out of scope — see `2026-07-21-alternate-keys-design.md`.
+      via the shared `FluentSyntaxHelpers.TryReadPropertyNameList` helper
+      into a new `AlternateKeyConfig` (property-set name list); unparseable
+      arguments are flagged with `DiagnosticCodes.
+      UnreadableHasAlternateKeyArgument`. `EntityModel.AlternateKeys` stores
+      these as a list of lists (since an entity can have multiple alternate
+      keys); `ModelMerger.ApplyAlternateKeys` performs full-replace merge per
+      entity (matching by property-set identity). Both `ParseAlternateKeys`
+      and `ApplyAlternateKeys` are wired into `DiagramModelBuilder.Build`.
+      `"HasAlternateKey"` was added to `FluentConfigParser.
+      RecognizedCallNames` to avoid flagging it as an unrecognized config
+      call. Write-back: `OnModelCreatingRewriter.AddAlternateKey`/
+      `RemoveAlternateKey` (both no-op-safe, reusing `BuildHasKeyArgumentList`
+      for argument generation), `DiagramEditor.AddAlternateKey`/
+      `ToggleAlternateKeyMembership`/`RemoveAlternateKey` (mirroring the
+      `HasIndex` pattern), and a new "Alternate keys:" section in
+      `EntityNode.razor`'s property expand panel with membership checkboxes,
+      remove button, and "+ New alternate key" button (no name/unique fields,
+      since `HasAlternateKey` omits both). `HasPrincipalKey` and relationship
+      cross-referencing remain explicitly out of scope — see
+      `2026-07-21-alternate-keys-design.md` — and `HasPrincipalKey` remains
+      listed in the README's unsupported EF Core features section. 549/549
+      tests green across all three test projects.
 - [ ] **`[found]` Index extras unread.** `HasFilter(...)`, `IsDescending(...)`,
       `IncludeProperties(...)` chained after a parsed `HasIndex` are dropped
       on index rewrite (the rewriter re-emits the canonical chain without
