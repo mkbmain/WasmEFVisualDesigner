@@ -915,8 +915,22 @@ these matter before any new surface is added.
       `SetSqlQuery`/`SetKeyless` and new `EntityNode.razor` header fields
       (View, SQL query, Keyless checkbox, which also disables the
       per-property primary-key toggle) complete the edit path.
-- [ ] **`[found]` Concurrency tokens unread.** `IsRowVersion()`,
+- [x] **`[found]` Concurrency tokens unread.** `IsRowVersion()`,
       `IsConcurrencyToken()`, `[Timestamp]`, `[ConcurrencyCheck]`.
+      **Update:** `FluentConfigParser.ParseConcurrencyTokens` reads both fluent
+      calls into a new `ConcurrencyTokenConfig` (two independent bools, since
+      the calls can co-occur on one property); `EntityClassParser.ParseProperty`
+      reads `[Timestamp]`/`[ConcurrencyCheck]` the same way `[Required]` is
+      read; `ModelMerger.ApplyConcurrencyTokens` ORs attribute- and
+      fluent-derived flags together (fluent only ever raises, never lowers).
+      Unlike the previous `ValueGenerated` badge-only pass, this one includes
+      full write-back: `OnModelCreatingRewriter.SetRowVersion`/
+      `RemoveRowVersion`/`SetConcurrencyToken`/`RemoveConcurrencyToken` (two
+      independent bare-marker-call Set/Remove pairs sharing private
+      `SetBareMarkerCall`/`RemoveBareMarkerCall` helpers), `DiagramEditor.
+      SetRowVersion`/`SetConcurrencyToken`, and two checkboxes ("Row version",
+      "Concurrency token") in `EntityNode.razor`'s property expand panel — see
+      `2026-07-21-concurrency-tokens-design.md`.
 - [ ] **`[found]` Alternate keys unread.** `HasAlternateKey(...)` — also a
       valid `HasForeignKey` principal target, so its absence can make parsed
       relationships subtly wrong.
