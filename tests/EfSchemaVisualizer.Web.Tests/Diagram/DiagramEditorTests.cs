@@ -47,6 +47,26 @@ public class DiagramEditorTests
         Assert.Contains(editor.Current.Entities, e => e.Name == "Blog");
     }
 
+    private const string ConfigSourceWithHasDataSeed = """
+        modelBuilder.Entity<Blog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasData(new Blog { Id = 1, Title = "First" });
+        });
+        """;
+
+    [Fact]
+    public void RenameEntity_WithHasDataSeedRows_RenamesObjectCreationType()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSourceWithHasDataSeed);
+
+        var result = editor.RenameEntity("Blog", "Post");
+
+        Assert.True(result.Success);
+        Assert.Contains("new Post { Id = 1, Title = \"First\" }", editor.ConfigSource);
+        Assert.DoesNotContain("new Blog", editor.ConfigSource);
+    }
+
     [Fact]
     public void Redo_AfterUndo_ReappliesTheEdit()
     {

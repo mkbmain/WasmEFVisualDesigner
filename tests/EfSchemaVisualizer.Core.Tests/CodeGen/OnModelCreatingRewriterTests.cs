@@ -946,6 +946,33 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Line1).HasMaxLength(200)", result);
     }
 
+    private const string SourceWithHasDataSeed = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasData(
+                        new Person { Id = 1, Name = "Alice" },
+                        new Person { Id = 2, Name = "Bob" });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void RenameEntityReferences_HasDataSeedRows_RenamesObjectCreationType()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenameEntityReferences(SourceWithHasDataSeed, oldEntityName: "Person", newEntityName: "Customer");
+
+        Assert.Contains("modelBuilder.Entity<Customer>(entity =>", result);
+        Assert.DoesNotContain("new Person", result);
+        Assert.Contains("new Customer { Id = 1, Name = \"Alice\" }", result);
+        Assert.Contains("new Customer { Id = 2, Name = \"Bob\" }", result);
+    }
+
     private const string SourceUsingEntityTypeConfigurationForRename = """
         public class BlogConfiguration : IEntityTypeConfiguration<Blog>
         {

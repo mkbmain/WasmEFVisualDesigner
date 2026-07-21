@@ -1942,6 +1942,26 @@ public sealed class OnModelCreatingRewriter
             }
         }
 
+        // `HasData(new Person { ... })` seed rows aren't otherwise tracked by the parser, but the
+        // object-creation type name still needs to follow an entity rename or the regenerated source
+        // won't compile (referencing a class that no longer exists).
+        foreach (var hasDataCall in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (hasDataCall.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "HasData" })
+            {
+                continue;
+            }
+
+            foreach (var objectCreation in hasDataCall.ArgumentList.DescendantNodes().OfType<ObjectCreationExpressionSyntax>())
+            {
+                if (objectCreation.Type is IdentifierNameSyntax { Identifier.Text: var seedTypeName } typeName
+                    && seedTypeName == oldEntityName)
+                {
+                    targets.Add(typeName);
+                }
+            }
+        }
+
         if (targets.Count == 0)
         {
             return sourceCode;

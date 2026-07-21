@@ -983,9 +983,35 @@ these matter before any new surface is added.
       No UI to edit these three directly yet (parse/merge/rewrite-preserve
       only, matching the precedent set by relationships/value-generation).
       565/565 tests green across all three test projects.
-- [ ] **`[found]` Data seeding (`HasData`) unread.** Harmless to the diagram,
+- [x] **`[found]` Data seeding (`HasData`) unread.** Harmless to the diagram,
       but an entity remove/rename leaves orphaned seed data behind; at minimum
       warn.
+      **Update:** Investigation found the "no diagnostic fires" half of this
+      item was already resolved as a side effect of the Priority 1
+      `UnrecognizedConfigCall` diagnostic — since `HasData` was never added to
+      `RecognizedCallNames`, every `HasData(...)` call already gets flagged
+      generically today, and that diagnostic recomputes (and stays visible)
+      after every diagram edit including removes. The real remaining gap was
+      a genuine correctness bug on the *rename* path: `OnModelCreatingRewriter
+      .RenameEntityReferences` (called by `DiagramEditor.RenameEntity`)
+      renamed `Entity<T>()`/`DbSet<T>`/`IEntityTypeConfiguration<T>`
+      references but never touched `new OldName { ... }` object-creation
+      expressions inside `HasData(...)` seed rows for that entity — so
+      renaming an entity with seed data produced regenerated source that no
+      longer compiled (referencing a deleted class). Fixed by extending
+      `RenameEntityReferences` to also find and rename any
+      `ObjectCreationExpressionSyntax` whose type matches the old entity name
+      within a `HasData(...)` call's argument list, alongside the existing
+      reference-renaming passes. Entity *removal* needed no code change: the
+      whole `Entity<T>(...)` block (including any of that entity's own
+      `HasData` calls) is already deleted wholesale; seed data on *other*
+      entities that may reference the removed entity's key values is a
+      data-value concern the parser can't verify (it doesn't model seed row
+      contents), so the pre-existing generic diagnostic remains the "warn"
+      for that half, as the backlog item allowed. Property rename/remove
+      leaving stale `HasData` member-initializer references is a related but
+      distinct gap, out of scope here (the item was scoped to entity
+      remove/rename). 567/567 tests green across all three test projects.
 - [ ] **`[found]` Smaller unread config:** `HasQueryFilter`, `HasComment`,
       `IsUnicode`/`IsFixedLength`, `UseCollation`, `ToJson`, temporal tables
       (`ToTable(b => b.IsTemporal())`), table/entity splitting
