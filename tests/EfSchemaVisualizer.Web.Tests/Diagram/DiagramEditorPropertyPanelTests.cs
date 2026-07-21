@@ -251,4 +251,95 @@ public class DiagramEditorPropertyPanelTests
         Assert.Equal(configSourceBefore, editor.ConfigSource);
         Assert.False(editor.CanUndo);
     }
+
+    [Fact]
+    public void AddAlternateKey_NewProperty_InsertsHasAlternateKey()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddAlternateKey("Person", "Name");
+
+        Assert.True(result.Success);
+        var alternateKey = Assert.Single(editor.Current.Entities.Single().AlternateKeys);
+        Assert.Equal(new[] { "Name" }, alternateKey);
+        Assert.Contains("HasAlternateKey(e => e.Name)", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void AddAlternateKey_AlreadyExists_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddAlternateKey("Person", "Name");
+
+        var result = editor.AddAlternateKey("Person", "Name");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void AddAlternateKey_UnknownEntity_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddAlternateKey("Unknown", "Name");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void AddAlternateKey_UnknownProperty_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddAlternateKey("Person", "Unknown");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void ToggleAlternateKeyMembership_AddSecondPropertyToExistingKey_MakesItComposite()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddAlternateKey("Person", "Name");
+
+        var result = editor.ToggleAlternateKeyMembership("Person", new[] { "Name" }, "Id", include: true);
+
+        Assert.True(result.Success);
+        var alternateKey = Assert.Single(editor.Current.Entities.Single().AlternateKeys);
+        Assert.Equal(new[] { "Name", "Id" }, alternateKey);
+    }
+
+    [Fact]
+    public void ToggleAlternateKeyMembership_RemoveOnlyMemberProperty_RemovesTheAlternateKeyEntirely()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddAlternateKey("Person", "Name");
+
+        var result = editor.ToggleAlternateKeyMembership("Person", new[] { "Name" }, "Name", include: false);
+
+        Assert.True(result.Success);
+        Assert.Empty(editor.Current.Entities.Single().AlternateKeys);
+    }
+
+    [Fact]
+    public void RemoveAlternateKey_Existing_RemovesIt()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddAlternateKey("Person", "Name");
+
+        var result = editor.RemoveAlternateKey("Person", new[] { "Name" });
+
+        Assert.True(result.Success);
+        Assert.Empty(editor.Current.Entities.Single().AlternateKeys);
+    }
+
+    [Fact]
+    public void RemoveAlternateKey_NotFound_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.RemoveAlternateKey("Person", new[] { "Name" });
+
+        Assert.False(result.Success);
+    }
 }

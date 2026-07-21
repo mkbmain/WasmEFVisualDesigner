@@ -400,6 +400,90 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult AddAlternateKey(string entityName, string propertyName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (!entity.Properties.Any(p => p.Name == propertyName))
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        if (entity.AlternateKeys.Any(k => k.SequenceEqual(new[] { propertyName })))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' already has an alternate key on '{propertyName}'.");
+        }
+
+        var newConfigSource = _configRewriter.AddAlternateKey(ConfigSource, entityName, new List<string> { propertyName });
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult ToggleAlternateKeyMembership(string entityName, IReadOnlyList<string> alternateKeyPropertyNames, string propertyName, bool include)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var alternateKey = entity.AlternateKeys.FirstOrDefault(k => k.SequenceEqual(alternateKeyPropertyNames));
+        if (alternateKey is null)
+        {
+            return DiagramEditResult.Fail($"Alternate key not found on '{entityName}'.");
+        }
+
+        var alreadyIncluded = alternateKey.Contains(propertyName);
+        if (include == alreadyIncluded)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newPropertyNames = include
+            ? alternateKey.Append(propertyName).ToList()
+            : alternateKey.Where(name => name != propertyName).ToList();
+
+        if (newPropertyNames.Count == 0)
+        {
+            var configAfterRemove = _configRewriter.RemoveAlternateKey(ConfigSource, entityName, alternateKey);
+            Apply(ClassSource, configAfterRemove);
+            return DiagramEditResult.Ok();
+        }
+
+        if (entity.AlternateKeys.Any(k => !ReferenceEquals(k, alternateKey) && k.SequenceEqual(newPropertyNames)))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' already has an alternate key on [{string.Join(", ", newPropertyNames)}].");
+        }
+
+        var withoutOldAlternateKey = _configRewriter.RemoveAlternateKey(ConfigSource, entityName, alternateKey);
+        var withNewAlternateKey = _configRewriter.AddAlternateKey(withoutOldAlternateKey, entityName, newPropertyNames);
+        Apply(ClassSource, withNewAlternateKey);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveAlternateKey(string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var alternateKey = entity.AlternateKeys.FirstOrDefault(k => k.SequenceEqual(propertyNames));
+        if (alternateKey is null)
+        {
+            return DiagramEditResult.Fail($"Alternate key not found on '{entityName}'.");
+        }
+
+        var newConfigSource = _configRewriter.RemoveAlternateKey(ConfigSource, entityName, propertyNames);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     public DiagramEditResult SetTableMapping(string entityName, string? tableName, string? schema)
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
