@@ -61,10 +61,13 @@ over `TryReadPropertyNameList`'s result), reusing `SetIndex`'s dispatch shape
 change — an alternate key either exists over that property set or doesn't —
 so it's really just "insert into existing scope / synthesize new
 `Entity<T>()` block" + "remove", not a four-case mutate/append/insert/
-synthesize dispatch). `RemoveAlternateKey` throws if no match is found
-(matching the "fail loudly instead of silently no-op" precedent set by the
-just-shipped concurrency-token work), since a UI-driven remove always targets
-something it can see.
+synthesize dispatch). `RemoveAlternateKey` returns `sourceCode` unchanged if
+no match is found, matching the existing `RemoveIndex`/`RemoveKey` no-op
+precedent rather than throwing — the plan's implementation deliberately
+chose consistency with those siblings over the "fail loudly" precedent set
+by the concurrency-token work; `DiagramEditor.RemoveAlternateKey` already
+checks the model for a matching key before calling the rewriter, so this
+rewriter-level no-op path is unreachable via the UI.
 
 ## App (`DiagramEditor` + `EntityNode.razor`)
 
