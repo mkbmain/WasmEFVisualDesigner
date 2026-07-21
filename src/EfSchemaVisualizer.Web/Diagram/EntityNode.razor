@@ -269,6 +269,30 @@
                                     <div style="color: red;">@_indexError</div>
                                 }
                             </div>
+                            <div style="font-size: 0.8em; margin-top: 4px;">
+                                <div>Alternate keys:</div>
+                                @foreach (var alternateKey in Node.Entity.AlternateKeys)
+                                {
+                                    <div style="display: flex; align-items: center; gap: 4px; margin: 2px 0;">
+                                        <input type="checkbox" checked="@alternateKey.Contains(property.Name)"
+                                               @onchange="e => ToggleAlternateKeyMembership(property, alternateKey, (bool)(e.Value ?? false))"
+                                               @onpointerdown:stopPropagation="true"
+                                               @onmousedown:stopPropagation="true" />
+                                        <span>[@string.Join(", ", alternateKey)]</span>
+                                        <button type="button" title="Remove alternate key" aria-label="Remove alternate key" style="border: none; background: transparent; cursor: pointer;"
+                                                @onclick="() => RemoveAlternateKey(alternateKey)"
+                                                @onpointerdown:stopPropagation="true"
+                                                @onmousedown:stopPropagation="true">×</button>
+                                    </div>
+                                }
+                                <button type="button" @onclick="() => AddAlternateKey(property)"
+                                        @onpointerdown:stopPropagation="true"
+                                        @onmousedown:stopPropagation="true">+ New alternate key on this property</button>
+                                @if (_alternateKeyError is not null)
+                                {
+                                    <div style="color: red;">@_alternateKeyError</div>
+                                }
+                            </div>
                         </div>
                     }
                 }
@@ -534,6 +558,50 @@
         else
         {
             _indexError = result.Error;
+        }
+    }
+
+    private string? _alternateKeyError;
+
+    private async Task AddAlternateKey(PropertyModel property)
+    {
+        var result = EditContext.Editor.AddAlternateKey(Node.Entity.Name, property.Name);
+        if (result.Success)
+        {
+            _alternateKeyError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _alternateKeyError = result.Error;
+        }
+    }
+
+    private async Task ToggleAlternateKeyMembership(PropertyModel property, IReadOnlyList<string> alternateKey, bool include)
+    {
+        var result = EditContext.Editor.ToggleAlternateKeyMembership(Node.Entity.Name, alternateKey, property.Name, include);
+        if (result.Success)
+        {
+            _alternateKeyError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _alternateKeyError = result.Error;
+        }
+    }
+
+    private async Task RemoveAlternateKey(IReadOnlyList<string> alternateKey)
+    {
+        var result = EditContext.Editor.RemoveAlternateKey(Node.Entity.Name, alternateKey);
+        if (result.Success)
+        {
+            _alternateKeyError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _alternateKeyError = result.Error;
         }
     }
 
