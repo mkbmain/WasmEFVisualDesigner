@@ -1062,9 +1062,39 @@ these matter before any new surface is added.
       sandbox (no `chromium`/`chromium-cli` binary, no `pwsh` to run
       `playwright.ps1 install`), matching the same limitation noted on
       earlier browser-verification passes in this backlog.
-- [ ] **`[spec]` Auto-layout.** Entities land on a fixed grid; no
+- [x] **`[spec]` Auto-layout.** Entities land on a fixed grid; no
       layered/force-directed layout, no zoom-to-fit, no minimap. Biggest
       quality-of-life gap for models above ~10 entities.
+      **Update:** Added `DiagramAutoLayout.Apply` (new
+      `src/EfSchemaVisualizer.Web/Diagram/DiagramAutoLayout.cs`): a layered
+      layout, not force-directed — entities are assigned a layer via
+      longest-path-from-root over dependent→principal relationship edges
+      (principals land left of their dependents), with cycles (self-refs,
+      mutual FKs) broken by ignoring any edge back to an entity still on the
+      current DFS stack so every entity still gets a finite layer; within a
+      layer, entities are ordered by a single barycenter pass against the
+      layer above (falling back to declaration order) to cut down on crossing
+      relationship lines. Node width/height come from each `EntityNodeModel`'s
+      real, already-rendered `Size` (nullable pre-render; falls back to a
+      260x160 default) rather than a fresh measurement pass, so it's a pure,
+      unit-testable function over `BlazorDiagram`'s existing node/link state.
+      Wired to a new "Auto-layout" toolbar button in `Home.razor` (existing
+      node positions are left untouched otherwise, so manual dragging isn't
+      fought — it's a manual "arrange" action, not automatic on every edit),
+      which also calls the library's existing (but previously unused)
+      `BlazorDiagram.ZoomToFit`; a separate "Zoom to fit" button exposes that
+      independently for re-centering after manual drags. Minimap: Z.Blazor.Diagrams
+      already ships a `NavigatorWidget` (overview/navigator) that was simply
+      unused; added it into `DiagramCanvas`'s `Widgets` render fragment,
+      picking up `BlazorDiagram` from the existing `CascadingValue` for free.
+      9 new tests in `DiagramAutoLayoutTests.cs` (layering over chains/isolated
+      entities/self-refs/cycles/dangling references, positioning: principal-
+      before-dependent, same-layer stacking without overlap, no-measured-size
+      fallback, empty-diagram no-op). 612/612 tests green across all three
+      test projects. Real in-browser verification of the button/drag/minimap
+      interaction wasn't possible — no browser or Playwright-installable
+      environment in this sandbox, the same limitation noted on every prior
+      browser-verification pass in this backlog.
 - [ ] **`[found]` Diagram layout isn't persisted.** Node positions are lost on
       reload/re-render from scratch. Persist to localStorage keyed by source
       hash, and/or a sidecar JSON in the downloaded zip that re-upload reads.

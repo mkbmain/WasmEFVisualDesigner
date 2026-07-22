@@ -7,6 +7,7 @@
 @using EfSchemaVisualizer.Web.Diagram
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Components
+@using Blazor.Diagrams.Components.Widgets
 @using Blazor.Diagrams.Core.Geometry
 @using Blazor.Diagrams.Core.Models
 @using Blazor.Diagrams.Options
@@ -37,6 +38,8 @@
         <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
         <button class="btn btn-secondary" title="Undo last diagram edit (Ctrl+Z)" disabled="@(_editor is null || !_editor.CanUndo)" @onclick="UndoAsync">Undo</button>
         <button class="btn btn-secondary" title="Redo last undone diagram edit (Ctrl+Y)" disabled="@(_editor is null || !_editor.CanRedo)" @onclick="RedoAsync">Redo</button>
+        <button class="btn btn-secondary" title="Arrange entities into layers by relationship (principals before dependents)" @onclick="AutoLayout">Auto-layout</button>
+        <button class="btn btn-secondary" title="Zoom/pan so every entity is visible" @onclick="ZoomToFit">Zoom to fit</button>
     }
     <InputFile OnChange="OnZipSelected" accept=".zip" />
     <button class="btn btn-secondary" disabled="@(_editor is null)" @onclick="DownloadZip">Download .zip</button>
@@ -66,12 +69,17 @@
             <li>Click the ▸ next to a property to expand its options: primary key toggle, column name/type, precision/scale, default value, and indexes.</li>
             <li>Use the "nullable" checkbox next to a property's type, and the × buttons to remove properties/entities.</li>
             <li>Use the Undo/Redo buttons above (or Ctrl+Z / Ctrl+Y anywhere outside the textareas) to step back through diagram edits (each gesture is one step).</li>
+            <li>Use the Auto-layout button to arrange entities into layers by relationship, and Zoom to fit to bring every entity back into view; the small overview in the canvas corner shows where you are when zoomed in.</li>
         </ul>
     </details>
-    <div style="height: 600px; width: 100%; border: 1px solid #ccc;">
+    <div style="height: 600px; width: 100%; border: 1px solid #ccc; position: relative;">
         <CascadingValue Value="_diagram">
             <CascadingValue Value="_editContext">
-                <DiagramCanvas />
+                <DiagramCanvas>
+                    <Widgets>
+                        <NavigatorWidget Width="180" Height="130" />
+                    </Widgets>
+                </DiagramCanvas>
             </CascadingValue>
         </CascadingValue>
     </div>
@@ -302,6 +310,22 @@
 
         _editor.Redo();
         await OnDiagramEditedAsync();
+    }
+
+    private void AutoLayout()
+    {
+        if (_diagram is null || _editor is null)
+        {
+            return;
+        }
+
+        DiagramAutoLayout.Apply(_diagram, _editor.Current);
+        _diagram.ZoomToFit(50);
+    }
+
+    private void ZoomToFit()
+    {
+        _diagram?.ZoomToFit(50);
     }
 
     private Task OnDiagramEditedAsync()
