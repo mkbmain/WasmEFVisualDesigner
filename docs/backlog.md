@@ -1098,10 +1098,45 @@ these matter before any new surface is added.
 - [ ] **`[found]` Diagram layout isn't persisted.** Node positions are lost on
       reload/re-render from scratch. Persist to localStorage keyed by source
       hash, and/or a sidecar JSON in the downloaded zip that re-upload reads.
-- [ ] **`[found]` No diagram export.** No PNG/SVG/Mermaid export — the obvious
+- [x] **`[found]` No diagram export.** No PNG/SVG/Mermaid export — the obvious
       "share with the team" feature for a *visualizer*. Mermaid `erDiagram`
       text output is the cheapest first step (pure string generation from
       `DiagramModelResult`, trivially testable).
+      **Update:** Scoped to SVG + Mermaid only (PNG explicitly deferred).
+      Added `src/EfSchemaVisualizer.Web/Diagram/MermaidExporter.cs` — pure
+      string generation over `DiagramModelResult` alone (no live diagram
+      needed), emitting `erDiagram` syntax with cardinality tokens per
+      `RelationshipModel.Kind`, PK/FK attribute markers (PK from
+      `EntityModel.KeyPropertyNames`, FK from any relationship's
+      `ForeignKeyProperties` where the entity is the dependent), and a
+      `SanitizeType` helper so generic/nullable CLR types (`List<string>`,
+      `int?`) become valid Mermaid attribute tokens. Added
+      `src/EfSchemaVisualizer.Web/Diagram/SvgExporter.cs` — a from-scratch SVG
+      renderer, not a live-DOM capture: investigation found the on-screen
+      canvas is a hybrid (entity cards are HTML `<div>`s in one absolutely-
+      positioned layer, relationship lines are real `<svg>` in a sibling
+      layer), so there's no single live element that's already valid
+      standalone SVG. Instead it reads each `EntityNodeModel`'s real
+      `Position`/`Size` from the live `BlazorDiagram` (the same node state
+      `DiagramAutoLayout.Apply` already reads, falling back to the same
+      260×160 default pre-render) and draws `<rect>`/`<text>` cards and
+      `<line>` relationship connectors anchored to whichever side of each box
+      faces the other entity. Both are wired to new "Export SVG"/"Export
+      Mermaid" toolbar buttons in `Home.razor`, reusing the existing
+      `downloadFileFromStream` JS helper (`wwwroot/js/downloadFile.js`), which
+      gained an optional third `mimeType` parameter (`image/svg+xml` /
+      `text/plain`) so the downloaded file gets a real content type instead of
+      the generic `application/octet-stream` the `.zip` download path already
+      used. 17 new tests across `MermaidExporterTests.cs`/`SvgExporterTests.cs`
+      (Web.Tests); 629/629 tests green across all three test projects. Real
+      in-browser verification of the toolbar buttons wasn't possible — no
+      browser or Playwright-installable environment in this sandbox (no
+      `chromium`/`pwsh`), the same limitation noted on every prior
+      browser-verification pass in this backlog — but output was manually
+      verified by exporting the app's own default Blog/Post sample through
+      `DiagramModelBuilder.Build` and checking the resulting Mermaid/SVG text
+      directly (correct cardinality token, PK/FK markers, and SVG coordinates
+      that place both entity boxes and the connecting line consistently).
 - [ ] **`[spec]` Zip round-trip loses file boundaries.** Documented trade-off
       from the original slice: everything collapses to `Entities.cs` +
       `DbContext.cs` and non-`.cs` files are dropped. The real fix — preserve

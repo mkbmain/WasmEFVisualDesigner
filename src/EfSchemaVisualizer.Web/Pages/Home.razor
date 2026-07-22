@@ -5,6 +5,7 @@
 @using EfSchemaVisualizer.Core.Parsing
 @using EfSchemaVisualizer.Core.Archive
 @using EfSchemaVisualizer.Web.Diagram
+@using System.Text
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Components
 @using Blazor.Diagrams.Components.Widgets
@@ -43,6 +44,8 @@
     }
     <InputFile OnChange="OnZipSelected" accept=".zip" />
     <button class="btn btn-secondary" disabled="@(_editor is null)" @onclick="DownloadZip">Download .zip</button>
+    <button class="btn btn-secondary" title="Export the diagram as a standalone SVG image" disabled="@(_editor is null || _diagram is null)" @onclick="ExportSvgAsync">Export SVG</button>
+    <button class="btn btn-secondary" title="Export the diagram as Mermaid erDiagram text" disabled="@(_editor is null)" @onclick="ExportMermaidAsync">Export Mermaid</button>
 </p>
 
 @if (_error is not null)
@@ -70,6 +73,7 @@
             <li>Use the "nullable" checkbox next to a property's type, and the × buttons to remove properties/entities.</li>
             <li>Use the Undo/Redo buttons above (or Ctrl+Z / Ctrl+Y anywhere outside the textareas) to step back through diagram edits (each gesture is one step).</li>
             <li>Use the Auto-layout button to arrange entities into layers by relationship, and Zoom to fit to bring every entity back into view; the small overview in the canvas corner shows where you are when zoomed in.</li>
+            <li>Use Export SVG for a standalone image of the current layout, or Export Mermaid for <code>erDiagram</code> text you can paste into docs/Markdown.</li>
         </ul>
     </details>
     <div style="height: 600px; width: 100%; border: 1px solid #ccc; position: relative;">
@@ -277,6 +281,36 @@
         using var stream = new MemoryStream(bytes);
         using var streamRef = new DotNetStreamReference(stream);
         await JS.InvokeVoidAsync("downloadFileFromStream", "ef-schema-visualizer-export.zip", streamRef);
+    }
+
+    private async Task ExportSvgAsync()
+    {
+        if (_editor is null || _diagram is null)
+        {
+            return;
+        }
+
+        var svg = SvgExporter.Export(_diagram, _editor.Current);
+        await DownloadTextAsync("diagram.svg", svg, "image/svg+xml");
+    }
+
+    private async Task ExportMermaidAsync()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var mermaid = MermaidExporter.Export(_editor.Current);
+        await DownloadTextAsync("diagram.mmd", mermaid, "text/plain");
+    }
+
+    private async Task DownloadTextAsync(string fileName, string content, string mimeType)
+    {
+        var bytes = Encoding.UTF8.GetBytes(content);
+        using var stream = new MemoryStream(bytes);
+        using var streamRef = new DotNetStreamReference(stream);
+        await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef, mimeType);
     }
 
     private async Task AddEntity()
