@@ -1040,10 +1040,28 @@ these matter before any new surface is added.
 
 ## Priority 4 — App-level features
 
-- [ ] **`[found]` Keyboard shortcuts for undo/redo.** Ctrl+Z/Ctrl+Y (outside
+- [x] **`[found]` Keyboard shortcuts for undo/redo.** Ctrl+Z/Ctrl+Y (outside
       the textareas) should drive the `DiagramEditor` undo stack; buttons only
       today. Needs a small JS keydown interop that ignores events targeting
       inputs/textareas.
+      **Update:** Added `wwwroot/js/keyboardShortcuts.js`
+      (`registerUndoRedoShortcuts`/`unregisterUndoRedoShortcuts`), a
+      `document`-level `keydown` listener that ignores events whose target is
+      an `INPUT`/`TEXTAREA`/`contentEditable` element, and otherwise maps
+      Ctrl/Cmd+Z to undo and Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z to redo (the Mac
+      convention), reusing the existing `OnUndoShortcut`/`OnRedoShortcut`
+      call into `UndoAsync`/`RedoAsync`. `Home.razor` now implements
+      `IAsyncDisposable`, registers a `DotNetObjectReference<Home>` on first
+      render, and exposes the two `[JSInvokable]` callbacks; disposal
+      unregisters the listener and disposes the reference. Button titles and
+      the in-app "How to edit the diagram" legend now mention the shortcuts.
+      524/524 + 78/78 tests still green (Core + Web). Verified the script is
+      correctly served and wired into `index.html` via a running `dotnet run`
+      dev server; genuine keydown-in-browser verification wasn't possible —
+      no browser or Playwright-installable environment is available in this
+      sandbox (no `chromium`/`chromium-cli` binary, no `pwsh` to run
+      `playwright.ps1 install`), matching the same limitation noted on
+      earlier browser-verification passes in this backlog.
 - [ ] **`[spec]` Auto-layout.** Entities land on a fixed grid; no
       layered/force-directed layout, no zoom-to-fit, no minimap. Biggest
       quality-of-life gap for models above ~10 entities.
