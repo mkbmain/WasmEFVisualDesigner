@@ -1142,7 +1142,16 @@ these matter before any new surface is added.
       `DbContext.cs` and non-`.cs` files are dropped. The real fix — preserve
       per-file boundaries and pass through unrecognized files verbatim — is
       the biggest remaining barrier to "upload your real project".
-- [ ] **`[found]` Add-property type picker.** `DiagramEditor.AddProperty`
+- [x] **`[found]` Add-property type picker.** `DiagramEditor.AddProperty`
       hardcodes `string`. A small dropdown (string/int/long/decimal/DateTime/
       Guid/bool) on the "+ Add property" row would cover most cases, and the
       double-click type edit already handles the rest.
+      **Update:** `DiagramEditor.AddProperty` now takes an optional `clrType`
+      parameter (defaults to `"string"`, unchanged for existing callers).
+      `EntityNode.razor`'s "+ Add property" row grew a `<select>` (string/
+      int/long/decimal/DateTime/Guid/bool) immediately before the button,
+      backed by a new `_addPropertyType` field wired via `OnAddPropertyTypeChanged`.
+      No `Core` changes needed — `EntityClassRewriter.AddProperty` already
+      took a full `PropertyModel`. 2 new tests in `DiagramEditorTests.cs`
+      covering the explicit-type and default-type paths; 631/631 tests green
+      across all three test projects.

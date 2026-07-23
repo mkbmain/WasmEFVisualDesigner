@@ -183,7 +183,7 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
-    public DiagramEditResult AddProperty(string entityName)
+    public DiagramEditResult AddProperty(string entityName, string clrType = "string")
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
         if (entity is null)
@@ -193,7 +193,7 @@ public sealed class DiagramEditor
 
         var propertyName = GenerateUniquePropertyName(entity);
         var newClassSource = _classRewriter.AddProperty(
-            ClassSource, entityName, new PropertyModel(propertyName, "string", IsNullable: false, MaxLength: null));
+            ClassSource, entityName, new PropertyModel(propertyName, clrType, IsNullable: false, MaxLength: null));
         Apply(newClassSource, ConfigSource);
         return DiagramEditResult.Ok();
     }

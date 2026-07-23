@@ -299,6 +299,15 @@
             </li>
         }
         <li style="padding: 2px 8px;">
+            <select aria-label="New property type" style="font-size: 0.8em;" value="@_addPropertyType"
+                    @onchange="OnAddPropertyTypeChanged"
+                    @onpointerdown:stopPropagation="true"
+                    @onmousedown:stopPropagation="true">
+                @foreach (var type in AddPropertyTypeOptions)
+                {
+                    <option value="@type">@type</option>
+                }
+            </select>
             <button type="button" style="font-size: 0.8em;"
                     @onclick="AddProperty"
                     @onpointerdown:stopPropagation="true"
@@ -863,9 +872,19 @@
         return int.TryParse(text, out var value) ? value : null;
     }
 
+    private static readonly string[] AddPropertyTypeOptions =
+        { "string", "int", "long", "decimal", "DateTime", "Guid", "bool" };
+
+    private string _addPropertyType = "string";
+
+    private void OnAddPropertyTypeChanged(ChangeEventArgs e)
+    {
+        _addPropertyType = e.Value?.ToString() ?? "string";
+    }
+
     private async Task AddProperty()
     {
-        var result = EditContext.Editor.AddProperty(Node.Entity.Name);
+        var result = EditContext.Editor.AddProperty(Node.Entity.Name, _addPropertyType);
         if (result.Success)
         {
             await EditContext.NotifyChangedAsync();

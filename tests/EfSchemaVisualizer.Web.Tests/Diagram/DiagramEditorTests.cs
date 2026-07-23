@@ -47,6 +47,30 @@ public class DiagramEditorTests
         Assert.Contains(editor.Current.Entities, e => e.Name == "Blog");
     }
 
+    [Fact]
+    public void AddProperty_WithClrType_UsesRequestedType()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddProperty("Blog", "int");
+
+        Assert.True(result.Success);
+        var property = Assert.Single(editor.Current.Entities.Single(e => e.Name == "Blog").Properties, p => p.Name == "NewProperty");
+        Assert.Equal("int", property.ClrType);
+    }
+
+    [Fact]
+    public void AddProperty_NoClrTypeSpecified_DefaultsToString()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddProperty("Blog");
+
+        Assert.True(result.Success);
+        var property = Assert.Single(editor.Current.Entities.Single(e => e.Name == "Blog").Properties, p => p.Name == "NewProperty");
+        Assert.Equal("string", property.ClrType);
+    }
+
     private const string ConfigSourceWithHasDataSeed = """
         modelBuilder.Entity<Blog>(entity =>
         {
