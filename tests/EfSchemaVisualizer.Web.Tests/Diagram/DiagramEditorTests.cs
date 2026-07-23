@@ -153,4 +153,80 @@ public class DiagramEditorTests
         Assert.True(result.Success);
         Assert.False(editor.CanUndo);
     }
+
+    [Fact]
+    public void Constructor_WithFileOrigins_ExposesThemUnchanged()
+    {
+        var entityFileOrigins = new Dictionary<string, string> { ["Blog"] = "Models/Blog.cs" };
+        var configFileOrigins = new Dictionary<string, string> { ["Blog"] = "Data/AppDbContext.cs" };
+
+        var editor = new DiagramEditor(ClassSource, ConfigSource, entityFileOrigins, configFileOrigins);
+
+        Assert.Equal("Models/Blog.cs", editor.EntityFileOrigins["Blog"]);
+        Assert.Equal("Data/AppDbContext.cs", editor.ConfigFileOrigins["Blog"]);
+    }
+
+    [Fact]
+    public void Constructor_WithoutFileOrigins_ExposesEmptyMaps()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        Assert.Empty(editor.EntityFileOrigins);
+        Assert.Empty(editor.ConfigFileOrigins);
+    }
+
+    [Fact]
+    public void RenameEntity_MovesFileOriginToTheNewName()
+    {
+        var entityFileOrigins = new Dictionary<string, string> { ["Blog"] = "Models/Blog.cs" };
+        var configFileOrigins = new Dictionary<string, string> { ["Blog"] = "Data/AppDbContext.cs" };
+        var editor = new DiagramEditor(ClassSource, ConfigSource, entityFileOrigins, configFileOrigins);
+
+        editor.RenameEntity("Blog", "Post");
+
+        Assert.False(editor.EntityFileOrigins.ContainsKey("Blog"));
+        Assert.Equal("Models/Blog.cs", editor.EntityFileOrigins["Post"]);
+        Assert.False(editor.ConfigFileOrigins.ContainsKey("Blog"));
+        Assert.Equal("Data/AppDbContext.cs", editor.ConfigFileOrigins["Post"]);
+    }
+
+    [Fact]
+    public void RemoveEntity_DropsItsFileOrigins()
+    {
+        const string classSource = """
+            public class Blog
+            {
+                public int Id { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+                public int BlogId { get; set; }
+            }
+            """;
+        const string configSource = """
+            modelBuilder.Entity<Blog>(entity => entity.HasKey(e => e.Id));
+            modelBuilder.Entity<Post>(entity => entity.HasKey(e => e.Id));
+            """;
+        var entityFileOrigins = new Dictionary<string, string> { ["Post"] = "Models/Post.cs" };
+        var editor = new DiagramEditor(classSource, configSource, entityFileOrigins);
+
+        editor.RemoveEntity("Post");
+
+        Assert.False(editor.EntityFileOrigins.ContainsKey("Post"));
+    }
+
+    [Fact]
+    public void Undo_AfterRename_RestoresPreviousFileOrigins()
+    {
+        var entityFileOrigins = new Dictionary<string, string> { ["Blog"] = "Models/Blog.cs" };
+        var editor = new DiagramEditor(ClassSource, ConfigSource, entityFileOrigins);
+
+        editor.RenameEntity("Blog", "Post");
+        editor.Undo();
+
+        Assert.Equal("Models/Blog.cs", editor.EntityFileOrigins["Blog"]);
+        Assert.False(editor.EntityFileOrigins.ContainsKey("Post"));
+    }
 }

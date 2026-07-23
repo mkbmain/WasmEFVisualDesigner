@@ -24,16 +24,29 @@ public sealed class DiagramEditor
     private readonly EntityClassRewriter _classRewriter = new();
     private readonly OnModelCreatingRewriter _configRewriter = new();
     private readonly Dictionary<string, Guid> _entityIds = new();
+    private readonly Dictionary<string, string> _entityFileOrigins;
+    private readonly Dictionary<string, string> _configFileOrigins;
     private readonly Stack<Snapshot> _undoStack = new();
     private readonly Stack<Snapshot> _redoStack = new();
 
-    private sealed record Snapshot(string ClassSource, string ConfigSource, Dictionary<string, Guid> EntityIds);
+    private sealed record Snapshot(
+        string ClassSource,
+        string ConfigSource,
+        Dictionary<string, Guid> EntityIds,
+        Dictionary<string, string> EntityFileOrigins,
+        Dictionary<string, string> ConfigFileOrigins);
 
-    public DiagramEditor(string classSource, string configSource)
+    public DiagramEditor(
+        string classSource,
+        string configSource,
+        IReadOnlyDictionary<string, string>? entityFileOrigins = null,
+        IReadOnlyDictionary<string, string>? configFileOrigins = null)
     {
         ClassSource = classSource;
         ConfigSource = configSource;
         Current = DiagramModelBuilder.Build(classSource, configSource);
+        _entityFileOrigins = entityFileOrigins is null ? new() : new(entityFileOrigins);
+        _configFileOrigins = configFileOrigins is null ? new() : new(configFileOrigins);
 
         foreach (var entity in Current.Entities)
         {
@@ -45,6 +58,8 @@ public sealed class DiagramEditor
     public string ConfigSource { get; private set; }
     public DiagramModelResult Current { get; private set; }
     public IReadOnlyDictionary<string, Guid> EntityIds => _entityIds;
+    public IReadOnlyDictionary<string, string> EntityFileOrigins => _entityFileOrigins;
+    public IReadOnlyDictionary<string, string> ConfigFileOrigins => _configFileOrigins;
 
     public DiagramEditResult RenameEntity(string oldName, string newName)
     {
@@ -72,7 +87,15 @@ public sealed class DiagramEditor
         newClassSource = _classRewriter.RenamePropertyTypeReferences(newClassSource, oldName, newName);
         var newConfigSource = _configRewriter.RenameEntityReferences(ConfigSource, oldName, newName);
 
-        // Re-key before Apply so its entity-id reconciliation (which only fills in
+        // Snapshot for undo before re-keying below, so the undo entry captures the
+        // pre-rename id/origin maps (oldName still present) rather than the
+        // already-renamed ones. Apply() itself can't take this snapshot for us here
+        // because by the time it runs, the re-keying below has already mutated these
+        // dictionaries in place.
+        _undoStack.Push(CurrentSnapshot());
+        _redoStack.Clear();
+
+        // Re-key before ApplyCore so its entity-id reconciliation (which only fills in
         // missing names and drops stale ones) sees the rename as already accounted
         // for, instead of dropping oldName and minting a fresh Guid for newName.
         if (_entityIds.Remove(oldName, out var entityId))
@@ -84,7 +107,17 @@ public sealed class DiagramEditor
             _entityIds[newName] = Guid.NewGuid();
         }
 
-        Apply(newClassSource, newConfigSource);
+        if (_entityFileOrigins.Remove(oldName, out var entityFileOrigin))
+        {
+            _entityFileOrigins[newName] = entityFileOrigin;
+        }
+
+        if (_configFileOrigins.Remove(oldName, out var configFileOrigin))
+        {
+            _configFileOrigins[newName] = configFileOrigin;
+        }
+
+        ApplyCore(newClassSource, newConfigSource);
 
         return DiagramEditResult.Ok();
     }
@@ -180,6 +213,8 @@ public sealed class DiagramEditor
         var newConfigSource = _configRewriter.RemoveEntity(ConfigSource, entityName);
         Apply(newClassSource, newConfigSource);
         _entityIds.Remove(entityName);
+        _entityFileOrigins.Remove(entityName);
+        _configFileOrigins.Remove(entityName);
         return DiagramEditResult.Ok();
     }
 
@@ -1014,7 +1049,12 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
-    private Snapshot CurrentSnapshot() => new(ClassSource, ConfigSource, new Dictionary<string, Guid>(_entityIds));
+    private Snapshot CurrentSnapshot() => new(
+        ClassSource,
+        ConfigSource,
+        new Dictionary<string, Guid>(_entityIds),
+        new Dictionary<string, string>(_entityFileOrigins),
+        new Dictionary<string, string>(_configFileOrigins));
 
     private void Restore(Snapshot snapshot)
     {
@@ -1026,6 +1066,18 @@ public sealed class DiagramEditor
             _entityIds[name] = id;
         }
 
+        _entityFileOrigins.Clear();
+        foreach (var (name, path) in snapshot.EntityFileOrigins)
+        {
+            _entityFileOrigins[name] = path;
+        }
+
+        _configFileOrigins.Clear();
+        foreach (var (name, path) in snapshot.ConfigFileOrigins)
+        {
+            _configFileOrigins[name] = path;
+        }
+
         Current = DiagramModelBuilder.Build(ClassSource, ConfigSource);
     }
 
@@ -1034,6 +1086,11 @@ public sealed class DiagramEditor
         _undoStack.Push(CurrentSnapshot());
         _redoStack.Clear();
 
+        ApplyCore(newClassSource, newConfigSource);
+    }
+
+    private void ApplyCore(string newClassSource, string newConfigSource)
+    {
         ClassSource = newClassSource;
         ConfigSource = newConfigSource;
         Current = DiagramModelBuilder.Build(ClassSource, ConfigSource);
@@ -1054,6 +1111,16 @@ public sealed class DiagramEditor
         foreach (var staleName in _entityIds.Keys.Where(name => !currentNames.Contains(name)).ToList())
         {
             _entityIds.Remove(staleName);
+        }
+
+        foreach (var staleName in _entityFileOrigins.Keys.Where(name => !currentNames.Contains(name)).ToList())
+        {
+            _entityFileOrigins.Remove(staleName);
+        }
+
+        foreach (var staleName in _configFileOrigins.Keys.Where(name => !currentNames.Contains(name)).ToList())
+        {
+            _configFileOrigins.Remove(staleName);
         }
     }
 
