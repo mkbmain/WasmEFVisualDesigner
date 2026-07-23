@@ -115,7 +115,7 @@ public class ProjectArchiveRoundTripTests
     }
 
     [Fact]
-    public void UploadEditDownload_MultiFileProjectWithOwnNamespacesAndConfigFiles_EveryDownloadedFileCompiles()
+    public void UploadEditDownload_MultiFileProjectWithOwnNamespacesAndConfigFiles_EveryDownloadedFileParses()
     {
         const string customerFile = """
             using System;

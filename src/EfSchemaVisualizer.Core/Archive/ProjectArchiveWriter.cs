@@ -33,8 +33,14 @@ public static class ProjectArchiveWriter
                 configSource, configFileOrigins ?? new Dictionary<string, string>(), "DbContext.cs");
             foreach (var (path, content) in configFiles)
             {
-                WriteEntry(zip, path, content);
-                writtenPaths.Add(path);
+                // Guard against a class-origin path and a config-origin path colliding (e.g. an
+                // uploaded entity class file literally named "DbContext.cs"), the same way the
+                // passthrough/layout blocks below already guard against colliding with the chosen
+                // class/config paths.
+                if (writtenPaths.Add(path))
+                {
+                    WriteEntry(zip, path, content);
+                }
             }
 
             if (passthroughFiles is not null)
