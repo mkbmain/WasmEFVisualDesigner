@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using EfSchemaVisualizer.Core.Parsing;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -74,5 +75,169 @@ public static class MultiFileSourceMerger
             .WithMembers(SyntaxFactory.List(globalStatements.Concat(otherMembers)));
 
         return mergedRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    /// Reverses `Merge` for the (possibly edited) merged source, routing each top-level
+    /// declaration/statement back to its original file via `fileOrigins` (entity/config name ->
+    /// path). Anything with no recorded origin (e.g. a brand-new entity added in the editor) falls
+    /// back to `defaultPath`. A file that ends up with nothing routed to it is omitted.
+    public static IReadOnlyDictionary<string, string> Split(
+        string mergedSource,
+        IReadOnlyDictionary<string, string> fileOrigins,
+        string defaultPath)
+    {
+        var distinctPaths = fileOrigins.Values.Distinct().ToList();
+        if (distinctPaths.Count <= 1)
+        {
+            var singlePath = distinctPaths.Count == 1 ? distinctPaths[0] : defaultPath;
+            return new Dictionary<string, string> { [singlePath] = mergedSource };
+        }
+
+        var root = CSharpSyntaxTree.ParseText(mergedSource).GetCompilationUnitRoot();
+        var routed = new List<(string Path, string? Namespace, MemberDeclarationSyntax Member)>();
+
+        string ResolvePath(string? name) =>
+            name is not null && fileOrigins.TryGetValue(name, out var path) ? path : defaultPath;
+
+        string? ResolveEntityNameForType(TypeDeclarationSyntax type)
+        {
+            if (type is ClassDeclarationSyntax classDeclaration)
+            {
+                var configuredEntityName = FluentSyntaxHelpers.TryGetEntityTypeConfigurationEntityName(classDeclaration);
+                if (configuredEntityName is not null)
+                {
+                    return configuredEntityName;
+                }
+            }
+
+            if (fileOrigins.ContainsKey(type.Identifier.Text))
+            {
+                return type.Identifier.Text;
+            }
+
+            // A DbContext-shaped class configuring one or more entities via bare Entity<T>()
+            // calls inside a method body: route the whole class alongside whichever entity it
+            // configures (only reachable when every entity inside it shares one origin, since the
+            // 2-distinct-path short-circuit above already handled the single-origin case).
+            return type.DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+                .FirstOrDefault(name => name is not null);
+        }
+
+        void Route(MemberDeclarationSyntax member, string? namespaceName)
+        {
+            switch (member)
+            {
+                case GlobalStatementSyntax globalStatement:
+                    var entityName = globalStatement.DescendantNodesAndSelf()
+                        .OfType<InvocationExpressionSyntax>()
+                        .Select(FluentSyntaxHelpers.GetConfiguredEntityName)
+                        .FirstOrDefault(name => name is not null);
+                    routed.Add((ResolvePath(entityName), null, member));
+                    break;
+
+                case FileScopedNamespaceDeclarationSyntax fileScopedNamespace:
+                    foreach (var nested in fileScopedNamespace.Members)
+                    {
+                        Route(nested, fileScopedNamespace.Name.ToString());
+                    }
+
+                    break;
+
+                case NamespaceDeclarationSyntax namespaceDeclaration:
+                    foreach (var nested in namespaceDeclaration.Members)
+                    {
+                        Route(nested, namespaceDeclaration.Name.ToString());
+                    }
+
+                    break;
+
+                case TypeDeclarationSyntax typeDeclaration:
+                    routed.Add((ResolvePath(ResolveEntityNameForType(typeDeclaration)), namespaceName, member));
+                    break;
+
+                default:
+                    routed.Add((defaultPath, namespaceName, member));
+                    break;
+            }
+        }
+
+        foreach (var member in root.Members)
+        {
+            Route(member, namespaceName: null);
+        }
+
+        var pathOrder = new List<string>();
+        var byPath = new Dictionary<string, List<(string? Namespace, MemberDeclarationSyntax Member)>>();
+        foreach (var (path, ns, member) in routed)
+        {
+            if (!byPath.TryGetValue(path, out var members))
+            {
+                members = new List<(string? Namespace, MemberDeclarationSyntax Member)>();
+                byPath[path] = members;
+                pathOrder.Add(path);
+            }
+
+            members.Add((ns, member));
+        }
+
+        var result = new Dictionary<string, string>();
+        foreach (var path in pathOrder)
+        {
+            result[path] = BuildFileContent(root.Usings, byPath[path]);
+        }
+
+        return result;
+    }
+
+    private static string BuildFileContent(
+        SyntaxList<UsingDirectiveSyntax> usings,
+        List<(string? Namespace, MemberDeclarationSyntax Member)> entries)
+    {
+        var globalStatements = entries.Where(e => e.Member is GlobalStatementSyntax).Select(e => e.Member).ToList();
+
+        var namespaceOrder = new List<string?>();
+#pragma warning disable CS8714
+        var byNamespace = new Dictionary<string?, List<MemberDeclarationSyntax>>();
+#pragma warning restore CS8714
+        foreach (var (ns, member) in entries)
+        {
+            if (member is GlobalStatementSyntax)
+            {
+                continue;
+            }
+
+            if (!byNamespace.TryGetValue(ns, out var members))
+            {
+                members = new List<MemberDeclarationSyntax>();
+                byNamespace[ns] = members;
+                namespaceOrder.Add(ns);
+            }
+
+            members.Add(member);
+        }
+
+        var finalMembers = new List<MemberDeclarationSyntax>(globalStatements);
+        foreach (var ns in namespaceOrder)
+        {
+            var members = byNamespace[ns];
+            if (ns is null)
+            {
+                finalMembers.AddRange(members);
+            }
+            else
+            {
+                finalMembers.Add(
+                    SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName(ns))
+                        .WithMembers(SyntaxFactory.List(members)));
+            }
+        }
+
+        var newRoot = SyntaxFactory.CompilationUnit()
+            .WithUsings(usings)
+            .WithMembers(SyntaxFactory.List(finalMembers));
+
+        return newRoot.NormalizeWhitespace().ToFullString();
     }
 }
