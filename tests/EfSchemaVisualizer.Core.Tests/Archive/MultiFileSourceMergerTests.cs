@@ -275,6 +275,8 @@ public class MultiFileSourceMergerTests
         var split = MultiFileSourceMerger.Split(merged, origins, "DbContext.cs");
 
         Assert.Equal(2, split.Count);
+        AssertParsesWithoutErrors(split["Data/CustomerConfiguration.cs"]);
+        AssertParsesWithoutErrors(split["Data/OrderConfiguration.cs"]);
         Assert.Contains("CustomerConfiguration", split["Data/CustomerConfiguration.cs"]);
         Assert.Contains("OrderConfiguration", split["Data/OrderConfiguration.cs"]);
     }
@@ -296,6 +298,8 @@ public class MultiFileSourceMergerTests
         var split = MultiFileSourceMerger.Split(bareStatements, origins, "DbContext.cs");
 
         Assert.Equal(2, split.Count);
+        AssertParsesWithoutErrors(split["Data/CustomerConfig.cs"]);
+        AssertParsesWithoutErrors(split["Data/OrderConfig.cs"]);
         Assert.Contains("Entity<Customer>", split["Data/CustomerConfig.cs"]);
         Assert.DoesNotContain("Entity<Order>", split["Data/CustomerConfig.cs"]);
         Assert.Contains("Entity<Order>", split["Data/OrderConfig.cs"]);
@@ -347,5 +351,30 @@ public class MultiFileSourceMergerTests
 
         Assert.Single(split);
         Assert.DoesNotContain("Entities/Order.cs", split.Keys);
+    }
+
+    [Fact]
+    public void Split_NamespacelessTypesWithTwoDistinctOrigins_DoesNotThrow()
+    {
+        const string source = """
+            public class Blog
+            {
+                public int Id { get; set; }
+            }
+
+            public class Tag
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var origins = new Dictionary<string, string> { ["Blog"] = "Blog.cs", ["Tag"] = "Tag.cs" };
+
+        var split = MultiFileSourceMerger.Split(source, origins, "Entities.cs");
+
+        AssertParsesWithoutErrors(split["Blog.cs"]);
+        AssertParsesWithoutErrors(split["Tag.cs"]);
+        Assert.Contains("class Blog", split["Blog.cs"]);
+        Assert.Contains("class Tag", split["Tag.cs"]);
     }
 }

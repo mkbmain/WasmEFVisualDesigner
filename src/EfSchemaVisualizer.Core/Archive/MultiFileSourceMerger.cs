@@ -81,6 +81,11 @@ public static class MultiFileSourceMerger
     /// declaration/statement back to its original file via `fileOrigins` (entity/config name ->
     /// path). Anything with no recorded origin (e.g. a brand-new entity added in the editor) falls
     /// back to `defaultPath`. A file that ends up with nothing routed to it is omitted.
+    /// When a config file configures more than one entity via bare method-body calls (the
+    /// `ResolveEntityNameForType` DbContext-shaped-class fallback), this assumes every entity
+    /// configured inside that one type shares the same recorded origin in `fileOrigins` — if a
+    /// caller violates that, entities are silently routed by whichever configured entity is found
+    /// first, not an error.
     public static IReadOnlyDictionary<string, string> Split(
         string mergedSource,
         IReadOnlyDictionary<string, string> fileOrigins,
@@ -198,9 +203,7 @@ public static class MultiFileSourceMerger
         var globalStatements = entries.Where(e => e.Member is GlobalStatementSyntax).Select(e => e.Member).ToList();
 
         var namespaceOrder = new List<string?>();
-#pragma warning disable CS8714
-        var byNamespace = new Dictionary<string?, List<MemberDeclarationSyntax>>();
-#pragma warning restore CS8714
+        var byNamespace = new Dictionary<string, List<MemberDeclarationSyntax>>();
         foreach (var (ns, member) in entries)
         {
             if (member is GlobalStatementSyntax)
@@ -208,10 +211,11 @@ public static class MultiFileSourceMerger
                 continue;
             }
 
-            if (!byNamespace.TryGetValue(ns, out var members))
+            var key = ns ?? "";
+            if (!byNamespace.TryGetValue(key, out var members))
             {
                 members = new List<MemberDeclarationSyntax>();
-                byNamespace[ns] = members;
+                byNamespace[key] = members;
                 namespaceOrder.Add(ns);
             }
 
@@ -221,7 +225,7 @@ public static class MultiFileSourceMerger
         var finalMembers = new List<MemberDeclarationSyntax>(globalStatements);
         foreach (var ns in namespaceOrder)
         {
-            var members = byNamespace[ns];
+            var members = byNamespace[ns ?? ""];
             if (ns is null)
             {
                 finalMembers.AddRange(members);
