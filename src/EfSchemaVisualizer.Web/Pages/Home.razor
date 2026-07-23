@@ -35,7 +35,7 @@
 </div>
 
 <p>
-    <button id="render-diagram" class="btn btn-primary" @onclick="RenderDiagramAsync">Render Diagram</button>
+    <button id="render-diagram" class="btn btn-primary" @onclick="() => RenderDiagramAsync()">Render Diagram</button>
     @if (_editContext is not null)
     {
         <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
@@ -129,11 +129,10 @@
     private DotNetObjectReference<Home>? _shortcutsRef;
 
     // Populated from an uploaded zip so DownloadZip can write files back under their original
-    // names/paths instead of collapsing everything into Entities.cs/DbContext.cs (see F2). Reset
-    // whenever the diagram is rendered from freehand pasted text, since that content is no longer
-    // tied to any uploaded file's structure.
-    private IReadOnlyDictionary<string, string>? _entityFileOrigins;
-    private IReadOnlyDictionary<string, string>? _configFileOrigins;
+    // names/paths instead of collapsing everything into Entities.cs/DbContext.cs (see F2/F3).
+    // Reset whenever the diagram is rendered from freehand pasted text, since that content is no
+    // longer tied to any uploaded file's structure. Entity/config origins themselves live on
+    // `_editor` from construction onward (see F3), which keeps them correct across renames.
     private IReadOnlyDictionary<string, byte[]>? _passthroughFiles;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -160,19 +159,19 @@
         }
     }
 
-    private async Task RenderDiagramAsync()
+    private async Task RenderDiagramAsync(
+        IReadOnlyDictionary<string, string>? entityFileOrigins = null,
+        IReadOnlyDictionary<string, string>? configFileOrigins = null)
     {
         _error = null;
         _diagnostics = null;
         _diagram = null;
         _editContext = null;
-        _entityFileOrigins = null;
-        _configFileOrigins = null;
         _passthroughFiles = null;
 
         try
         {
-            _editor = new DiagramEditor(_classSource, _configSource);
+            _editor = new DiagramEditor(_classSource, _configSource, entityFileOrigins, configFileOrigins);
             _diagnostics = _editor.Current.Diagnostics;
 
             var diagram = new BlazorDiagram(new BlazorDiagramOptions
@@ -278,11 +277,9 @@
             _classSource = archiveResult.ClassSource;
             _configSource = archiveResult.ConfigSource;
 
-            await RenderDiagramAsync();
+            await RenderDiagramAsync(archiveResult.EntityFileOrigins, archiveResult.ConfigFileOrigins);
 
-            // Must be set after RenderDiagramAsync, which clears them at the start of every render.
-            _entityFileOrigins = archiveResult.EntityFileOrigins;
-            _configFileOrigins = archiveResult.ConfigFileOrigins;
+            // Must be set after RenderDiagramAsync, which clears it at the start of every render.
             _passthroughFiles = archiveResult.PassthroughFiles;
 
             if (_diagram is not null && archiveResult.Layout.Count > 0)
@@ -320,7 +317,7 @@
         var layout = _diagram is not null ? DiagramLayout.Capture(_diagram) : null;
         var bytes = ProjectArchiveWriter.Write(
             _editor.ClassSource, _editor.ConfigSource, layout,
-            _entityFileOrigins, _configFileOrigins, _passthroughFiles);
+            _editor.EntityFileOrigins, _editor.ConfigFileOrigins, _passthroughFiles);
         using var stream = new MemoryStream(bytes);
         using var streamRef = new DotNetStreamReference(stream);
         await JS.InvokeVoidAsync("downloadFileFromStream", "ef-schema-visualizer-export.zip", streamRef);
