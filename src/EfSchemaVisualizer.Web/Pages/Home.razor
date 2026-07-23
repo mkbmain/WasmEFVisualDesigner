@@ -6,6 +6,8 @@
 @using EfSchemaVisualizer.Core.Archive
 @using EfSchemaVisualizer.Web.Diagram
 @using System.Text
+@using System.Text.Json
+@using System.Security.Cryptography
 @using Blazor.Diagrams
 @using Blazor.Diagrams.Components
 @using Blazor.Diagrams.Components.Widgets
@@ -169,6 +171,7 @@
             diagram.RegisterComponent<EntityNodeModel, EntityNode>();
             diagram.RegisterComponent<RelationshipLinkLabelModel, RelationshipLinkLabel>();
             diagram.Links.Added += OnLinkAdded;
+            diagram.Nodes.Added += OnNodeAdded;
 
             DiagramSync.Rebuild(diagram, _editor.Current, _editor.EntityIds);
 
@@ -178,6 +181,8 @@
                 Editor = _editor,
                 NotifyChangedAsync = OnDiagramEditedAsync,
             };
+
+            await RestoreLayoutAsync();
         }
         catch (Exception ex)
         {
@@ -189,6 +194,19 @@
     private void OnLinkAdded(BaseLinkModel link)
     {
         link.TargetAttached += OnRelationshipLinkAttached;
+    }
+
+    private void OnNodeAdded(NodeModel node)
+    {
+        if (node is EntityNodeModel entityNode)
+        {
+            entityNode.Moved += OnNodeMoved;
+        }
+    }
+
+    private void OnNodeMoved(MovableModel movedNode)
+    {
+        _ = SaveLayoutAsync();
     }
 
     private void OnRelationshipLinkAttached(BaseLinkModel link)
@@ -251,6 +269,12 @@
 
             await RenderDiagramAsync();
 
+            if (_diagram is not null && archiveResult.Layout.Count > 0)
+            {
+                DiagramLayout.Apply(_diagram, archiveResult.Layout);
+                await SaveLayoutAsync();
+            }
+
             if (archiveResult.Diagnostics.Count > 0)
             {
                 _diagnostics = (_diagnostics ?? new List<Diagnostic>())
@@ -277,7 +301,8 @@
             return;
         }
 
-        var bytes = ProjectArchiveWriter.Write(_editor.ClassSource, _editor.ConfigSource);
+        var layout = _diagram is not null ? DiagramLayout.Capture(_diagram) : null;
+        var bytes = ProjectArchiveWriter.Write(_editor.ClassSource, _editor.ConfigSource, layout);
         using var stream = new MemoryStream(bytes);
         using var streamRef = new DotNetStreamReference(stream);
         await JS.InvokeVoidAsync("downloadFileFromStream", "ef-schema-visualizer-export.zip", streamRef);
@@ -346,7 +371,7 @@
         await OnDiagramEditedAsync();
     }
 
-    private void AutoLayout()
+    private async Task AutoLayout()
     {
         if (_diagram is null || _editor is null)
         {
@@ -355,6 +380,7 @@
 
         DiagramAutoLayout.Apply(_diagram, _editor.Current);
         _diagram.ZoomToFit(50);
+        await SaveLayoutAsync();
     }
 
     private void ZoomToFit()
@@ -362,11 +388,11 @@
         _diagram?.ZoomToFit(50);
     }
 
-    private Task OnDiagramEditedAsync()
+    private async Task OnDiagramEditedAsync()
     {
         if (_diagram is null || _editor is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         _classSource = _editor.ClassSource;
@@ -375,6 +401,45 @@
         DiagramSync.Rebuild(_diagram, _editor.Current, _editor.EntityIds);
         StateHasChanged();
 
-        return Task.CompletedTask;
+        await SaveLayoutAsync();
+    }
+
+    private static string ComputeLayoutKey(string classSource, string configSource)
+    {
+        var bytes = Encoding.UTF8.GetBytes(classSource + " " + configSource);
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
+    private async Task SaveLayoutAsync()
+    {
+        if (_editor is null || _diagram is null)
+        {
+            return;
+        }
+
+        var layout = DiagramLayout.Capture(_diagram);
+        var key = ComputeLayoutKey(_editor.ClassSource, _editor.ConfigSource);
+        await JS.InvokeVoidAsync("saveDiagramLayout", key, JsonSerializer.Serialize(layout));
+    }
+
+    private async Task RestoreLayoutAsync()
+    {
+        if (_editor is null || _diagram is null)
+        {
+            return;
+        }
+
+        var key = ComputeLayoutKey(_editor.ClassSource, _editor.ConfigSource);
+        var json = await JS.InvokeAsync<string?>("loadDiagramLayout", key);
+        if (json is null)
+        {
+            return;
+        }
+
+        var layout = JsonSerializer.Deserialize<Dictionary<string, EntityPosition>>(json);
+        if (layout is not null)
+        {
+            DiagramLayout.Apply(_diagram, layout);
+        }
     }
 }

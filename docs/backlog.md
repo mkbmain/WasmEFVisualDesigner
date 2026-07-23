@@ -1095,9 +1095,46 @@ these matter before any new surface is added.
       interaction wasn't possible — no browser or Playwright-installable
       environment in this sandbox, the same limitation noted on every prior
       browser-verification pass in this backlog.
-- [ ] **`[found]` Diagram layout isn't persisted.** Node positions are lost on
+- [x] **`[found]` Diagram layout isn't persisted.** Node positions are lost on
       reload/re-render from scratch. Persist to localStorage keyed by source
       hash, and/or a sidecar JSON in the downloaded zip that re-upload reads.
+      **Update:** Did both. Added `EfSchemaVisualizer.Core.Archive.EntityPosition`
+      and an optional `layout` parameter to `ProjectArchiveWriter.Write`, which
+      writes it as a `diagram-layout.json` zip entry (only when non-empty, so
+      existing two-entry zips are unaffected); `ProjectArchiveReader.Read`
+      recognizes that entry by name (ahead of the `.cs`-only filter) and
+      returns it via a new `ProjectArchiveResult.Layout`, tolerating malformed
+      JSON by dropping it silently rather than raising a diagnostic — layout is
+      display-only, not part of the schema-correctness trust story the other
+      diagnostics protect. Added a new pure `EfSchemaVisualizer.Web.Diagram.
+      DiagramLayout.Capture`/`Apply` (reads/writes `EntityNodeModel.Position`
+      by entity name, mirroring `DiagramAutoLayout`'s existing pattern of pure
+      functions over a live `BlazorDiagram`). For the "re-render from scratch"
+      case, `Home.razor` now hashes `ClassSource`/`ConfigSource` (SHA-256) as a
+      localStorage key: a new `wwwroot/js/layoutStorage.js`
+      `saveDiagramLayout`/`loadDiagramLayout` pair persists/restores captured
+      layouts keyed by that hash, saved on every node-drag (`NodeModel.Moved`,
+      wired via a new `diagram.Nodes.Added` handler alongside the existing
+      `Links.Added` one), every diagram gesture (`OnDiagramEditedAsync`), and
+      Auto-layout; restored automatically at the end of `RenderDiagramAsync`
+      when the current source matches a previously-seen hash. Since every
+      gesture changes the source text and therefore the hash key, `
+      layoutStorage.js` keeps a small LRU index (25 entries) to bound
+      localStorage growth over a long session rather than accumulating
+      entries forever. For the zip round trip, `DownloadZip` now captures and
+      includes the live layout; `OnZipSelected` applies an uploaded zip's
+      `Layout` on top of the freshly rendered diagram (and re-saves it to
+      localStorage), so a zip carries its own layout independent of whether
+      the browser has seen that exact source before. 11 new tests across
+      `ProjectArchiveWriterTests`/`ProjectArchiveReaderTests`/
+      `ProjectArchiveRoundTripTests` (Core.Tests) and a new
+      `DiagramLayoutTests.cs` (Web.Tests); 642/642 tests green across all
+      three test projects. Verified `layoutStorage.js` is correctly served and
+      wired into `index.html` via a running `dotnet run` dev server; genuine
+      drag-and-persist in-browser verification wasn't possible — no browser or
+      Playwright-installable environment in this sandbox (no
+      `chromium`/`chromium-cli` binary, no `pwsh`), the same limitation noted
+      on every prior browser-verification pass in this backlog.
 - [x] **`[found]` No diagram export.** No PNG/SVG/Mermaid export — the obvious
       "share with the team" feature for a *visualizer*. Mermaid `erDiagram`
       text output is the cheapest first step (pure string generation from

@@ -1,10 +1,13 @@
 using System.IO.Compression;
+using System.Text.Json;
 
 namespace EfSchemaVisualizer.Core.Archive;
 
 public static class ProjectArchiveWriter
 {
-    public static byte[] Write(string classSource, string configSource)
+    public const string LayoutFileName = "diagram-layout.json";
+
+    public static byte[] Write(string classSource, string configSource, IReadOnlyDictionary<string, EntityPosition>? layout = null)
     {
         using var stream = new MemoryStream();
 
@@ -12,6 +15,11 @@ public static class ProjectArchiveWriter
         {
             WriteEntry(zip, "Entities.cs", classSource);
             WriteEntry(zip, "DbContext.cs", configSource);
+
+            if (layout is { Count: > 0 })
+            {
+                WriteEntry(zip, LayoutFileName, JsonSerializer.Serialize(layout));
+            }
         }
 
         return stream.ToArray();

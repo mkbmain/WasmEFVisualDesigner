@@ -169,4 +169,42 @@ public class ProjectArchiveReaderTests
 
         Assert.Throws<InvalidDataException>(() => ProjectArchiveReader.Read(garbage));
     }
+
+    [Fact]
+    public void Read_NoLayoutEntry_ReturnsEmptyLayout()
+    {
+        using var zip = CreateZip(("Blog.cs", "public class Blog { public int Id { get; set; } }"));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.Empty(result.Layout);
+    }
+
+    [Fact]
+    public void Read_LayoutEntry_ParsesEntityPositions()
+    {
+        using var zip = CreateZip(
+            ("Blog.cs", "public class Blog { public int Id { get; set; } }"),
+            (ProjectArchiveWriter.LayoutFileName, """{"Blog":{"X":15,"Y":25}}"""));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        var entry = Assert.Single(result.Layout);
+        Assert.Equal("Blog", entry.Key);
+        Assert.Equal(15, entry.Value.X);
+        Assert.Equal(25, entry.Value.Y);
+    }
+
+    [Fact]
+    public void Read_MalformedLayoutEntry_IsIgnoredWithoutThrowing()
+    {
+        using var zip = CreateZip(
+            ("Blog.cs", "public class Blog { public int Id { get; set; } }"),
+            (ProjectArchiveWriter.LayoutFileName, "not valid json"));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.Empty(result.Layout);
+        Assert.Contains("class Blog", result.ClassSource);
+    }
 }
