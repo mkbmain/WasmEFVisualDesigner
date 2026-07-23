@@ -21,66 +21,88 @@
 
 <div class="page-fill">
 
-<h1>EF Schema Visualizer — ER Diagram</h1>
+@if (!_isFullscreen)
+{
+    <h1>EF Schema Visualizer — ER Diagram</h1>
 
-<p>Paste entity classes and matching <code>OnModelCreating</code> fluent config below, then click Render Diagram.</p>
+    <p>Paste entity classes and matching <code>OnModelCreating</code> fluent config below, then click Render Diagram.</p>
 
-<div style="display: flex; gap: 16px;">
-    <div style="flex: 1;">
-        <label for="class-source">Entity classes</label>
-        <textarea id="class-source" @bind="_classSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+    <div style="display: flex; gap: 16px;">
+        <div style="flex: 1;">
+            <label for="class-source">Entity classes</label>
+            <textarea id="class-source" @bind="_classSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+        </div>
+        <div style="flex: 1;">
+            <label for="config-source">DbContext / OnModelCreating</label>
+            <textarea id="config-source" @bind="_configSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
+        </div>
     </div>
-    <div style="flex: 1;">
-        <label for="config-source">DbContext / OnModelCreating</label>
-        <textarea id="config-source" @bind="_configSource" @bind:event="oninput" @bind:after="SyncEditorSource" rows="14" style="width: 100%; font-family: monospace;"></textarea>
-    </div>
-</div>
 
-<p>
-    <button id="render-diagram" class="btn btn-primary" @onclick="() => RenderDiagramAsync()">Render Diagram</button>
-    @if (_editContext is not null)
+    <p>
+        <button id="render-diagram" class="btn btn-primary" @onclick="() => RenderDiagramAsync()">Render Diagram</button>
+        @if (_editContext is not null)
+        {
+            <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
+            <button class="btn btn-secondary" title="Undo last diagram edit (Ctrl+Z)" disabled="@(_editor is null || !_editor.CanUndo)" @onclick="UndoAsync">Undo</button>
+            <button class="btn btn-secondary" title="Redo last undone diagram edit (Ctrl+Y)" disabled="@(_editor is null || !_editor.CanRedo)" @onclick="RedoAsync">Redo</button>
+            <button class="btn btn-secondary" title="Arrange entities into layers by relationship (principals before dependents)" @onclick="AutoLayout">Auto-layout</button>
+            <button class="btn btn-secondary" title="Zoom/pan so every entity is visible" @onclick="ZoomToFit">Zoom to fit</button>
+            <button class="btn btn-secondary" title="Expand the diagram to fill the whole window" @onclick="ToggleFullscreen">Fullscreen</button>
+        }
+        <InputFile OnChange="OnZipSelected" accept=".zip" />
+        <button class="btn btn-secondary" disabled="@(_editor is null)" @onclick="DownloadZip">Download .zip</button>
+        <button class="btn btn-secondary" title="Export the diagram as a standalone SVG image" disabled="@(_editor is null || _diagram is null)" @onclick="ExportSvgAsync">Export SVG</button>
+        <button class="btn btn-secondary" title="Export the diagram as Mermaid erDiagram text" disabled="@(_editor is null)" @onclick="ExportMermaidAsync">Export Mermaid</button>
+    </p>
+
+    @if (_error is not null)
     {
-        <button class="btn btn-secondary" @onclick="AddEntity">+ Entity</button>
-        <button class="btn btn-secondary" title="Undo last diagram edit (Ctrl+Z)" disabled="@(_editor is null || !_editor.CanUndo)" @onclick="UndoAsync">Undo</button>
-        <button class="btn btn-secondary" title="Redo last undone diagram edit (Ctrl+Y)" disabled="@(_editor is null || !_editor.CanRedo)" @onclick="RedoAsync">Redo</button>
-        <button class="btn btn-secondary" title="Arrange entities into layers by relationship (principals before dependents)" @onclick="AutoLayout">Auto-layout</button>
-        <button class="btn btn-secondary" title="Zoom/pan so every entity is visible" @onclick="ZoomToFit">Zoom to fit</button>
+        <pre style="color: red;">@_error</pre>
     }
-    <InputFile OnChange="OnZipSelected" accept=".zip" />
-    <button class="btn btn-secondary" disabled="@(_editor is null)" @onclick="DownloadZip">Download .zip</button>
-    <button class="btn btn-secondary" title="Export the diagram as a standalone SVG image" disabled="@(_editor is null || _diagram is null)" @onclick="ExportSvgAsync">Export SVG</button>
-    <button class="btn btn-secondary" title="Export the diagram as Mermaid erDiagram text" disabled="@(_editor is null)" @onclick="ExportMermaidAsync">Export Mermaid</button>
-</p>
 
-@if (_error is not null)
-{
-    <pre style="color: red;">@_error</pre>
-}
-
-@if (_diagnostics is { Count: > 0 })
-{
-    <pre style="color: darkorange;">Diagnostics:
+    @if (_diagnostics is { Count: > 0 })
+    {
+        <pre style="color: darkorange;">Diagnostics:
 @foreach (var diagnostic in _diagnostics)
 {
     @($"  [{diagnostic.Code}] {diagnostic.Message}{Environment.NewLine}")
 }</pre>
+    }
+
+    @if (_diagram is not null && _editContext is not null)
+    {
+        <details style="margin: 8px 0; font-size: 0.85em;">
+            <summary style="cursor: pointer;">How to edit the diagram</summary>
+            <ul style="margin: 4px 0;">
+                <li>Double-click an entity name, property name, or property type to rename/retype it in place.</li>
+                <li>Drag from a port on the child (many) entity to the parent (one) entity to draw a relationship.</li>
+                <li>Click the ▸ next to a property to expand its options: primary key toggle, column name/type, precision/scale, default value, and indexes.</li>
+                <li>Use the "nullable" checkbox next to a property's type, and the × buttons to remove properties/entities.</li>
+                <li>Use the Undo/Redo buttons above (or Ctrl+Z / Ctrl+Y anywhere outside the textareas) to step back through diagram edits (each gesture is one step).</li>
+                <li>Use the Auto-layout button to arrange entities into layers by relationship, and Zoom to fit to bring every entity back into view; the small overview in the canvas corner shows where you are when zoomed in.</li>
+                <li>Use Export SVG for a standalone image of the current layout, or Export Mermaid for <code>erDiagram</code> text you can paste into docs/Markdown. Use Fullscreen for more room to work.</li>
+            </ul>
+        </details>
+    }
 }
 
 @if (_diagram is not null && _editContext is not null)
 {
-    <details style="margin: 8px 0; font-size: 0.85em;">
-        <summary style="cursor: pointer;">How to edit the diagram</summary>
-        <ul style="margin: 4px 0;">
-            <li>Double-click an entity name, property name, or property type to rename/retype it in place.</li>
-            <li>Drag from a port on the child (many) entity to the parent (one) entity to draw a relationship.</li>
-            <li>Click the ▸ next to a property to expand its options: primary key toggle, column name/type, precision/scale, default value, and indexes.</li>
-            <li>Use the "nullable" checkbox next to a property's type, and the × buttons to remove properties/entities.</li>
-            <li>Use the Undo/Redo buttons above (or Ctrl+Z / Ctrl+Y anywhere outside the textareas) to step back through diagram edits (each gesture is one step).</li>
-            <li>Use the Auto-layout button to arrange entities into layers by relationship, and Zoom to fit to bring every entity back into view; the small overview in the canvas corner shows where you are when zoomed in.</li>
-            <li>Use Export SVG for a standalone image of the current layout, or Export Mermaid for <code>erDiagram</code> text you can paste into docs/Markdown.</li>
-        </ul>
-    </details>
-    <div class="diagram-panel">
+    <div class="diagram-panel @(_isFullscreen ? "fullscreen" : "")">
+        @if (_isFullscreen)
+        {
+            <div class="fullscreen-toolbar">
+                <button class="btn btn-secondary btn-sm" title="Undo last diagram edit (Ctrl+Z)" disabled="@(_editor is null || !_editor.CanUndo)" @onclick="UndoAsync">Undo</button>
+                <button class="btn btn-secondary btn-sm" title="Redo last undone diagram edit (Ctrl+Y)" disabled="@(_editor is null || !_editor.CanRedo)" @onclick="RedoAsync">Redo</button>
+                <button class="btn btn-secondary btn-sm" title="Arrange entities into layers by relationship (principals before dependents)" @onclick="AutoLayout">Auto-layout</button>
+                <button class="btn btn-secondary btn-sm" title="Zoom/pan so every entity is visible" @onclick="ZoomToFit">Zoom to fit</button>
+                <button class="btn btn-secondary btn-sm" title="Exit fullscreen (Esc)" @onclick="ToggleFullscreen">Exit fullscreen</button>
+            </div>
+            @if (_error is not null)
+            {
+                <pre class="fullscreen-error">@_error</pre>
+            }
+        }
         <CascadingValue Value="_diagram">
             <CascadingValue Value="_editContext">
                 <DiagramCanvas>
@@ -131,6 +153,7 @@
     private IReadOnlyList<Diagnostic>? _diagnostics;
     private string? _error;
     private DotNetObjectReference<Home>? _shortcutsRef;
+    private bool _isFullscreen;
 
     // Populated from an uploaded zip so DownloadZip can write files back under their original
     // names/paths instead of collapsing everything into Entities.cs/DbContext.cs (see F2/F3).
@@ -405,6 +428,11 @@
     private void ZoomToFit()
     {
         _diagram?.ZoomToFit(50);
+    }
+
+    private void ToggleFullscreen()
+    {
+        _isFullscreen = !_isFullscreen;
     }
 
     private async Task OnDiagramEditedAsync()
