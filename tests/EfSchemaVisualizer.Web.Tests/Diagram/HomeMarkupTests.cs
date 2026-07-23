@@ -20,6 +20,11 @@ public class HomeMarkupTests
         Assert.Contains("AutoLayout", fullscreenBlock);
         Assert.Contains("ZoomToFit", fullscreenBlock);
         Assert.Contains("ToggleFullscreen", fullscreenBlock);
+
+        // The five Contains checks above only prove the toolbar isn't missing an action; without
+        // this count, a sixth (unrelated) button added to the toolbar would slip past every
+        // assertion in this file undetected.
+        Assert.Equal(5, CountOccurrences(fullscreenBlock, "<button"));
     }
 
     [Fact]
