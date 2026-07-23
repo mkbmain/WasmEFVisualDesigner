@@ -21,13 +21,21 @@ public static class ProjectArchiveWriter
         {
             var writtenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            var classFilePath = SingleOriginPathOrDefault(entityFileOrigins) ?? "Entities.cs";
-            WriteEntry(zip, classFilePath, classSource);
-            writtenPaths.Add(classFilePath);
+            var classFiles = MultiFileSourceMerger.Split(
+                classSource, entityFileOrigins ?? new Dictionary<string, string>(), "Entities.cs");
+            foreach (var (path, content) in classFiles)
+            {
+                WriteEntry(zip, path, content);
+                writtenPaths.Add(path);
+            }
 
-            var configFilePath = SingleOriginPathOrDefault(configFileOrigins) ?? "DbContext.cs";
-            WriteEntry(zip, configFilePath, configSource);
-            writtenPaths.Add(configFilePath);
+            var configFiles = MultiFileSourceMerger.Split(
+                configSource, configFileOrigins ?? new Dictionary<string, string>(), "DbContext.cs");
+            foreach (var (path, content) in configFiles)
+            {
+                WriteEntry(zip, path, content);
+                writtenPaths.Add(path);
+            }
 
             if (passthroughFiles is not null)
             {
@@ -49,20 +57,6 @@ public static class ProjectArchiveWriter
         }
 
         return stream.ToArray();
-    }
-
-    /// A project may have uploaded more than one class (or config) file; when it did, there is
-    /// no single correct original path to write the merged, currently-edited source back to, so
-    /// the caller falls back to the fixed default name instead of guessing.
-    private static string? SingleOriginPathOrDefault(IReadOnlyDictionary<string, string>? origins)
-    {
-        if (origins is null || origins.Count == 0)
-        {
-            return null;
-        }
-
-        var distinctPaths = origins.Values.Distinct().ToList();
-        return distinctPaths.Count == 1 ? distinctPaths[0] : null;
     }
 
     private static void WriteEntry(ZipArchive zip, string name, string content)

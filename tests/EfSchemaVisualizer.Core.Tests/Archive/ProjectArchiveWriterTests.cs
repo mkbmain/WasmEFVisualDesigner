@@ -117,7 +117,7 @@ public class ProjectArchiveWriterTests
     }
 
     [Fact]
-    public void Write_MultipleDistinctClassOrigins_FallsBackToEntitiesCsDefaultName()
+    public void Write_MultipleDistinctClassOrigins_SplitsEachEntityBackToItsOwnOriginalFile()
     {
         var entityFileOrigins = new Dictionary<string, string>
         {
@@ -126,13 +126,29 @@ public class ProjectArchiveWriterTests
         };
 
         var bytes = ProjectArchiveWriter.Write(
-            "public class Blog { }", "", entityFileOrigins: entityFileOrigins);
+            "public class Blog { } public class Post { }", "", entityFileOrigins: entityFileOrigins);
 
         using var stream = new MemoryStream(bytes);
         using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
 
-        Assert.NotNull(zip.GetEntry("Entities.cs"));
-        Assert.Null(zip.GetEntry("Models/Blog.cs"));
+        Assert.Null(zip.GetEntry("Entities.cs"));
+
+        var blogEntry = zip.GetEntry("Models/Blog.cs");
+        Assert.NotNull(blogEntry);
+        using (var reader = new StreamReader(blogEntry!.Open()))
+        {
+            var content = reader.ReadToEnd();
+            Assert.Contains("class Blog", content);
+            Assert.DoesNotContain("class Post", content);
+        }
+
+        var postEntry = zip.GetEntry("Models/Post.cs");
+        Assert.NotNull(postEntry);
+        using (var reader = new StreamReader(postEntry!.Open()))
+        {
+            var content = reader.ReadToEnd();
+            Assert.Contains("class Post", content);
+        }
     }
 
     [Fact]
