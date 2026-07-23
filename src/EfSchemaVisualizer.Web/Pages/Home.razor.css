@@ -1,0 +1,25 @@
+@media (min-width: 641px) {
+    .page-fill {
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 3.5rem);
+    }
+
+    .diagram-panel {
+        flex: 1 1 auto;
+        min-height: 400px;
+    }
+}
+
+@media (max-width: 640.98px) {
+    .diagram-panel {
+        min-height: 70vh;
+    }
+}
+
+.diagram-panel {
+    width: 100%;
+    border: 1px solid #ccc;
+    position: relative;
+    overflow: hidden;
+}

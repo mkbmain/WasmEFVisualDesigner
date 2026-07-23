@@ -19,6 +19,8 @@
 
 <PageTitle>EF Schema Visualizer</PageTitle>
 
+<div class="page-fill">
+
 <h1>EF Schema Visualizer — ER Diagram</h1>
 
 <p>Paste entity classes and matching <code>OnModelCreating</code> fluent config below, then click Render Diagram.</p>
@@ -78,7 +80,7 @@
             <li>Use Export SVG for a standalone image of the current layout, or Export Mermaid for <code>erDiagram</code> text you can paste into docs/Markdown.</li>
         </ul>
     </details>
-    <div style="height: 600px; width: 100%; border: 1px solid #ccc; position: relative;">
+    <div class="diagram-panel">
         <CascadingValue Value="_diagram">
             <CascadingValue Value="_editContext">
                 <DiagramCanvas>
@@ -90,6 +92,8 @@
         </CascadingValue>
     </div>
 }
+
+</div>
 
 @code {
     private string _classSource = """
