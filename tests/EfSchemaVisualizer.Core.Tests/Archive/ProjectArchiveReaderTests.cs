@@ -207,4 +207,153 @@ public class ProjectArchiveReaderTests
         Assert.Empty(result.Layout);
         Assert.Contains("class Blog", result.ClassSource);
     }
+
+    [Fact]
+    public void Read_MultipleClassFiles_RecordsEachEntitysOriginFilename()
+    {
+        const string blogFile = """
+            public class Blog
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        const string postFile = """
+            public class Post
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        using var zip = CreateZip(("Models/Blog.cs", blogFile), ("Models/Post.cs", postFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.Equal("Models/Blog.cs", result.EntityFileOrigins["Blog"]);
+        Assert.Equal("Models/Post.cs", result.EntityFileOrigins["Post"]);
+    }
+
+    [Fact]
+    public void Read_SharedOnModelCreatingFile_RecordsSameFilenameForEveryConfiguredEntity()
+    {
+        const string classFile = """
+            public class Blog { public int Id { get; set; } }
+            public class Post { public int Id { get; set; } }
+            """;
+
+        const string configFile = """
+            public class AppDbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Blog>(entity => entity.HasKey(e => e.Id));
+                    modelBuilder.Entity<Post>(entity => entity.HasKey(e => e.Id));
+                }
+            }
+            """;
+
+        using var zip = CreateZip(("Entities.cs", classFile), ("Data/AppDbContext.cs", configFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.Equal("Data/AppDbContext.cs", result.ConfigFileOrigins["Blog"]);
+        Assert.Equal("Data/AppDbContext.cs", result.ConfigFileOrigins["Post"]);
+    }
+
+    [Fact]
+    public void Read_IEntityTypeConfigurationPerFile_RecordsEachEntitysOwnConfigFilename()
+    {
+        const string classFile = "public class Blog { public int Id { get; set; } }";
+
+        const string configFile = """
+            public class BlogConfiguration : IEntityTypeConfiguration<Blog>
+            {
+                public void Configure(EntityTypeBuilder<Blog> builder)
+                {
+                    builder.HasKey(e => e.Id);
+                }
+            }
+            """;
+
+        using var zip = CreateZip(("Blog.cs", classFile), ("Configurations/BlogConfiguration.cs", configFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.Equal("Configurations/BlogConfiguration.cs", result.ConfigFileOrigins["Blog"]);
+    }
+
+    [Fact]
+    public void Read_NonCsFile_IsCapturedAsPassthroughBytes()
+    {
+        const string classFile = "public class Blog { public int Id { get; set; } }";
+        var csprojBytes = System.Text.Encoding.UTF8.GetBytes("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+
+        using var zip = CreateZip(("Blog.cs", classFile));
+        // Add a non-.cs entry directly since CreateZip only supports text .cs entries.
+        zip.Position = 0;
+        using var zipWithExtra = new MemoryStream();
+        using (var source = new ZipArchive(zip, ZipArchiveMode.Read, leaveOpen: true))
+        using (var dest = new ZipArchive(zipWithExtra, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in source.Entries)
+            {
+                var destEntry = dest.CreateEntry(entry.FullName);
+                using var destStream = destEntry.Open();
+                using var srcStream = entry.Open();
+                srcStream.CopyTo(destStream);
+            }
+
+            var projEntry = dest.CreateEntry("MyProject.csproj");
+            using var projStream = projEntry.Open();
+            projStream.Write(csprojBytes);
+        }
+
+        zipWithExtra.Position = 0;
+        var result = ProjectArchiveReader.Read(zipWithExtra);
+
+        Assert.True(result.PassthroughFiles.ContainsKey("MyProject.csproj"));
+        Assert.Equal(csprojBytes, result.PassthroughFiles["MyProject.csproj"]);
+    }
+
+    [Fact]
+    public void Read_UnclassifiableCsFile_IsCapturedAsPassthroughBytes()
+    {
+        const string classFile = "public class Blog { public int Id { get; set; } }";
+        const string enumOnlyFile = "public enum Status { Active, Inactive }";
+
+        using var zip = CreateZip(("Blog.cs", classFile), ("Status.cs", enumOnlyFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.True(result.PassthroughFiles.ContainsKey("Status.cs"));
+        Assert.Contains("enum Status", System.Text.Encoding.UTF8.GetString(result.PassthroughFiles["Status.cs"]));
+    }
+
+    [Fact]
+    public void Read_DirectoryEntry_IsNotCapturedAsPassthrough()
+    {
+        const string classFile = "public class Blog { public int Id { get; set; } }";
+
+        using var zip = CreateZip(("Blog.cs", classFile));
+        zip.Position = 0;
+        using var zipWithDir = new MemoryStream();
+        using (var source = new ZipArchive(zip, ZipArchiveMode.Read, leaveOpen: true))
+        using (var dest = new ZipArchive(zipWithDir, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in source.Entries)
+            {
+                var destEntry = dest.CreateEntry(entry.FullName);
+                using var destStream = destEntry.Open();
+                using var srcStream = entry.Open();
+                srcStream.CopyTo(destStream);
+            }
+
+            dest.CreateEntry("Models/");
+        }
+
+        zipWithDir.Position = 0;
+        var result = ProjectArchiveReader.Read(zipWithDir);
+
+        Assert.False(result.PassthroughFiles.ContainsKey("Models/"));
+    }
 }
