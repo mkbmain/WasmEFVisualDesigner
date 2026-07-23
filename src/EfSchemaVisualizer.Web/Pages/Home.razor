@@ -128,6 +128,14 @@
     private string? _error;
     private DotNetObjectReference<Home>? _shortcutsRef;
 
+    // Populated from an uploaded zip so DownloadZip can write files back under their original
+    // names/paths instead of collapsing everything into Entities.cs/DbContext.cs (see F2). Reset
+    // whenever the diagram is rendered from freehand pasted text, since that content is no longer
+    // tied to any uploaded file's structure.
+    private IReadOnlyDictionary<string, string>? _entityFileOrigins;
+    private IReadOnlyDictionary<string, string>? _configFileOrigins;
+    private IReadOnlyDictionary<string, byte[]>? _passthroughFiles;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -158,6 +166,9 @@
         _diagnostics = null;
         _diagram = null;
         _editContext = null;
+        _entityFileOrigins = null;
+        _configFileOrigins = null;
+        _passthroughFiles = null;
 
         try
         {
@@ -269,6 +280,11 @@
 
             await RenderDiagramAsync();
 
+            // Must be set after RenderDiagramAsync, which clears them at the start of every render.
+            _entityFileOrigins = archiveResult.EntityFileOrigins;
+            _configFileOrigins = archiveResult.ConfigFileOrigins;
+            _passthroughFiles = archiveResult.PassthroughFiles;
+
             if (_diagram is not null && archiveResult.Layout.Count > 0)
             {
                 DiagramLayout.Apply(_diagram, archiveResult.Layout);
@@ -302,7 +318,9 @@
         }
 
         var layout = _diagram is not null ? DiagramLayout.Capture(_diagram) : null;
-        var bytes = ProjectArchiveWriter.Write(_editor.ClassSource, _editor.ConfigSource, layout);
+        var bytes = ProjectArchiveWriter.Write(
+            _editor.ClassSource, _editor.ConfigSource, layout,
+            _entityFileOrigins, _configFileOrigins, _passthroughFiles);
         using var stream = new MemoryStream(bytes);
         using var streamRef = new DotNetStreamReference(stream);
         await JS.InvokeVoidAsync("downloadFileFromStream", "ef-schema-visualizer-export.zip", streamRef);

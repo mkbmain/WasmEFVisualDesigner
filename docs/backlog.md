@@ -63,23 +63,39 @@
       test (`GestureHandlerSafeEditTests`) that verifies every call site stays
       wrapped.
 
-- [ ] **`[carried]/[verified]` F2 — Download throws away the entire uploaded
-      project.**
-      `ProjectArchiveReader` already collects `PassthroughFiles`,
+- [x] **`[carried]/[verified]` F2 — Download throws away the entire uploaded
+      project.** — Partially fixed 2026-07-23 (scoped fix; see note below).
+      `ProjectArchiveReader` already collected `PassthroughFiles`,
       `EntityFileOrigins`, and `ConfigFileOrigins` (commit `af42ca7`), but
-      nothing consumes them. `Home.razor:305` calls
-      `ProjectArchiveWriter.Write(_editor.ClassSource, _editor.ConfigSource, layout)`,
-      and `ProjectArchiveWriter.Write` (`ProjectArchiveWriter.cs:16-17`)
-      hardcodes exactly two entries. Measured against a realistic 7-file project
-      zip:
+      nothing consumed them — `ProjectArchiveWriter.Write` hardcoded exactly
+      two output entries regardless of what was uploaded, so the `.csproj` and
+      every other non-`.cs` file (migrations, `Program.cs`, `appsettings.json`)
+      vanished on download, leaving nothing to run `dotnet ef migrations add`
+      against.
 
-      | Uploaded | Downloaded |
-      |---|---|
-      | `MyApp.csproj`, `Program.cs`, `appsettings.json`, `Migrations/20240101_Init.cs`, `Entities/Customer.cs`, `Entities/Order.cs`, `Data/AppDbContext.cs` | `Entities.cs`, `DbContext.cs` |
+      Fix (scoped, chosen over the full per-file architecture below):
+      `ProjectArchiveWriter.Write` now re-emits every `PassthroughFiles` entry
+      verbatim at its original path, and — when a project has exactly one
+      class file and/or exactly one config file (the common case) — writes the
+      current edited source back under that file's original name/path instead
+      of `Entities.cs`/`DbContext.cs`. `Home.razor` threads `EntityFileOrigins`
+      /`ConfigFileOrigins`/`PassthroughFiles` from the upload through to
+      download, clearing them whenever the diagram is (re-)rendered from
+      freehand pasted text rather than an uploaded zip. Measured against the
+      same 7-file zip: `MyApp.csproj`, `Program.cs`, `appsettings.json`, and
+      `Migrations/20240101_Init.cs` now survive download unchanged; the two
+      class files (`Entities/Customer.cs`, `Entities/Order.cs`) still collapse
+      into one `Entities.cs`, since that multi-file case is F3, not F2, and
+      remains open (see below).
 
-      The `.csproj` is gone, so there is nothing left to run
-      `dotnet ef migrations add` against. Round-tripping a real project
-      **destroys it**. This is the single biggest blocker for journey 2.
+      **Not done — deferred by explicit user decision:** the backlog's
+      originally-recommended "real per-file round-trip" (teaching
+      `DiagramEditor` to track per-file state and route cross-file-aware edits
+      like entity rename to the correct originating file) was assessed as a
+      large architectural change — DiagramEditor's ~30 edit methods, undo/redo
+      snapshots, and every place a rename must scan *other* files for
+      references — and deferred in favor of the scoped fix above. That full
+      fix is still what F3 needs.
 
 - [ ] **`[carried]/[verified]` F3 — The regenerated `Entities.cs` does not
       compile.**
@@ -98,11 +114,14 @@
       every type's fully-qualified name. Any project with more than one entity
       file produces broken output.
 
-      F2 and F3 share one fix: **real per-file round-trip.** Keep each uploaded
-      file as its own unit (parse per file, rewrite the file that owns the
-      entity via the already-captured origins), re-emit passthrough files
-      verbatim, and preserve the original paths. This supersedes the archived
-      backlog's "zip round-trip loses file boundaries" item.
+      The real fix is **per-file round-trip**: keep each uploaded file as its
+      own unit (parse per file, rewrite the file that owns the entity via the
+      already-captured origins — DiagramEditor would need to track per-file
+      state and route cross-file-aware edits like entity rename to every file
+      that references the renamed type), re-emit passthrough files verbatim,
+      and preserve the original paths. F2's 2026-07-23 fix covers the
+      single-class-file/single-config-file case and passthrough files; this
+      item is what's left for genuinely multi-file class/config projects.
 
 - [ ] **`[found]/[verified]` F4 — Migrations, `ModelSnapshot`, and `obj/` are
       parsed as entities.**
