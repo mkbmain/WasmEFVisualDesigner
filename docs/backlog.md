@@ -38,37 +38,30 @@
 
 ## Priority 0 — Fatal: crashes, data loss, non-compiling output
 
-- [ ] **`[found]/[verified]` F1 — `RemoveEntity` crashes the whole app on
-      bare-statement config.**
-      `OnModelCreatingRewriter.RemoveEntity` (`OnModelCreatingRewriter.cs:2289`)
-      calls `root.RemoveNodes(...)` on the `ExpressionStatementSyntax` nodes it
-      collects. When the config source is bare top-level fluent statements —
-      **the shape the app ships as its own default sample, and the shape
-      `ProjectArchiveWriter` produces on every download** — those statements are
-      wrapped in a `GlobalStatementSyntax`. Removing the inner statement leaves a
-      `GlobalStatement` with a null child and Roslyn throws:
+- [x] **`[found]/[verified]` F1 — `RemoveEntity` crashes the whole app on
+      bare-statement config.** — Fixed 2026-07-23.
+      `OnModelCreatingRewriter.RemoveEntity` called `root.RemoveNodes(...)` on
+      the inner `ExpressionStatementSyntax` nodes it collected. When the config
+      source is bare top-level fluent statements — the shape the app ships as
+      its own default sample, and the shape `ProjectArchiveWriter` produces on
+      every download — those statements are wrapped in a `GlobalStatementSyntax`,
+      so removing the inner statement left a `GlobalStatement` with a null
+      child and Roslyn threw `ArgumentNullException`, which escaped
+      `EntityNode.razor`'s uncaught call into the Blazor renderer and crashed
+      the app with every unsaved edit lost.
 
-      ```
-      RemoveEntity(Tag) bare-statement config THREW:
-        System.ArgumentNullException: Value cannot be null. (Parameter 'statement')
-      RemoveEntity(Tag) wrapped-in-OnModelCreating config: success=True
-      ```
-
-      `EntityNode.razor:376` calls `Editor.RemoveEntity` with no `try`/`catch`, so
-      the exception escapes into the Blazor renderer: "An unhandled error has
-      occurred", reload required, **every unsaved edit lost**.
-
-      Repro from a cold app: default sample → **+ Entity** → **×** on the new
-      entity (it has no relationships, so the existing relationship guard doesn't
-      refuse it first).
-
-      Every rewriter test wraps config in a class/method, which is why 647 green
-      tests miss this. Fix: when a node's parent is a `GlobalStatementSyntax`,
-      remove the parent instead. Audit the other `RemoveNode(s)` call sites in
-      `OnModelCreatingRewriter` for the same bug, and add a bare-statement
-      fixture to `OnModelCreatingRewriterTests`. Separately, wrap the
-      `EntityNode.razor` / `RelationshipLinkLabel.razor` gesture handlers so a
-      rewriter exception becomes an inline error, not a dead app.
+      Fix: when the removed node's parent is a `GlobalStatementSyntax`, remove
+      that parent instead (root cause). Audited the other 8
+      `RemoveNode`/`RemoveNodes` call sites in `OnModelCreatingRewriter`; none
+      are reachable with a bare top-level statement, since they only remove
+      nodes found inside an `Entity<T>(entity => {...})` lambda block. Added
+      `RemoveEntity_BareTopLevelStatementConfig_RemovesStatementWithoutThrowing`
+      regression test. Also wrapped every `EditContext.Editor.*` gesture
+      handler in `EntityNode.razor`/`RelationshipLinkLabel.razor` in a
+      `SafeEdit` helper so any future rewriter exception surfaces as an inline
+      error instead of crashing the app, guarded by a markup-source regression
+      test (`GestureHandlerSafeEditTests`) that verifies every call site stays
+      wrapped.
 
 - [ ] **`[carried]/[verified]` F2 — Download throws away the entire uploaded
       project.**

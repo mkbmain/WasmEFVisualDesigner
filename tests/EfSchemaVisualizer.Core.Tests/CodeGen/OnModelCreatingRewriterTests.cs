@@ -1214,6 +1214,29 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("IEntityTypeConfiguration<Post>", result);
     }
 
+    private const string SourceWithBareTopLevelStatements = """
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.Property(e => e.Name).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<Blog>(entity =>
+        {
+            entity.Property(e => e.Title).HasMaxLength(200);
+        });
+        """;
+
+    [Fact]
+    public void RemoveEntity_BareTopLevelStatementConfig_RemovesStatementWithoutThrowing()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveEntity(SourceWithBareTopLevelStatements, entityName: "Tag");
+
+        Assert.DoesNotContain("Entity<Tag>", result);
+        Assert.Contains("modelBuilder.Entity<Blog>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Title).HasMaxLength(200)", result);
+    }
+
     private const string SourceWithBothConfigsChainedForRewrite = """
         public class AppDbContext : DbContext
         {

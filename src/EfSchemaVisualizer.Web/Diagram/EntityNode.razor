@@ -327,6 +327,21 @@
     private string _editingName = string.Empty;
     private string? _nameError;
 
+    /// A rewriter bug can throw instead of returning a failed DiagramEditResult (e.g. F1: a
+    /// Roslyn ArgumentNullException on bare-statement config). Without this, that exception
+    /// escapes into the Blazor renderer and kills the whole app instead of showing an inline error.
+    private static DiagramEditResult SafeEdit(Func<DiagramEditResult> operation)
+    {
+        try
+        {
+            return operation();
+        }
+        catch (Exception ex)
+        {
+            return DiagramEditResult.Fail($"Unexpected error: {ex.Message}");
+        }
+    }
+
     private void BeginNameEdit()
     {
         _isEditingName = true;
@@ -348,7 +363,7 @@
             return;
         }
 
-        var result = EditContext.Editor.RenameEntity(Node.Entity.Name, _editingName);
+        var result = SafeEdit(() => EditContext.Editor.RenameEntity(Node.Entity.Name, _editingName));
         if (result.Success)
         {
             _nameError = null;
@@ -375,7 +390,7 @@
 
     private async Task RemoveEntity()
     {
-        var result = EditContext.Editor.RemoveEntity(Node.Entity.Name);
+        var result = SafeEdit(() => EditContext.Editor.RemoveEntity(Node.Entity.Name));
         if (result.Success)
         {
             _nameError = null;
@@ -391,7 +406,7 @@
 
     private async Task CommitTableName(string? newTableName)
     {
-        var result = EditContext.Editor.SetTableMapping(Node.Entity.Name, newTableName, Node.Entity.Schema);
+        var result = SafeEdit(() => EditContext.Editor.SetTableMapping(Node.Entity.Name, newTableName, Node.Entity.Schema));
         if (result.Success)
         {
             _tableError = null;
@@ -407,9 +422,9 @@
     {
         var isViewOnly = Node.Entity.TableName is null && Node.Entity.ViewName is not null;
 
-        var result = isViewOnly
+        var result = SafeEdit(() => isViewOnly
             ? EditContext.Editor.SetViewMapping(Node.Entity.Name, Node.Entity.ViewName, newSchema)
-            : EditContext.Editor.SetTableMapping(Node.Entity.Name, Node.Entity.TableName, newSchema);
+            : EditContext.Editor.SetTableMapping(Node.Entity.Name, Node.Entity.TableName, newSchema));
 
         if (result.Success)
         {
@@ -431,7 +446,7 @@
 
     private async Task CommitViewName(string? newViewName)
     {
-        var result = EditContext.Editor.SetViewMapping(Node.Entity.Name, newViewName, Node.Entity.Schema);
+        var result = SafeEdit(() => EditContext.Editor.SetViewMapping(Node.Entity.Name, newViewName, Node.Entity.Schema));
         if (result.Success)
         {
             _viewError = null;
@@ -447,7 +462,7 @@
 
     private async Task CommitSqlQuery(string? newSql)
     {
-        var result = EditContext.Editor.SetSqlQuery(Node.Entity.Name, newSql);
+        var result = SafeEdit(() => EditContext.Editor.SetSqlQuery(Node.Entity.Name, newSql));
         if (result.Success)
         {
             _sqlQueryError = null;
@@ -461,7 +476,7 @@
 
     private async Task CommitKeyless(bool isKeyless)
     {
-        var result = EditContext.Editor.SetKeyless(Node.Entity.Name, isKeyless);
+        var result = SafeEdit(() => EditContext.Editor.SetKeyless(Node.Entity.Name, isKeyless));
         if (!result.Success)
         {
             // SetKeyless only fails on an unknown entity, which can't happen from this UI
@@ -486,7 +501,7 @@
 
     private async Task ToggleKey(PropertyModel property, bool isKey)
     {
-        var result = EditContext.Editor.ToggleKey(Node.Entity.Name, property.Name, isKey);
+        var result = SafeEdit(() => EditContext.Editor.ToggleKey(Node.Entity.Name, property.Name, isKey));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -502,7 +517,7 @@
 
     private async Task AddIndex(PropertyModel property)
     {
-        var result = EditContext.Editor.AddIndex(Node.Entity.Name, property.Name);
+        var result = SafeEdit(() => EditContext.Editor.AddIndex(Node.Entity.Name, property.Name));
         if (result.Success)
         {
             _indexError = null;
@@ -516,7 +531,7 @@
 
     private async Task ToggleIndexMembership(PropertyModel property, IndexModel index, bool include)
     {
-        var result = EditContext.Editor.ToggleIndexMembership(Node.Entity.Name, index.PropertyNames, property.Name, include);
+        var result = SafeEdit(() => EditContext.Editor.ToggleIndexMembership(Node.Entity.Name, index.PropertyNames, property.Name, include));
         if (result.Success)
         {
             _indexError = null;
@@ -530,7 +545,7 @@
 
     private async Task SetIndexUnique(IndexModel index, bool isUnique)
     {
-        var result = EditContext.Editor.SetIndexUnique(Node.Entity.Name, index.PropertyNames, isUnique);
+        var result = SafeEdit(() => EditContext.Editor.SetIndexUnique(Node.Entity.Name, index.PropertyNames, isUnique));
         if (result.Success)
         {
             _indexError = null;
@@ -544,7 +559,7 @@
 
     private async Task RenameIndex(IndexModel index, string? newName)
     {
-        var result = EditContext.Editor.RenameIndex(Node.Entity.Name, index.PropertyNames, newName);
+        var result = SafeEdit(() => EditContext.Editor.RenameIndex(Node.Entity.Name, index.PropertyNames, newName));
         if (result.Success)
         {
             _indexError = null;
@@ -558,7 +573,7 @@
 
     private async Task RemoveIndex(IndexModel index)
     {
-        var result = EditContext.Editor.RemoveIndex(Node.Entity.Name, index.PropertyNames);
+        var result = SafeEdit(() => EditContext.Editor.RemoveIndex(Node.Entity.Name, index.PropertyNames));
         if (result.Success)
         {
             _indexError = null;
@@ -574,7 +589,7 @@
 
     private async Task AddAlternateKey(PropertyModel property)
     {
-        var result = EditContext.Editor.AddAlternateKey(Node.Entity.Name, property.Name);
+        var result = SafeEdit(() => EditContext.Editor.AddAlternateKey(Node.Entity.Name, property.Name));
         if (result.Success)
         {
             _alternateKeyError = null;
@@ -588,7 +603,7 @@
 
     private async Task ToggleAlternateKeyMembership(PropertyModel property, IReadOnlyList<string> alternateKey, bool include)
     {
-        var result = EditContext.Editor.ToggleAlternateKeyMembership(Node.Entity.Name, alternateKey, property.Name, include);
+        var result = SafeEdit(() => EditContext.Editor.ToggleAlternateKeyMembership(Node.Entity.Name, alternateKey, property.Name, include));
         if (result.Success)
         {
             _alternateKeyError = null;
@@ -602,7 +617,7 @@
 
     private async Task RemoveAlternateKey(IReadOnlyList<string> alternateKey)
     {
-        var result = EditContext.Editor.RemoveAlternateKey(Node.Entity.Name, alternateKey);
+        var result = SafeEdit(() => EditContext.Editor.RemoveAlternateKey(Node.Entity.Name, alternateKey));
         if (result.Success)
         {
             _alternateKeyError = null;
@@ -635,7 +650,7 @@
             return;
         }
 
-        var result = EditContext.Editor.RenameProperty(Node.Entity.Name, originalPropertyName, _editingPropertyValue);
+        var result = SafeEdit(() => EditContext.Editor.RenameProperty(Node.Entity.Name, originalPropertyName, _editingPropertyValue));
         if (result.Success)
         {
             _propertyErrors.Remove(originalPropertyName);
@@ -683,7 +698,7 @@
             return;
         }
 
-        var result = EditContext.Editor.ChangePropertyType(Node.Entity.Name, property.Name, _editingTypeValue, property.IsNullable);
+        var result = SafeEdit(() => EditContext.Editor.ChangePropertyType(Node.Entity.Name, property.Name, _editingTypeValue, property.IsNullable));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -709,7 +724,7 @@
 
     private async Task ToggleNullable(PropertyModel property, bool isNullable)
     {
-        var result = EditContext.Editor.ChangePropertyType(Node.Entity.Name, property.Name, property.ClrType, isNullable);
+        var result = SafeEdit(() => EditContext.Editor.ChangePropertyType(Node.Entity.Name, property.Name, property.ClrType, isNullable));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -731,7 +746,7 @@
 
     private async Task CommitMaxLength(PropertyModel property, int? newMaxLength)
     {
-        var result = EditContext.Editor.SetMaxLength(Node.Entity.Name, property.Name, newMaxLength);
+        var result = SafeEdit(() => EditContext.Editor.SetMaxLength(Node.Entity.Name, property.Name, newMaxLength));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -752,7 +767,7 @@
             _ => null,
         };
 
-        var result = EditContext.Editor.SetRequiredOverride(Node.Entity.Name, property.Name, newIsRequired);
+        var result = SafeEdit(() => EditContext.Editor.SetRequiredOverride(Node.Entity.Name, property.Name, newIsRequired));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -766,7 +781,7 @@
 
     private async Task CommitRowVersion(PropertyModel property, bool newIsRowVersion)
     {
-        var result = EditContext.Editor.SetRowVersion(Node.Entity.Name, property.Name, newIsRowVersion);
+        var result = SafeEdit(() => EditContext.Editor.SetRowVersion(Node.Entity.Name, property.Name, newIsRowVersion));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -780,7 +795,7 @@
 
     private async Task CommitConcurrencyToken(PropertyModel property, bool newIsConcurrencyToken)
     {
-        var result = EditContext.Editor.SetConcurrencyToken(Node.Entity.Name, property.Name, newIsConcurrencyToken);
+        var result = SafeEdit(() => EditContext.Editor.SetConcurrencyToken(Node.Entity.Name, property.Name, newIsConcurrencyToken));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -794,7 +809,7 @@
 
     private async Task CommitColumnName(PropertyModel property, string? newColumnName)
     {
-        var result = EditContext.Editor.SetColumnName(Node.Entity.Name, property.Name, newColumnName);
+        var result = SafeEdit(() => EditContext.Editor.SetColumnName(Node.Entity.Name, property.Name, newColumnName));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -808,7 +823,7 @@
 
     private async Task CommitColumnType(PropertyModel property, string? newColumnType)
     {
-        var result = EditContext.Editor.SetColumnType(Node.Entity.Name, property.Name, newColumnType);
+        var result = SafeEdit(() => EditContext.Editor.SetColumnType(Node.Entity.Name, property.Name, newColumnType));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -822,7 +837,7 @@
 
     private async Task CommitPrecision(PropertyModel property, int? newPrecision)
     {
-        var result = EditContext.Editor.SetPrecision(Node.Entity.Name, property.Name, newPrecision, property.Scale);
+        var result = SafeEdit(() => EditContext.Editor.SetPrecision(Node.Entity.Name, property.Name, newPrecision, property.Scale));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -836,7 +851,7 @@
 
     private async Task CommitScale(PropertyModel property, int? newScale)
     {
-        var result = EditContext.Editor.SetPrecision(Node.Entity.Name, property.Name, property.Precision, newScale);
+        var result = SafeEdit(() => EditContext.Editor.SetPrecision(Node.Entity.Name, property.Name, property.Precision, newScale));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -850,7 +865,7 @@
 
     private async Task CommitDefaultValue(PropertyModel property, string? newLiteralText)
     {
-        var result = EditContext.Editor.SetDefaultValue(Node.Entity.Name, property.Name, newLiteralText);
+        var result = SafeEdit(() => EditContext.Editor.SetDefaultValue(Node.Entity.Name, property.Name, newLiteralText));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
@@ -884,7 +899,7 @@
 
     private async Task AddProperty()
     {
-        var result = EditContext.Editor.AddProperty(Node.Entity.Name, _addPropertyType);
+        var result = SafeEdit(() => EditContext.Editor.AddProperty(Node.Entity.Name, _addPropertyType));
         if (result.Success)
         {
             await EditContext.NotifyChangedAsync();
@@ -893,7 +908,7 @@
 
     private async Task RemoveProperty(string propertyName)
     {
-        var result = EditContext.Editor.RemoveProperty(Node.Entity.Name, propertyName);
+        var result = SafeEdit(() => EditContext.Editor.RemoveProperty(Node.Entity.Name, propertyName));
         if (result.Success)
         {
             _propertyErrors.Remove(propertyName);

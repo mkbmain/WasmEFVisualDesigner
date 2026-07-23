@@ -2261,7 +2261,13 @@ public sealed class OnModelCreatingRewriter
             if (FluentSyntaxHelpers.GetConfiguredEntityName(invocation) == entityName
                 && invocation.Parent is ExpressionStatementSyntax statement)
             {
-                nodesToRemove.Add(statement);
+                // Bare top-level fluent statements (no wrapping class/method) are
+                // parsed as GlobalStatementSyntax. Removing only the inner
+                // ExpressionStatementSyntax leaves the GlobalStatementSyntax with a
+                // null Statement child, which Roslyn rejects.
+                nodesToRemove.Add(statement.Parent is GlobalStatementSyntax globalStatement
+                    ? globalStatement
+                    : statement);
             }
         }
 

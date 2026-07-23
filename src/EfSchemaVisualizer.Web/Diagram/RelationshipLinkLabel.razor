@@ -82,6 +82,21 @@
         EditContext.Editor.Current.Entities.FirstOrDefault(e => e.Name == Label.Relationship.DependentEntity)?.Properties
             ?? Enumerable.Empty<PropertyModel>();
 
+    /// A rewriter bug can throw instead of returning a failed DiagramEditResult (e.g. F1: a
+    /// Roslyn ArgumentNullException on bare-statement config). Without this, that exception
+    /// escapes into the Blazor renderer and kills the whole app instead of showing an inline error.
+    private static DiagramEditResult SafeEdit(Func<DiagramEditResult> operation)
+    {
+        try
+        {
+            return operation();
+        }
+        catch (Exception ex)
+        {
+            return DiagramEditResult.Fail($"Unexpected error: {ex.Message}");
+        }
+    }
+
     private void ToggleExpand()
     {
         _expanded = !_expanded;
@@ -135,7 +150,7 @@
             : _foreignKeyProperties.ToArray();
         var onDeleteBehavior = _kind == RelationshipKind.ManyToMany ? null : _onDeleteBehavior;
 
-        var result = EditContext.Editor.SetRelationshipShape(Label.Relationship, _kind, foreignKeyProperties, onDeleteBehavior);
+        var result = SafeEdit(() => EditContext.Editor.SetRelationshipShape(Label.Relationship, _kind, foreignKeyProperties, onDeleteBehavior));
         if (result.Success)
         {
             _error = null;
@@ -149,7 +164,7 @@
 
     private async Task Remove()
     {
-        var result = EditContext.Editor.RemoveRelationship(Label.Relationship);
+        var result = SafeEdit(() => EditContext.Editor.RemoveRelationship(Label.Relationship));
         if (result.Success)
         {
             _error = null;
