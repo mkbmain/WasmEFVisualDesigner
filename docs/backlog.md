@@ -97,11 +97,11 @@
       references — and deferred in favor of the scoped fix above. That full
       fix is still what F3 needs.
 
-- [ ] **`[carried]/[verified]` F3 — The regenerated `Entities.cs` does not
-      compile.**
-      `ProjectArchiveReader.cs:81-82` joins every class file with a blank line
+- [x] **`[carried]/[verified]` F3 — The regenerated `Entities.cs` does not
+      compile.** — Fixed 2026-07-23.
+      `ProjectArchiveReader.cs:81-82` joined every class file with a blank line
       into one blob. Two entity files each carrying their own `using` block and
-      file-scoped namespace concatenate into a single illegal compilation unit:
+      file-scoped namespace concatenated into a single illegal compilation unit:
 
       ```
       concatenated multi-file class source: 1 syntax error
@@ -110,18 +110,30 @@
       ```
 
       Multiple `namespace X;` declarations in one file are also illegal, and all
-      types silently collapse into whichever namespace lands first — changing
+      types silently collapsed into whichever namespace landed first — changing
       every type's fully-qualified name. Any project with more than one entity
-      file produces broken output.
+      file produced broken output.
 
-      The real fix is **per-file round-trip**: keep each uploaded file as its
-      own unit (parse per file, rewrite the file that owns the entity via the
-      already-captured origins — DiagramEditor would need to track per-file
-      state and route cross-file-aware edits like entity rename to every file
-      that references the renamed type), re-emit passthrough files verbatim,
-      and preserve the original paths. F2's 2026-07-23 fix covers the
-      single-class-file/single-config-file case and passthrough files; this
-      item is what's left for genuinely multi-file class/config projects.
+      Fix: `MultiFileSourceMerger.Merge` now folds every uploaded class/config
+      file into one valid compilation unit at read time (deduplicating `using`
+      directives and reconciling namespaces), and `MultiFileSourceMerger.Split`
+      reverses that at write time, routing the edited merged source back to
+      each file's original path via `ProjectArchiveReader`/`ProjectArchiveWriter`.
+      `DiagramEditor` now owns `EntityFileOrigins`/`ConfigFileOrigins` directly
+      and keeps them correctly re-keyed across renames, instead of the caller
+      threading stale origins through. Verified end to end: a new
+      `ProjectArchiveRoundTripTests` test uploads a 5-file project (two entity
+      files in their own namespace, two config files, a `.csproj`), renames an
+      entity through `DiagramEditor`, downloads, and asserts every downloaded
+      `.cs` file parses with zero Roslyn error diagnostics — the same
+      verification methodology this finding was originally reproduced with.
+
+      **Documented limitations (not defects):** all of a merged document's
+      `using` directives are re-emitted into every split file — a safe
+      over-approximation, since an unused `using` warns rather than fails to
+      compile. A model-level (non-entity-scoped) config statement with no
+      single resolvable entity falls back to the default config file rather
+      than its original one.
 
 - [ ] **`[found]/[verified]` F4 — Migrations, `ModelSnapshot`, and `obj/` are
       parsed as entities.**
