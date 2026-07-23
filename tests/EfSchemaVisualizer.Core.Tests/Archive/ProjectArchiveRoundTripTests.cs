@@ -115,6 +115,59 @@ public class ProjectArchiveRoundTripTests
     }
 
     [Fact]
+    public void UploadEditDownload_ProjectWithMigrationsAndSnapshot_ExcludesThemFromDiagramButSurvivesDownloadUnchanged()
+    {
+        const string blogFile = "public class Blog { public int Id { get; set; } }";
+        const string migrationFile = """
+            public partial class Init : Migration
+            {
+                protected override void Up(MigrationBuilder migrationBuilder) { }
+            }
+            """;
+        const string snapshotFile = """
+            partial class AppDbContextModelSnapshot : ModelSnapshot
+            {
+                protected override void BuildModel(ModelBuilder modelBuilder) { }
+            }
+            """;
+        var csprojBytes = System.Text.Encoding.UTF8.GetBytes("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+
+        using var uploadedZip = CreateZip(
+            ("MyApp.csproj", csprojBytes),
+            ("Blog.cs", System.Text.Encoding.UTF8.GetBytes(blogFile)),
+            ("Migrations/20240101_Init.cs", System.Text.Encoding.UTF8.GetBytes(migrationFile)),
+            ("Migrations/AppDbContextModelSnapshot.cs", System.Text.Encoding.UTF8.GetBytes(snapshotFile)));
+
+        var readResult = ProjectArchiveReader.Read(uploadedZip);
+
+        Assert.DoesNotContain("class Init", readResult.ClassSource);
+        Assert.DoesNotContain("ModelSnapshot", readResult.ClassSource);
+
+        var downloadedBytes = ProjectArchiveWriter.Write(
+            readResult.ClassSource, readResult.ConfigSource,
+            entityFileOrigins: readResult.EntityFileOrigins,
+            configFileOrigins: readResult.ConfigFileOrigins,
+            passthroughFiles: readResult.PassthroughFiles);
+
+        using var downloadedStream = new MemoryStream(downloadedBytes);
+        using var downloadedZip = new ZipArchive(downloadedStream, ZipArchiveMode.Read);
+
+        var migrationEntry = downloadedZip.GetEntry("Migrations/20240101_Init.cs");
+        Assert.NotNull(migrationEntry);
+        using (var reader = new StreamReader(migrationEntry!.Open()))
+        {
+            Assert.Equal(migrationFile, reader.ReadToEnd());
+        }
+
+        var snapshotEntry = downloadedZip.GetEntry("Migrations/AppDbContextModelSnapshot.cs");
+        Assert.NotNull(snapshotEntry);
+        using (var reader = new StreamReader(snapshotEntry!.Open()))
+        {
+            Assert.Equal(snapshotFile, reader.ReadToEnd());
+        }
+    }
+
+    [Fact]
     public void UploadEditDownload_MultiFileProjectWithOwnNamespacesAndConfigFiles_EveryDownloadedFileParses()
     {
         const string customerFile = """

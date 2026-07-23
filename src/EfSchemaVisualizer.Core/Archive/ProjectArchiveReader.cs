@@ -30,6 +30,8 @@ public static class ProjectArchiveReader
         var entityStyleConfigOrigins = new Dictionary<string, string>();
         var classStyleConfigOrigins = new Dictionary<string, string>();
         var passthroughFiles = new Dictionary<string, byte[]>();
+        var skippedBuildArtifactCount = 0;
+        var excludedGeneratedFiles = new List<string>();
 
         foreach (var entry in zip.Entries)
         {
@@ -44,9 +46,24 @@ public static class ProjectArchiveReader
                 continue;
             }
 
+            if (ArchivePathFilter.IsBuildArtifact(entry.FullName))
+            {
+                skippedBuildArtifactCount++;
+                continue;
+            }
+
+            var isGeneratedOrMigration = ArchivePathFilter.IsGeneratedOrMigration(entry.FullName);
+
             if (!entry.FullName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             {
                 passthroughFiles[entry.FullName] = ReadAllBytes(entry);
+                continue;
+            }
+
+            if (isGeneratedOrMigration)
+            {
+                passthroughFiles[entry.FullName] = ReadAllBytes(entry);
+                excludedGeneratedFiles.Add(entry.FullName);
                 continue;
             }
 
@@ -82,6 +99,28 @@ public static class ProjectArchiveReader
         var configSource = MultiFileSourceMerger.Merge(configFiles);
 
         var diagnostics = new List<Diagnostic>();
+        if (skippedBuildArtifactCount > 0)
+        {
+            diagnostics.Add(new Diagnostic(
+                DiagnosticCodes.ArchiveBuildArtifactSkipped,
+                $"Skipped {skippedBuildArtifactCount} build-artifact file(s) under bin/ or obj/ — "
+                    + "not part of the schema and not included in the download.",
+                EntityName: null,
+                PropertyName: null,
+                new TextSpan(0, 0)));
+        }
+
+        if (excludedGeneratedFiles.Count > 0)
+        {
+            diagnostics.Add(new Diagnostic(
+                DiagnosticCodes.ArchiveGeneratedFileExcluded,
+                $"Excluded {excludedGeneratedFiles.Count} migration/generated file(s) from the diagram "
+                    + $"(preserved unchanged for download): {string.Join(", ", excludedGeneratedFiles)}.",
+                EntityName: null,
+                PropertyName: null,
+                new TextSpan(0, 0)));
+        }
+
         if (classFiles.Count == 0 && configFiles.Count == 0)
         {
             diagnostics.Add(new Diagnostic(

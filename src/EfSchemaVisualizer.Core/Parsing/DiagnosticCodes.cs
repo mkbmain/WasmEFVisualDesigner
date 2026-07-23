@@ -34,4 +34,6 @@ public static class DiagnosticCodes
     public const string UnrecognizedConfigCall = nameof(UnrecognizedConfigCall);
     public const string ArchiveNoContentFound = nameof(ArchiveNoContentFound);
     public const string UnreadableHasCommentArgument = nameof(UnreadableHasCommentArgument);
+    public const string ArchiveGeneratedFileExcluded = nameof(ArchiveGeneratedFileExcluded);
+    public const string ArchiveBuildArtifactSkipped = nameof(ArchiveBuildArtifactSkipped);
 }

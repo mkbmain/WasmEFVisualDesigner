@@ -135,17 +135,28 @@
       single resolvable entity falls back to the default config file rather
       than its original one.
 
-- [ ] **`[found]/[verified]` F4 — Migrations, `ModelSnapshot`, and `obj/` are
-      parsed as entities.**
-      `ProjectArchiveReader.Read` (`ProjectArchiveReader.cs:34-51`) iterates
-      every zip entry with no path filtering. From the test zip above the diagram
-      rendered `Entities: Init, Customer, Order` — `Init` being the migration
-      class. A real repo zip also carries `AppDbContextModelSnapshot.cs`,
-      `obj/Debug/**/*.AssemblyInfo.cs`, `*.g.cs`, and test-project classes; all
-      become tables in the diagram and all get folded into the downloaded
-      `Entities.cs`. Add a path filter (`bin/`, `obj/`, `Migrations/`,
-      `*ModelSnapshot.cs`, `*.g.cs`, `*.Designer.cs`) and surface what was
-      skipped as a diagnostic rather than silently.
+- [x] **`[found]/[verified]` F4 — Migrations, `ModelSnapshot`, and `obj/` are
+      parsed as entities.** — Fixed 2026-07-23.
+      `ProjectArchiveReader.Read` iterated every zip entry with no path
+      filtering, so migration classes, `AppDbContextModelSnapshot.cs`, and
+      `obj/`/`bin/` build output all got parsed as entities and folded into the
+      downloaded `Entities.cs`.
+
+      Fix: new `ArchivePathFilter` classifies each entry before it reaches
+      class/config classification. `bin/`/`obj/` path segments are dropped
+      entirely (regenerable build output; not written to the download either,
+      shrinking upload/download bulk as the P4 size-ceiling item anticipated).
+      `Migrations/` path segments and `*ModelSnapshot.cs`/`*.Designer.cs`/
+      `*.g.cs` filenames are excluded from diagram parsing but preserved
+      verbatim via `PassthroughFiles`, so they still round-trip unchanged on
+      download (needed for `dotnet ef` to keep working) without rendering as
+      fake entities. Both categories now surface as diagnostics
+      (`ArchiveBuildArtifactSkipped`, `ArchiveGeneratedFileExcluded`) instead
+      of silently. Verified with new `ProjectArchiveReaderTests` cases (one per
+      filtered path/suffix, plus one confirming bin/ files are dropped from
+      passthrough too) and a `ProjectArchiveRoundTripTests` case uploading a
+      project with a migration + snapshot file, confirming both are absent
+      from `ClassSource` and byte-identical in the downloaded zip.
 
 - [ ] **`[found]/[verified]` F5 — Renaming to a C# keyword corrupts the source.**
       `DiagramEditor.cs:51` guards with `SyntaxFacts.IsValidIdentifier`, which

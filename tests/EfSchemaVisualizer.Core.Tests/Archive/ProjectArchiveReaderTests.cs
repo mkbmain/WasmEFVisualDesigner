@@ -358,6 +358,99 @@ public class ProjectArchiveReaderTests
     }
 
     [Fact]
+    public void Read_MigrationFile_IsExcludedFromClassSource_AndPreservedAsPassthrough()
+    {
+        const string blogFile = "public class Blog { public int Id { get; set; } }";
+        const string migrationFile = """
+            public partial class Init : Migration
+            {
+                protected override void Up(MigrationBuilder migrationBuilder) { }
+            }
+            """;
+
+        using var zip = CreateZip(("Blog.cs", blogFile), ("Migrations/20240101_Init.cs", migrationFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.Contains("class Blog", result.ClassSource);
+        Assert.DoesNotContain("class Init", result.ClassSource);
+        Assert.True(result.PassthroughFiles.ContainsKey("Migrations/20240101_Init.cs"));
+        Assert.Contains(
+            "class Init",
+            System.Text.Encoding.UTF8.GetString(result.PassthroughFiles["Migrations/20240101_Init.cs"]));
+        Assert.Contains(result.Diagnostics, d => d.Code == DiagnosticCodes.ArchiveGeneratedFileExcluded);
+    }
+
+    [Fact]
+    public void Read_ModelSnapshotFile_IsExcludedFromClassSource_AndPreservedAsPassthrough()
+    {
+        const string blogFile = "public class Blog { public int Id { get; set; } }";
+        const string snapshotFile = """
+            partial class AppDbContextModelSnapshot : ModelSnapshot
+            {
+                protected override void BuildModel(ModelBuilder modelBuilder) { }
+            }
+            """;
+
+        using var zip = CreateZip(("Blog.cs", blogFile), ("Migrations/AppDbContextModelSnapshot.cs", snapshotFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.DoesNotContain("ModelSnapshot", result.ClassSource);
+        Assert.True(result.PassthroughFiles.ContainsKey("Migrations/AppDbContextModelSnapshot.cs"));
+    }
+
+    [Fact]
+    public void Read_DesignerFile_IsExcludedFromClassSource_AndPreservedAsPassthrough()
+    {
+        const string blogFile = "public class Blog { public int Id { get; set; } }";
+        const string designerFile = """
+            partial class Init
+            {
+                protected override void BuildTargetModel(ModelBuilder modelBuilder) { }
+            }
+            """;
+
+        using var zip = CreateZip(("Blog.cs", blogFile), ("Migrations/20240101_Init.Designer.cs", designerFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.DoesNotContain("BuildTargetModel", result.ClassSource);
+        Assert.True(result.PassthroughFiles.ContainsKey("Migrations/20240101_Init.Designer.cs"));
+    }
+
+    [Fact]
+    public void Read_ObjFolderCsFile_IsDroppedEntirely_NotParsedNorPreserved()
+    {
+        const string blogFile = "public class Blog { public int Id { get; set; } }";
+        const string generatedFile = "public class MyAppAssemblyInfo { }";
+
+        using var zip = CreateZip(
+            ("Blog.cs", blogFile),
+            ("obj/Debug/net8.0/MyApp.AssemblyInfo.cs", generatedFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.DoesNotContain("MyAppAssemblyInfo", result.ClassSource);
+        Assert.False(result.PassthroughFiles.ContainsKey("obj/Debug/net8.0/MyApp.AssemblyInfo.cs"));
+        Assert.Contains(result.Diagnostics, d => d.Code == DiagnosticCodes.ArchiveBuildArtifactSkipped);
+    }
+
+    [Fact]
+    public void Read_BinFolderFile_IsDroppedEntirely_RegardlessOfExtension()
+    {
+        const string blogFile = "public class Blog { public int Id { get; set; } }";
+
+        using var zip = CreateZip(
+            ("Blog.cs", blogFile),
+            ("bin/Debug/net8.0/MyApp.dll", "fake binary content"));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        Assert.False(result.PassthroughFiles.ContainsKey("bin/Debug/net8.0/MyApp.dll"));
+    }
+
+    [Fact]
     public void Read_MultipleClassFilesWithOwnUsingsAndNamespaces_ProducesParseableClassSource()
     {
         const string customerFile = """
