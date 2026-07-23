@@ -78,9 +78,10 @@ diagram library with no extra JS interop or manual resize calls needed.
 `isEditableTarget` so it doesn't fire while typing in the textareas. Extend the
 same listener to also check for the `Escape` key and invoke a new
 `[JSInvokable] OnEscapeShortcut()` method on `Home`, reusing the existing
-registration (no second listener). `OnEscapeShortcut` only acts (calls
-`ToggleFullscreen()` to exit) when `_isFullscreen` is currently true; otherwise
-it's a no-op, so Escape doesn't interfere with anything else on the page when
+registration (no second listener). `OnEscapeShortcut` only acts (sets
+`_isFullscreen` back to `false` and calls `StateHasChanged()`) when
+`_isFullscreen` is currently true; otherwise it's a no-op, so Escape doesn't
+interfere with anything else on the page when
 not in fullscreen.
 
 ## Edge cases
