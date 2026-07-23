@@ -78,8 +78,8 @@ public static class ProjectArchiveReader
             configFileOrigins[entityName] = fileName;
         }
 
-        var classSource = string.Join(Environment.NewLine + Environment.NewLine, classFiles);
-        var configSource = string.Join(Environment.NewLine + Environment.NewLine, configFiles);
+        var classSource = MultiFileSourceMerger.Merge(classFiles);
+        var configSource = MultiFileSourceMerger.Merge(configFiles);
 
         var diagnostics = new List<Diagnostic>();
         if (classFiles.Count == 0 && configFiles.Count == 0)

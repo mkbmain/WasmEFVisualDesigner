@@ -356,4 +356,41 @@ public class ProjectArchiveReaderTests
 
         Assert.False(result.PassthroughFiles.ContainsKey("Models/"));
     }
+
+    [Fact]
+    public void Read_MultipleClassFilesWithOwnUsingsAndNamespaces_ProducesParseableClassSource()
+    {
+        const string customerFile = """
+            using System;
+
+            namespace MyApp.Entities;
+
+            public class Customer
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        const string orderFile = """
+            using System.Collections.Generic;
+
+            namespace MyApp.Entities;
+
+            public class Order
+            {
+                public int Id { get; set; }
+                public int CustomerId { get; set; }
+            }
+            """;
+
+        using var zip = CreateZip(("Entities/Customer.cs", customerFile), ("Entities/Order.cs", orderFile));
+
+        var result = ProjectArchiveReader.Read(zip);
+
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(result.ClassSource);
+        var errors = tree.GetDiagnostics().Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error).ToList();
+        Assert.True(errors.Count == 0, "Expected no parse errors, got: " + string.Join("; ", errors));
+        Assert.Contains("class Customer", result.ClassSource);
+        Assert.Contains("class Order", result.ClassSource);
+    }
 }
