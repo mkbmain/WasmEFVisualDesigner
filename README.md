@@ -59,7 +59,8 @@ your model entirely client-side.
   non-UI logic (diagram sync, accessibility).
 - `tests/EfSchemaVisualizer.SmokeTests` — headless-Chromium smoke test that
   drives the actual published app and confirms it boots.
-- `docs/backlog.md` — what's built and what's left.
+- `docs/backlog.md` — what's left (active).
+- `docs/DoneBackLog20260723.md` — archived record of completed rounds 1–3.
 - `docs/superpowers/specs/` — design docs for each feature slice.
 
 ## Getting started
@@ -109,7 +110,8 @@ eye before trusting a regenerated file:
 
 ## Contributing
 
-Issues and PRs welcome. Check `docs/backlog.md` for known gaps and
+Issues and PRs welcome. Check `docs/backlog.md` for known gaps (and
+`docs/DoneBackLog20260723.md` for what's already been closed out) and
 `docs/superpowers/specs/` for the design rationale behind existing
 features before proposing changes to them.
 
