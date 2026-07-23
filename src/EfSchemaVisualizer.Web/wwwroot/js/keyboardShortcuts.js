@@ -9,6 +9,11 @@ function isEditableTarget(target) {
 }
 
 function handleUndoRedoKeydown(event) {
+    if (event.key === 'Escape') {
+        _undoRedoDotNetRef?.invokeMethodAsync('OnEscapeShortcut');
+        return;
+    }
+
     if (isEditableTarget(event.target) || (!event.ctrlKey && !event.metaKey)) {
         return;
     }

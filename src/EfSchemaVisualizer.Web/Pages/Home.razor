@@ -177,6 +177,18 @@
     [JSInvokable]
     public async Task OnRedoShortcut() => await RedoAsync();
 
+    [JSInvokable]
+    public void OnEscapeShortcut()
+    {
+        if (!_isFullscreen)
+        {
+            return;
+        }
+
+        _isFullscreen = false;
+        StateHasChanged();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_shortcutsRef is not null)
