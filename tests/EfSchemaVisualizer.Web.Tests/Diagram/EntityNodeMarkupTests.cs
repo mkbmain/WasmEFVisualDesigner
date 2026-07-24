@@ -50,6 +50,15 @@ public class EntityNodeMarkupTests
         Assert.Contains("EditContext.Editor.SetViewMapping(Node.Entity.Name, Node.Entity.ViewName, newSchema)", markup);
     }
 
+    [Fact]
+    public void PropertyRow_RendersMutedKeyMarker_WhenKeyIsInferred()
+    {
+        var markup = ReadEntityNodeRazorSource();
+
+        Assert.Contains("Node.Entity.IsKeyInferred", markup);
+        Assert.Contains("inferred-key", markup);
+    }
+
     private static string ReadEntityNodeRazorSource()
     {
         var path = Path.Combine(FindRepoRoot(), "src", "EfSchemaVisualizer.Web", "Diagram", "EntityNode.razor");

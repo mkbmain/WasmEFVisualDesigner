@@ -102,7 +102,9 @@
                 {
                     @if (isKey)
                     {
-                        <text>🔑 </text>
+                        <span class="@(Node.Entity.IsKeyInferred ? "inferred-key" : "")"
+                              style="@(Node.Entity.IsKeyInferred ? "opacity: 0.5;" : "")"
+                              title="@(Node.Entity.IsKeyInferred ? "Inferred from EF naming convention (Id / <Type>Id) — not yet in source" : null)">🔑 </span>
                     }
                     @if (_editingPropertyName == property.Name)
                     {
