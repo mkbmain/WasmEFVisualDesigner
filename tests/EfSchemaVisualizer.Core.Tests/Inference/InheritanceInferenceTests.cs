@@ -110,6 +110,21 @@ public class InheritanceInferenceTests
     }
 
     [Fact]
+    public void Fold_MultiLevelChain_NearerAncestorShadowsFurtherAncestorPropertyOfSameName()
+    {
+        var root = new EntityModel("Root", new[] { Property("Foo", "int") });
+        var mid = new EntityModel("Mid", new[] { Property("Foo", "string") }, BaseEntityName: "Root");
+        var leaf = new EntityModel("Leaf", System.Array.Empty<PropertyModel>(), BaseEntityName: "Mid");
+
+        var result = InheritanceInference.Fold(new[] { root, mid, leaf });
+
+        var foldedLeaf = result.Entities.Single(e => e.Name == "Leaf");
+        var foo = Assert.Single(foldedLeaf.Properties, p => p.Name == "Foo");
+        Assert.Equal("string", foo.ClrType);
+        Assert.Equal("Mid", foo.DeclaringEntityName);
+    }
+
+    [Fact]
     public void Fold_MalformedCycle_DoesNotThrowAndStopsAtCycle()
     {
         var a = new EntityModel("A", new[] { Property("X", "int") }, BaseEntityName: "B");

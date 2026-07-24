@@ -26,20 +26,33 @@ public static class InheritanceInference
 
             var nearestFirstChain = BuildAncestorChain(entity, byName);
 
+            // Root-first pass: decide the ORDER ancestor property names first appear in.
+            // Own properties are excluded from this ordering (they're appended separately
+            // below) but seed the seen-set so an own-property's name isn't folded in here.
             var seenNames = new HashSet<string>(entity.Properties.Select(p => p.Name));
-            var foldedProperties = new List<PropertyModel>();
+            var ancestorPropertyNamesInOrder = new List<string>();
 
             foreach (var ancestor in nearestFirstChain.AsEnumerable().Reverse())
             {
                 foreach (var property in ancestor.Properties)
                 {
-                    if (!seenNames.Add(property.Name))
+                    if (seenNames.Add(property.Name))
                     {
-                        continue;
+                        ancestorPropertyNamesInOrder.Add(property.Name);
                     }
-
-                    foldedProperties.Add(property with { DeclaringEntityName = ancestor.Name });
                 }
+            }
+
+            // Nearest-first pass: for each name, the NEAREST ancestor that declares it wins
+            // (shadowing), even though the further ancestor may have declared it first.
+            var foldedProperties = new List<PropertyModel>();
+            foreach (var name in ancestorPropertyNamesInOrder)
+            {
+                var (winningProperty, owner) = nearestFirstChain
+                    .Select(a => (Property: a.Properties.FirstOrDefault(p => p.Name == name), Owner: a))
+                    .First(x => x.Property is not null);
+
+                foldedProperties.Add(winningProperty! with { DeclaringEntityName = owner.Name });
             }
 
             foldedProperties.AddRange(entity.Properties);
