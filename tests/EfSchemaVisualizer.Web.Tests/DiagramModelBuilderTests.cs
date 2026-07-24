@@ -1,4 +1,5 @@
 using System.Linq;
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 using EfSchemaVisualizer.Web;
 using Xunit;
@@ -787,5 +788,52 @@ public class DiagramModelBuilderTests
         var relationship = Assert.Single(result.Relationships);
         Assert.False(relationship.IsInferred);
         Assert.Equal("Restrict", relationship.OnDeleteBehavior);
+    }
+
+    [Fact]
+    public void Build_TphHierarchy_FoldsInheritedPropertiesAndKeyAndAddsInheritanceEdge()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Name { get; set; }
+            }
+
+            public class Student : Person
+            {
+                public string Course { get; set; }
+            }
+
+            public class Teacher : Person
+            {
+                public decimal Salary { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var student = result.Entities.Single(e => e.Name == "Student");
+        Assert.Equal(new[] { "Id", "Name", "Course" }, student.Properties.Select(p => p.Name));
+        Assert.Equal(new[] { "Id" }, student.KeyPropertyNames);
+        Assert.True(student.IsKeyInferred);
+
+        var teacher = result.Entities.Single(e => e.Name == "Teacher");
+        Assert.Equal(new[] { "Id", "Name", "Salary" }, teacher.Properties.Select(p => p.Name));
+        Assert.Equal(new[] { "Id" }, teacher.KeyPropertyNames);
+
+        var inheritanceEdges = result.Relationships.Where(r => r.Kind == RelationshipKind.Inheritance).ToList();
+        Assert.Equal(2, inheritanceEdges.Count);
+        Assert.Contains(inheritanceEdges, r => r.PrincipalEntity == "Person" && r.DependentEntity == "Student");
+        Assert.Contains(inheritanceEdges, r => r.PrincipalEntity == "Person" && r.DependentEntity == "Teacher");
     }
 }

@@ -88,7 +88,7 @@ public static class DiagramModelBuilder
             .Concat(indexes.Value)
             .ToList();
 
-        var entities = entityResult.Value
+        IReadOnlyList<EntityModel> entities = entityResult.Value
             .Where(entity => !ignoredEntityNames.Contains(entity.Name))
             .Select(entity => ModelMerger.ApplyMaxLengths(entity, maxLengths.Value))
             .Select(entity => ModelMerger.ApplyPrecisions(entity, precisions.Value))
@@ -122,6 +122,9 @@ public static class DiagramModelBuilder
             .Select(ConventionInference.InferKey)
             .ToList();
 
+        var inheritanceFold = InheritanceInference.Fold(entities);
+        entities = inheritanceFold.Entities;
+
         var fluentRelationshipKeys = fluentRelationships.Value
             .Select(RelationshipDedupeKey)
             .ToHashSet();
@@ -147,7 +150,10 @@ public static class DiagramModelBuilder
                 && !explicitNavigationKeys.Contains((r.DependentEntity, r.DependentNavigation)))
             .ToList();
 
-        var allRelationships = relationshipModels.Concat(inferredRelationships).ToList();
+        var allRelationships = relationshipModels
+            .Concat(inferredRelationships)
+            .Concat(inheritanceFold.Relationships)
+            .ToList();
 
         return new DiagramModelResult(entities, allRelationships, diagnostics);
     }
