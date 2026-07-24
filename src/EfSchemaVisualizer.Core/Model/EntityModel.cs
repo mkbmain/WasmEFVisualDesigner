@@ -19,7 +19,8 @@ public sealed record EntityModel(
     bool IsJson = false,
     string? JsonColumnName = null,
     bool IsTemporal = false,
-    IReadOnlyList<string>? SplitTables = null)
+    IReadOnlyList<string>? SplitTables = null,
+    string? BaseEntityName = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();

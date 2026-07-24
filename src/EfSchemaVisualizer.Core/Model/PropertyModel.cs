@@ -20,4 +20,5 @@ public sealed record PropertyModel(
     bool? IsUnicode = null,
     bool? IsFixedLength = null,
     string? Collation = null,
-    string? InverseProperty = null);
+    string? InverseProperty = null,
+    string? DeclaringEntityName = null);

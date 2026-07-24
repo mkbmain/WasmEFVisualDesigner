@@ -227,4 +227,52 @@ public class PropertyModelTests
         Assert.False(original.IsShadow);
         Assert.True(updated.IsShadow);
     }
+
+    [Fact]
+    public void DeclaringEntityName_DefaultsToNull()
+    {
+        var property = new PropertyModel("Id", "int", IsNullable: false, MaxLength: null);
+
+        Assert.Null(property.DeclaringEntityName);
+    }
+
+    [Fact]
+    public void WithDeclaringEntityName_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new PropertyModel("Id", "int", IsNullable: false, MaxLength: null);
+
+        var updated = original with { DeclaringEntityName = "Person" };
+
+        Assert.Null(original.DeclaringEntityName);
+        Assert.Equal("Person", updated.DeclaringEntityName);
+    }
+
+    [Fact]
+    public void EntityModel_BaseEntityName_DefaultsToNull()
+    {
+        var entity = new EntityModel("Student", new List<PropertyModel>());
+
+        Assert.Null(entity.BaseEntityName);
+    }
+
+    [Fact]
+    public void EntityModel_WithBaseEntityName_ProducesUpdatedCopy_LeavingOriginalUnchanged()
+    {
+        var original = new EntityModel("Student", new List<PropertyModel>());
+
+        var updated = original with { BaseEntityName = "Person" };
+
+        Assert.Null(original.BaseEntityName);
+        Assert.Equal("Person", updated.BaseEntityName);
+    }
+
+    [Fact]
+    public void RelationshipKind_HasInheritanceMember()
+    {
+        var relationship = new RelationshipModel(
+            "Person", "Student", RelationshipKind.Inheritance,
+            PrincipalNavigation: null, DependentNavigation: null);
+
+        Assert.Equal(RelationshipKind.Inheritance, relationship.Kind);
+    }
 }
