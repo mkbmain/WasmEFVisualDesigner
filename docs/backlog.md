@@ -272,7 +272,7 @@
       alone relationship inference, and actually suppressing an inferred relationship
       remain out of scope (see the design spec).
 
-- [ ] **`[found]/[verified]` W2 — Inheritance renders as unrelated fragments.**
+- [x] **`[found]/[verified]` W2 — Inheritance renders as unrelated fragments.**
       A TPH hierarchy parses as:
 
       ```
@@ -285,6 +285,30 @@
       from the class declaration, fold inherited properties into derived
       entities, and draw an inheritance edge. TPT/TPC and discriminator editing
       can follow.
+
+      **Fixed 2026-07-24.** Added `EntityModel.BaseEntityName` and
+      `PropertyModel.DeclaringEntityName` model fields. `EntityClassParser`
+      resolves `BaseEntityName` from a class's base-list when it matches a
+      sibling entity in the same parse. New `Core.Inference.InheritanceInference.Fold`
+      module folds inherited properties and keys into derived entities
+      (nearest-ancestor-wins on name collisions across multi-level chains) and
+      emits one `RelationshipModel` per derived entity with the new
+      `RelationshipKind.Inheritance`. Wired into `DiagramModelBuilder.Build` right
+      after key inference. `DiagramEditor`'s single-scalar-property edit methods
+      (rename, retype, remove, column name/type, max length, required, row
+      version, concurrency token, precision, default value, default value SQL,
+      key toggle) now resolve which entity actually declares a given property
+      (via `DeclaringEntityName`) and route edits there — so editing an inherited
+      property from the derived entity's card correctly rewrites the base class's
+      source. Rendering: inheritance edges get a distinct link color and label,
+      and a read-only expanded view (no FK/cardinality/remove controls, since
+      there's no rewriter support for un-inheriting). Verified end-to-end against
+      a three-level TPH hierarchy (`Student` and `Teacher` deriving from `Person`)
+      with multi-level property inheritance and overlapping property names.
+      TPT/TPC mapping strategies, `HasDiscriminator`/`HasValue` parsing/editing,
+      removing an inheritance edge, and composite index/alternate-key ownership
+      routing across inheritance boundaries remain out of scope (see the design
+      spec at `docs/superpowers/specs/2026-07-24-inheritance-tph-design.md`).
 
 - [ ] **`[found]/[verified]` W3 — Owned types render as their own tables.**
       `OwnsOne(e => e.ShippingAddress, ...)` is flagged unrecognized, but the
