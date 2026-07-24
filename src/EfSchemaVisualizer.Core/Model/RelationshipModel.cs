@@ -10,7 +10,8 @@ public sealed record RelationshipModel(
     string? DependentNavigation,
     IReadOnlyList<string>? ForeignKeyProperties = null,
     string? OnDeleteBehavior = null,
-    string? JoinEntityName = null)
+    string? JoinEntityName = null,
+    bool IsInferred = false)
 {
     public IReadOnlyList<string> ForeignKeyProperties { get; init; } = ForeignKeyProperties ?? new List<string>();
 }
