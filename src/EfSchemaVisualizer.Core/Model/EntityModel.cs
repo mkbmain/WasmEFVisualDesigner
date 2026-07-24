@@ -10,6 +10,7 @@ public sealed record EntityModel(
     string? TableName = null,
     string? Schema = null,
     bool IsKeyless = false,
+    bool IsKeyInferred = false,
     string? ViewName = null,
     string? SqlQuery = null,
     IReadOnlyList<IReadOnlyList<string>>? AlternateKeys = null,
