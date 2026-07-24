@@ -172,4 +172,42 @@ public class DiagramSyncTests
         Assert.Equal(5, nodes.Count);
         Assert.Equal(5, distinctPositions);
     }
+
+    [Fact]
+    public void Rebuild_InferredRelationship_RendersWithMutedLinkColor()
+    {
+        var diagram = NewDiagram();
+        var entityIds = new Dictionary<string, Guid> { ["Customer"] = Guid.NewGuid(), ["Order"] = Guid.NewGuid() };
+        var relationship = new RelationshipModel(
+            "Customer", "Order", RelationshipKind.OneToMany,
+            PrincipalNavigation: null, DependentNavigation: "Customer",
+            ForeignKeyProperties: new[] { "CustomerId" }, IsInferred: true);
+
+        DiagramSync.Rebuild(diagram, new DiagramModelResult(
+            new[] { Entity("Customer"), Entity("Order") },
+            new[] { relationship },
+            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+
+        var link = diagram.Links.OfType<LinkModel>().Single();
+        Assert.Equal("#aaaaaa", link.Color);
+    }
+
+    [Fact]
+    public void Rebuild_ExplicitRelationship_RendersWithDefaultLinkColor()
+    {
+        var diagram = NewDiagram();
+        var entityIds = new Dictionary<string, Guid> { ["Customer"] = Guid.NewGuid(), ["Order"] = Guid.NewGuid() };
+        var relationship = new RelationshipModel(
+            "Customer", "Order", RelationshipKind.OneToMany,
+            PrincipalNavigation: "Orders", DependentNavigation: "Customer",
+            ForeignKeyProperties: new[] { "CustomerId" });
+
+        DiagramSync.Rebuild(diagram, new DiagramModelResult(
+            new[] { Entity("Customer"), Entity("Order") },
+            new[] { relationship },
+            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+
+        var link = diagram.Links.OfType<LinkModel>().Single();
+        Assert.Null(link.Color);
+    }
 }

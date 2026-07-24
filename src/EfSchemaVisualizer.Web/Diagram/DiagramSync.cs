@@ -66,6 +66,10 @@ public static class DiagramSync
             }
 
             var link = new LinkModel(dependentNode, principalNode);
+            if (relationship.IsInferred)
+            {
+                link.Color = "#aaaaaa";
+            }
             link.Labels.Add(new RelationshipLinkLabelModel(link, relationship));
             diagram.Links.Add(link);
         }
