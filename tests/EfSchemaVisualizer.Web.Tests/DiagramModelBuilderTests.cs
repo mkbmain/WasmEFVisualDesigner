@@ -635,4 +635,117 @@ public class DiagramModelBuilderTests
 
         Assert.True(result.Entities.Single().IsKeyless);
     }
+
+    [Fact]
+    public void Build_ConventionOnlyModel_InfersKeysAndRelationship()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+                public string Name { get; set; }
+            }
+
+            public class Order
+            {
+                public int Id { get; set; }
+                public int CustomerId { get; set; }
+                public Customer Customer { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var customer = result.Entities.Single(e => e.Name == "Customer");
+        var order = result.Entities.Single(e => e.Name == "Order");
+        Assert.Equal(new[] { "Id" }, customer.KeyPropertyNames);
+        Assert.True(customer.IsKeyInferred);
+        Assert.Equal(new[] { "Id" }, order.KeyPropertyNames);
+        Assert.True(order.IsKeyInferred);
+
+        var relationship = Assert.Single(result.Relationships);
+        Assert.Equal("Customer", relationship.PrincipalEntity);
+        Assert.Equal("Order", relationship.DependentEntity);
+        Assert.True(relationship.IsInferred);
+    }
+
+    [Fact]
+    public void Build_ExplicitFluentKeyOnConventionEntity_ExplicitWinsOverConvention()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+                public string Ssn { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Customer>(entity =>
+                    {
+                        entity.HasKey(e => e.Ssn);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var customer = result.Entities.Single();
+        Assert.Equal(new[] { "Ssn" }, customer.KeyPropertyNames);
+        Assert.False(customer.IsKeyInferred);
+    }
+
+    [Fact]
+    public void Build_ExplicitFluentRelationshipOnConventionShapedFk_ExplicitWinsOverConvention()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+            }
+
+            public class Order
+            {
+                public int Id { get; set; }
+                public int CustomerId { get; set; }
+                public Customer Customer { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(o => o.Customer)
+                            .WithMany()
+                            .HasForeignKey(o => o.CustomerId)
+                            .OnDelete(DeleteBehavior.Cascade);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var relationship = Assert.Single(result.Relationships);
+        Assert.False(relationship.IsInferred);
+        Assert.Equal("Cascade", relationship.OnDeleteBehavior);
+    }
 }

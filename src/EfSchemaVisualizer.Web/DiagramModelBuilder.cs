@@ -1,4 +1,5 @@
 using System.Linq;
+using EfSchemaVisualizer.Core.Inference;
 using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
@@ -118,6 +119,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyConcurrencyTokens(entity, concurrencyTokens.Value))
             .Select(entity => ModelMerger.ApplyIgnoredProperties(entity, ignoredProperties.Value))
             .Select(entity => ModelMerger.ApplyShadowProperties(entity, shadowProperties.Value))
+            .Select(ConventionInference.InferKey)
             .ToList();
 
         var fluentRelationshipKeys = fluentRelationships.Value
@@ -131,7 +133,17 @@ public static class DiagramModelBuilder
 
         var relationshipModels = ModelMerger.ApplyRelationships(mergedRelationshipConfigs);
 
-        return new DiagramModelResult(entities, relationshipModels, diagnostics);
+        var explicitRelationshipKeys = relationshipModels
+            .Select(RelationshipModelDedupeKey)
+            .ToHashSet();
+
+        var inferredRelationships = ConventionInference.InferRelationships(entities)
+            .Where(r => !explicitRelationshipKeys.Contains(RelationshipModelDedupeKey(r)))
+            .ToList();
+
+        var allRelationships = relationshipModels.Concat(inferredRelationships).ToList();
+
+        return new DiagramModelResult(entities, allRelationships, diagnostics);
     }
 
     private static (string PrincipalEntity, string DependentEntity, string ForeignKeyProperties) RelationshipDedupeKey(
@@ -143,5 +155,10 @@ public static class DiagramModelBuilder
     private static (string EntityName, string PropertyNames) IndexDedupeKey(IndexConfig config)
     {
         return (config.EntityName, string.Join(",", config.PropertyNames));
+    }
+
+    private static (string DependentEntity, string ForeignKeyProperties) RelationshipModelDedupeKey(RelationshipModel relationship)
+    {
+        return (relationship.DependentEntity, string.Join(",", relationship.ForeignKeyProperties));
     }
 }
