@@ -293,7 +293,7 @@ public sealed class DiagramEditor
         }
 
         var alreadyKey = entity.KeyPropertyNames.Contains(propertyName);
-        if (isKey == alreadyKey)
+        if (isKey == alreadyKey && !(isKey && entity.IsKeyInferred))
         {
             return DiagramEditResult.Ok();
         }
@@ -307,7 +307,8 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"'{entityName}' must have at least one key property.");
         }
 
-        var newConfigSource = _configRewriter.SetKey(ConfigSource, entityName, newKeyPropertyNames);
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+        var newConfigSource = _configRewriter.SetKey(ConfigSource, owningEntityName, newKeyPropertyNames);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -658,9 +659,10 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
         var newConfigSource = normalizedColumnName is null
-            ? _configRewriter.RemoveColumnName(ConfigSource, entityName, propertyName)
-            : _configRewriter.SetColumnName(ConfigSource, entityName, propertyName, normalizedColumnName);
+            ? _configRewriter.RemoveColumnName(ConfigSource, owningEntityName, propertyName)
+            : _configRewriter.SetColumnName(ConfigSource, owningEntityName, propertyName, normalizedColumnName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -685,9 +687,10 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
         var newConfigSource = normalizedColumnType is null
-            ? _configRewriter.RemoveColumnType(ConfigSource, entityName, propertyName)
-            : _configRewriter.SetColumnType(ConfigSource, entityName, propertyName, normalizedColumnType);
+            ? _configRewriter.RemoveColumnType(ConfigSource, owningEntityName, propertyName)
+            : _configRewriter.SetColumnType(ConfigSource, owningEntityName, propertyName, normalizedColumnType);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -711,9 +714,11 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+
         if (maxLength is null)
         {
-            var clearedConfigSource = _configRewriter.RemoveMaxLength(ConfigSource, entityName, propertyName);
+            var clearedConfigSource = _configRewriter.RemoveMaxLength(ConfigSource, owningEntityName, propertyName);
             Apply(ClassSource, clearedConfigSource);
             return DiagramEditResult.Ok();
         }
@@ -723,7 +728,7 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail("Max length must be a positive number.");
         }
 
-        var newConfigSource = _configRewriter.RewriteMaxLength(ConfigSource, entityName, propertyName, maxLength.Value);
+        var newConfigSource = _configRewriter.RewriteMaxLength(ConfigSource, owningEntityName, propertyName, maxLength.Value);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -747,14 +752,16 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+
         if (isRequired is null)
         {
-            var clearedConfigSource = _configRewriter.RemoveIsRequired(ConfigSource, entityName, propertyName);
+            var clearedConfigSource = _configRewriter.RemoveIsRequired(ConfigSource, owningEntityName, propertyName);
             Apply(ClassSource, clearedConfigSource);
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.RewriteIsRequired(ConfigSource, entityName, propertyName, isRequired.Value);
+        var newConfigSource = _configRewriter.RewriteIsRequired(ConfigSource, owningEntityName, propertyName, isRequired.Value);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -778,9 +785,11 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+
         if (!isRowVersion)
         {
-            var clearedConfigSource = _configRewriter.RemoveRowVersion(ConfigSource, entityName, propertyName);
+            var clearedConfigSource = _configRewriter.RemoveRowVersion(ConfigSource, owningEntityName, propertyName);
             if (clearedConfigSource == ConfigSource)
             {
                 return DiagramEditResult.Fail(
@@ -791,7 +800,7 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.SetRowVersion(ConfigSource, entityName, propertyName);
+        var newConfigSource = _configRewriter.SetRowVersion(ConfigSource, owningEntityName, propertyName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -815,9 +824,11 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+
         if (!isConcurrencyToken)
         {
-            var clearedConfigSource = _configRewriter.RemoveConcurrencyToken(ConfigSource, entityName, propertyName);
+            var clearedConfigSource = _configRewriter.RemoveConcurrencyToken(ConfigSource, owningEntityName, propertyName);
             if (clearedConfigSource == ConfigSource)
             {
                 return DiagramEditResult.Fail(
@@ -828,7 +839,7 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.SetConcurrencyToken(ConfigSource, entityName, propertyName);
+        var newConfigSource = _configRewriter.SetConcurrencyToken(ConfigSource, owningEntityName, propertyName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -847,6 +858,8 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+
         if (precision is null)
         {
             if (property.Precision is null && property.Scale is null)
@@ -854,7 +867,7 @@ public sealed class DiagramEditor
                 return DiagramEditResult.Ok();
             }
 
-            var clearedConfigSource = _configRewriter.RemovePrecision(ConfigSource, entityName, propertyName);
+            var clearedConfigSource = _configRewriter.RemovePrecision(ConfigSource, owningEntityName, propertyName);
             Apply(ClassSource, clearedConfigSource);
             return DiagramEditResult.Ok();
         }
@@ -874,7 +887,7 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.RewritePrecision(ConfigSource, entityName, propertyName, precision.Value, scale);
+        var newConfigSource = _configRewriter.RewritePrecision(ConfigSource, owningEntityName, propertyName, precision.Value, scale);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -911,9 +924,10 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
         var newConfigSource = normalizedLiteral is null
-            ? _configRewriter.RemoveDefaultValue(ConfigSource, entityName, propertyName)
-            : _configRewriter.SetDefaultValue(ConfigSource, entityName, propertyName, normalizedLiteral);
+            ? _configRewriter.RemoveDefaultValue(ConfigSource, owningEntityName, propertyName)
+            : _configRewriter.SetDefaultValue(ConfigSource, owningEntityName, propertyName, normalizedLiteral);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -938,9 +952,10 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
         var newConfigSource = normalizedSql is null
-            ? _configRewriter.RemoveDefaultValueSql(ConfigSource, entityName, propertyName)
-            : _configRewriter.SetDefaultValueSql(ConfigSource, entityName, propertyName, normalizedSql);
+            ? _configRewriter.RemoveDefaultValueSql(ConfigSource, owningEntityName, propertyName)
+            : _configRewriter.SetDefaultValueSql(ConfigSource, owningEntityName, propertyName, normalizedSql);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }

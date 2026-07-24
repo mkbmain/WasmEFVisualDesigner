@@ -74,4 +74,53 @@ public class DiagramEditorInheritanceTests
         Assert.True(result.Success);
         Assert.Contains("public string Class { get; set; }", editor.ClassSource);
     }
+
+    [Fact]
+    public void SetMaxLength_InheritedPropertyViewedFromDerivedEntity_WritesConfigUnderTheBaseEntityScope()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetMaxLength("Student", "Name", 50);
+
+        Assert.True(result.Success);
+        Assert.Contains("modelBuilder.Entity<Person>", editor.ConfigSource);
+        Assert.Contains("HasMaxLength(50)", editor.ConfigSource);
+        Assert.DoesNotContain("modelBuilder.Entity<Student>", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void ToggleKey_InheritedPropertyViewedFromDerivedEntity_WritesHasKeyUnderTheBaseEntityScope()
+    {
+        const string classSourceNoOwnKey = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+
+            public class Student : Person
+            {
+                public string Course { get; set; }
+            }
+            """;
+
+        var editor = new DiagramEditor(classSourceNoOwnKey, ConfigSource);
+
+        var result = editor.ToggleKey("Student", "Id", isKey: true);
+
+        Assert.True(result.Success);
+        Assert.Contains("modelBuilder.Entity<Person>", editor.ConfigSource);
+        Assert.Contains("HasKey", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetColumnName_OwnPropertyOnDerivedEntity_StillWritesUnderTheDerivedEntityScope()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetColumnName("Student", "Course", "class_name");
+
+        Assert.True(result.Success);
+        Assert.Contains("modelBuilder.Entity<Student>", editor.ConfigSource);
+        Assert.Contains("class_name", editor.ConfigSource);
+    }
 }
