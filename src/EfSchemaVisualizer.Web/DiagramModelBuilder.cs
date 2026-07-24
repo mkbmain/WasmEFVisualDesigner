@@ -137,8 +137,14 @@ public static class DiagramModelBuilder
             .Select(RelationshipModelDedupeKey)
             .ToHashSet();
 
+        var explicitNavigationKeys = relationshipModels
+            .Where(r => r.DependentNavigation is not null)
+            .Select(r => (r.DependentEntity, r.DependentNavigation))
+            .ToHashSet();
+
         var inferredRelationships = ConventionInference.InferRelationships(entities)
-            .Where(r => !explicitRelationshipKeys.Contains(RelationshipModelDedupeKey(r)))
+            .Where(r => !explicitRelationshipKeys.Contains(RelationshipModelDedupeKey(r))
+                && !explicitNavigationKeys.Contains((r.DependentEntity, r.DependentNavigation)))
             .ToList();
 
         var allRelationships = relationshipModels.Concat(inferredRelationships).ToList();

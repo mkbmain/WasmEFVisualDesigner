@@ -64,7 +64,10 @@ public static class ConventionInference
             }
         }
 
-        return results;
+        return results
+            .GroupBy(r => (r.DependentEntity, Fk: string.Join(",", r.ForeignKeyProperties)))
+            .Select(g => g.First())
+            .ToList();
     }
 
     private static PropertyModel? FindForeignKeyProperty(

@@ -748,4 +748,44 @@ public class DiagramModelBuilderTests
         Assert.False(relationship.IsInferred);
         Assert.Equal("Cascade", relationship.OnDeleteBehavior);
     }
+
+    [Fact]
+    public void Build_ExplicitRelationshipWithoutHasForeignKey_DoesNotProduceDuplicateInferredRelationship()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+                public ICollection<Order> Orders { get; set; }
+            }
+
+            public class Order
+            {
+                public int Id { get; set; }
+                public int CustomerId { get; set; }
+                public Customer Customer { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(o => o.Customer)
+                            .WithMany(c => c.Orders)
+                            .OnDelete(DeleteBehavior.Restrict);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var relationship = Assert.Single(result.Relationships);
+        Assert.False(relationship.IsInferred);
+        Assert.Equal("Restrict", relationship.OnDeleteBehavior);
+    }
 }
