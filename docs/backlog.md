@@ -227,7 +227,7 @@
 
 > Worse than a missing feature: the DBA has no way to tell the diagram is lying.
 
-- [ ] **`[found]/[verified]` W1 — No EF conventions are applied.**
+- [x] **`[found]/[verified]` W1 — No EF conventions are applied.**
       The parser reads only what is written explicitly. Verified against a
       perfectly ordinary convention-based model (`int Id`, `Customer Customer`,
       `int CustomerId`, no fluent config, no attributes):
@@ -248,6 +248,29 @@
       Render convention-derived keys/relationships distinctly (e.g. dashed) so
       the user can see what is explicit and what is inferred, and never write an
       inferred value back to source unless the user edits it.
+
+      **Fixed 2026-07-24.** Added `EfSchemaVisualizer.Core.Inference.ConventionInference`,
+      invoked from `DiagramModelBuilder.Build` after all explicit config is merged, so it
+      only fills gaps and is recomputed fresh on every parse. `InferKey` infers `Id` (case-
+      insensitive, wins on conflict) or `<TypeName>Id` as the primary key when no explicit
+      `HasKey`/`[Key]`/`HasNoKey`/`[Keyless]` is present. `InferRelationships` matches a
+      navigation property against a same-entity `<NavName>Id`/`<PrincipalTypeName>Id`
+      property (both required — FK-alone inference was scoped out to keep false-positive
+      risk low) and resolves one-to-many/one-to-one via the same principal-back-reference
+      scan `EntityClassParser` already uses for `[ForeignKey]`-annotated relationships.
+      Both are exposed via new `EntityModel.IsKeyInferred`/`RelationshipModel.IsInferred`
+      flags (default `false`, additive) and rendered distinctly — a muted key marker in
+      `EntityNode.razor`, a muted link color in `DiagramSync.cs` — so the user can always
+      tell explicit from inferred. `DiagramEditor.SetRelationshipShape` previously failed
+      outright on an inferred relationship (nothing in source to remove yet); it now
+      materializes explicit fluent config on first edit instead, which is the concrete
+      mechanism behind "never write an inferred value back to source unless the user edits
+      it". Verified against the exact convention-only repro this finding was originally
+      written from: `Customer`/`Order` with `int Id`, `Customer Customer`, `int
+      CustomerId`, no fluent config, no attributes now render as two keyed, related
+      entities instead of two disconnected keyless boxes. Composite convention keys, FK-
+      alone relationship inference, and actually suppressing an inferred relationship
+      remain out of scope (see the design spec).
 
 - [ ] **`[found]/[verified]` W2 — Inheritance renders as unrelated fragments.**
       A TPH hierarchy parses as:
