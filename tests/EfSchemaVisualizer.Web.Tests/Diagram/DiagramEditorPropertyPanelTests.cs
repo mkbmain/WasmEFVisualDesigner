@@ -56,6 +56,78 @@ public class DiagramEditorPropertyPanelTests
     }
 
     [Fact]
+    public void SetDefaultValue_StringPropertyWithUnquotedText_AutoQuotesTheLiteral()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetDefaultValue("Person", "Name", "Unknown");
+
+        Assert.True(result.Success);
+        Assert.Equal("\"Unknown\"", editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").DefaultValueLiteral);
+        Assert.Contains("HasDefaultValue(\"Unknown\")", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetDefaultValue_StringPropertyWithAlreadyQuotedText_DoesNotDoubleQuote()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetDefaultValue("Person", "Name", "\"Unknown\"");
+
+        Assert.True(result.Success);
+        Assert.Contains("HasDefaultValue(\"Unknown\")", editor.ConfigSource);
+        Assert.DoesNotContain("\"\\\"Unknown\\\"\"", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetDefaultValue_NumericPropertyWithPlainNumber_PassesThroughUnquoted()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetDefaultValue("Person", "Id", "1");
+
+        Assert.True(result.Success);
+        Assert.Equal("1", editor.Current.Entities.Single().Properties.Single(p => p.Name == "Id").DefaultValueLiteral);
+        Assert.Contains("HasDefaultValue(1)", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetDefaultValue_NumericPropertyWithNonLiteralExpression_FailsWithGuidanceTowardSqlField()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetDefaultValue("Person", "Id", "GetNextId()");
+
+        Assert.False(result.Success);
+        Assert.Contains("Default value SQL", result.Error);
+    }
+
+    [Fact]
+    public void SetDefaultValueSql_NoExistingConfig_InsertsHasDefaultValueSql()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetDefaultValueSql("Person", "Name", "GETDATE()");
+
+        Assert.True(result.Success);
+        Assert.Equal("GETDATE()", editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").DefaultValueSql);
+        Assert.Contains("HasDefaultValueSql(\"GETDATE()\")", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetDefaultValueSql_ClearingExistingConfig_RemovesHasDefaultValueSql()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetDefaultValueSql("Person", "Name", "GETDATE()");
+
+        var result = editor.SetDefaultValueSql("Person", "Name", null);
+
+        Assert.True(result.Success);
+        Assert.Null(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").DefaultValueSql);
+        Assert.DoesNotContain("HasDefaultValueSql", editor.ConfigSource);
+    }
+
+    [Fact]
     public void SetRequiredOverride_SetToTrue_InsertsIsRequired()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);

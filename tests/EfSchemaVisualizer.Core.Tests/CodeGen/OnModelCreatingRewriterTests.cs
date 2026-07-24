@@ -2225,6 +2225,50 @@ public class OnModelCreatingRewriterTests
         Assert.Equal(SourceWithPropertyButNoDefaultValue, result);
     }
 
+    [Fact]
+    public void SetDefaultValueSql_BarePropertyCall_AppendsHasDefaultValueSql()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetDefaultValueSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", sql: "GETDATE()");
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasDefaultValueSql(\"GETDATE()\")", result);
+    }
+
+    [Fact]
+    public void SetDefaultValueSql_ExistingCall_MutatesArgument()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetDefaultValueSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", sql: "GETDATE()");
+
+        var result = new OnModelCreatingRewriter()
+            .SetDefaultValueSql(source, entityName: "Order", propertyName: "Quantity", sql: "NEWID()");
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasDefaultValueSql(\"NEWID()\")", result);
+        Assert.DoesNotContain("GETDATE()", result);
+    }
+
+    [Fact]
+    public void RemoveDefaultValueSql_ExistingCall_RemovesCall_LeavesBarePropertyCall()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetDefaultValueSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", sql: "GETDATE()");
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveDefaultValueSql(source, entityName: "Order", propertyName: "Quantity");
+
+        Assert.Contains("entity.Property(e => e.Quantity);", result);
+        Assert.DoesNotContain("HasDefaultValueSql", result);
+    }
+
+    [Fact]
+    public void RemoveDefaultValueSql_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveDefaultValueSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity");
+
+        Assert.Equal(SourceWithPropertyButNoDefaultValue, result);
+    }
+
     private const string SourceWithNoRelationshipConfig = """
         public class AppDbContext : DbContext
         {

@@ -1,6 +1,8 @@
 using EfSchemaVisualizer.Core.CodeGen;
 using EfSchemaVisualizer.Core.Model;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace EfSchemaVisualizer.Web.Diagram;
 
@@ -888,15 +890,22 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
         }
 
-        var normalizedLiteral = string.IsNullOrWhiteSpace(literalText) ? null : literalText.Trim();
+        var trimmedInput = string.IsNullOrWhiteSpace(literalText) ? null : literalText.Trim();
+
+        string? normalizedLiteral = null;
+        if (trimmedInput is not null)
+        {
+            normalizedLiteral = FormatDefaultValueLiteral(trimmedInput, property.ClrType);
+            if (normalizedLiteral is null)
+            {
+                return DiagramEditResult.Fail(
+                    $"'{trimmedInput}' is not a valid default value for '{propertyName}'. For SQL expressions like GETDATE() or NEWID(), use the Default value SQL field instead.");
+            }
+        }
+
         if (normalizedLiteral == property.DefaultValueLiteral)
         {
             return DiagramEditResult.Ok();
-        }
-
-        if (normalizedLiteral is not null && !IsValidExpressionText(normalizedLiteral))
-        {
-            return DiagramEditResult.Fail($"'{normalizedLiteral}' is not a valid default value expression.");
         }
 
         var newConfigSource = normalizedLiteral is null
@@ -904,6 +913,61 @@ public sealed class DiagramEditor
             : _configRewriter.SetDefaultValue(ConfigSource, entityName, propertyName, normalizedLiteral);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetDefaultValueSql(string entityName, string propertyName, string? sql)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var normalizedSql = string.IsNullOrWhiteSpace(sql) ? null : sql.Trim();
+        if (normalizedSql == property.DefaultValueSql)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = normalizedSql is null
+            ? _configRewriter.RemoveDefaultValueSql(ConfigSource, entityName, propertyName)
+            : _configRewriter.SetDefaultValueSql(ConfigSource, entityName, propertyName, normalizedSql);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    private static readonly HashSet<string> QuotedDefaultValueClrTypes = new(StringComparer.Ordinal)
+    {
+        "string", "Guid", "DateTime", "DateTimeOffset", "DateOnly", "TimeOnly",
+    };
+
+    private static string? FormatDefaultValueLiteral(string rawText, string clrType)
+    {
+        var baseType = clrType.TrimEnd('?');
+
+        if (!QuotedDefaultValueClrTypes.Contains(baseType))
+        {
+            return IsLiteralExpressionText(rawText) ? rawText : null;
+        }
+
+        if (IsLiteralExpressionText(rawText) && SyntaxFactory.ParseExpression(rawText).IsKind(SyntaxKind.StringLiteralExpression))
+        {
+            return rawText;
+        }
+
+        var quoted = SyntaxFactory.Literal(rawText).ToString();
+        return IsValidExpressionText(quoted) ? quoted : null;
+    }
+
+    private static bool IsLiteralExpressionText(string text)
+    {
+        return IsValidExpressionText(text) && SyntaxFactory.ParseExpression(text) is LiteralExpressionSyntax;
     }
 
     public DiagramEditResult AddRelationship(string dependentEntityName, string principalEntityName)

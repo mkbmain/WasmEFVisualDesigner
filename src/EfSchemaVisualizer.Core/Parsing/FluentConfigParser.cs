@@ -16,7 +16,7 @@ public sealed class FluentConfigParser
     private static readonly HashSet<string> RecognizedCallNames = new()
     {
         "Property", "HasMaxLength", "HasPrecision", "IsRequired", "IsUnicode", "IsFixedLength", "HasKey", "HasAlternateKey", "ToTable",
-        "HasColumnName", "HasColumnType", "HasDefaultValue", "HasIndex", "IsUnique",
+        "HasColumnName", "HasColumnType", "HasDefaultValue", "HasDefaultValueSql", "HasIndex", "IsUnique",
         "HasFilter", "IsDescending", "IncludeProperties",
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
@@ -950,6 +950,52 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<DefaultValueConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<DefaultValueSqlConfig>> ParseDefaultValueSqls(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<DefaultValueSqlConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasDefaultValueSql"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which property this HasDefaultValueSql call configures.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    results.Add(new DefaultValueSqlConfig(entityName, propertyName, literal.Token.ValueText));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasDefaultValueSqlArgument,
+                        "HasDefaultValueSql argument is not a string literal and could not be read.",
+                        entityName,
+                        propertyName,
+                        (arg ?? (SyntaxNode)call).Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<DefaultValueSqlConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexes(string sourceCode)

@@ -189,22 +189,39 @@
       and `RenameProperty_ToSameNameAsEnclosingEntity_Fails` regression tests in
       `DiagramEditorTests`.
 
-- [ ] **`[found]/[verified]` F6 — The "Default value" field emits raw unquoted
-      text.**
-      `DiagramEditor.SetDefaultValue` (`DiagramEditor.cs:857`) validates only that
+- [x] **`[found]/[verified]` F6 — The "Default value" field emits raw unquoted
+      text.** — Fixed 2026-07-24.
+      `DiagramEditor.SetDefaultValue` (`DiagramEditor.cs:857`) validated only that
       the text parses as *some* C# expression, so what a DBA would naturally type
-      produces non-compiling source:
+      produced non-compiling source:
 
       ```csharp
       entity.Property(e => e.Title).HasDefaultValue(GETDATE())   // won't compile
       entity.Property(e => e.Title).HasDefaultValue(Unknown)     // won't compile
       ```
 
-      They must know to type `"Unknown"` with C# quotes, and nothing in the UI
-      says so. Fix: interpret the field by the property's CLR type (quote for
-      string/Guid/DateTime, pass through for numeric/bool), and add a separate
-      "Default value SQL" field wired to `HasDefaultValueSql` (see P2) — which is
-      the call the SQL-shaped input actually wants.
+      They had to know to type `"Unknown"` with C# quotes, and nothing in the UI
+      said so.
+
+      Fix: `DiagramEditor.SetDefaultValue` now interprets the field by the
+      property's CLR type — for `string`/`Guid`/`DateTime`/`DateTimeOffset`/
+      `DateOnly`/`TimeOnly` it auto-quotes plain text into a proper C# string
+      literal (idempotent if the text is already a valid quoted literal), and for
+      every other type it still requires an actual C# literal (numeric/bool/null/
+      char), rejecting identifiers or invocations like `GETDATE()` with an error
+      pointing at the new field below instead of writing uncompilable source.
+      Also added a separate **Default value SQL** field/gesture wired end-to-end
+      to `HasDefaultValueSql` — new `PropertyModel.DefaultValueSql`,
+      `FluentConfigParser.ParseDefaultValueSqls` (+ recognized-call-name entry +
+      `UnreadableHasDefaultValueSqlArgument` diagnostic), `ModelMerger.
+      ApplyDefaultValueSqls`, `OnModelCreatingRewriter.SetDefaultValueSql`/
+      `RemoveDefaultValueSql` (built from the existing generic string-arg
+      helpers, same as `HasColumnType`), `DiagramEditor.SetDefaultValueSql`, and
+      an `EntityNode.razor` input wired through `SafeEdit` — which is the call
+      the SQL-shaped input actually wants. Covered by new tests across all five
+      layers (parser, merger, rewriter, editor, and the existing markup-source
+      `SafeEdit`-coverage test, which the new gesture handler satisfies without
+      changes).
 
 ## Priority 1 — Models that render *wrong*, with no warning
 

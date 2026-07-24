@@ -409,6 +409,26 @@ public class ModelMergerTests
         Assert.Equal("1", merged.Properties.Single(p => p.Name == "Quantity").DefaultValueLiteral);
     }
 
+    [Fact]
+    public void ApplyDefaultValueSqls_SetsDefaultValueSqlOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+            new("CreatedAt", "DateTime", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<DefaultValueSqlConfig>
+        {
+            new("Order", "CreatedAt", "GETDATE()"),
+        };
+
+        var merged = ModelMerger.ApplyDefaultValueSqls(entity, configs);
+
+        Assert.Null(merged.Properties.Single(p => p.Name == "Id").DefaultValueSql);
+        Assert.Equal("GETDATE()", merged.Properties.Single(p => p.Name == "CreatedAt").DefaultValueSql);
+    }
+
     // ─── ApplyRelationships ─────────────────────────────────────────────────────
 
     [Fact]

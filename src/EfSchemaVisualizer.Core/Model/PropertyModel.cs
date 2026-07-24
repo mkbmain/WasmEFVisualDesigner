@@ -11,6 +11,7 @@ public sealed record PropertyModel(
     string? ColumnName = null,
     string? ColumnType = null,
     string? DefaultValueLiteral = null,
+    string? DefaultValueSql = null,
     string? ValueGenerated = null,
     bool IsShadow = false,
     bool IsRowVersion = false,

@@ -233,6 +233,13 @@
                                            @onpointerdown:stopPropagation="true"
                                            @onmousedown:stopPropagation="true" />
                                 </label>
+                                <label style="display: block;">
+                                    Default value SQL:
+                                    <input style="width: 100px;" value="@property.DefaultValueSql" placeholder="(none)"
+                                           @onchange="e => CommitDefaultValueSql(property, e.Value?.ToString())"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                </label>
                             </div>
                             <div style="font-size: 0.8em; margin-top: 4px;">
                                 <div>Indexes:</div>
@@ -866,6 +873,20 @@
     private async Task CommitDefaultValue(PropertyModel property, string? newLiteralText)
     {
         var result = SafeEdit(() => EditContext.Editor.SetDefaultValue(Node.Entity.Name, property.Name, newLiteralText));
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitDefaultValueSql(PropertyModel property, string? newSql)
+    {
+        var result = SafeEdit(() => EditContext.Editor.SetDefaultValueSql(Node.Entity.Name, property.Name, newSql));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);

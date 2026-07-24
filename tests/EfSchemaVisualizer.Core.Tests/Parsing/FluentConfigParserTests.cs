@@ -1694,6 +1694,56 @@ public class FluentConfigParserTests
         Assert.Equal("CreatedAt", diagnostic.PropertyName);
     }
 
+    private const string DefaultValueSqlSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETDATE()");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseDefaultValueSqls_ReadsStringLiteralArgument()
+    {
+        var result = new FluentConfigParser().ParseDefaultValueSqls(DefaultValueSqlSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Order", config.EntityName);
+        Assert.Equal("CreatedAt", config.PropertyName);
+        Assert.Equal("GETDATE()", config.Sql);
+    }
+
+    private const string DefaultValueSqlSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.CreatedAt).HasDefaultValueSql(SomeSqlConstant);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseDefaultValueSqls_NonLiteralArgument_EmitsUnreadableHasDefaultValueSqlArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseDefaultValueSqls(DefaultValueSqlSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasDefaultValueSqlArgument, diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        Assert.Equal("CreatedAt", diagnostic.PropertyName);
+    }
+
     // ─── ParseRelationships ─────────────────────────────────────────────────────
 
     private static readonly IReadOnlyList<EntityModel> OrderCustomerEntities = new List<EntityModel>

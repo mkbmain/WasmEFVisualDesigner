@@ -1071,6 +1071,46 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetDefaultValueSql(string sourceCode, string entityName, string propertyName, string sql)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasDefaultValueSql"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is not null)
+        {
+            return MutateExistingStringArgCall(root, existingCall, sql);
+        }
+
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            return AppendStringArgCallToPropertyCall(root, existingPropertyCall, "HasDefaultValueSql", sql);
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertStringArgPropertyStatement(root, existingScope, propertyName, "HasDefaultValueSql", sql);
+        }
+
+        return InsertStringArgEntityBlock(root, entityName, propertyName, "HasDefaultValueSql", sql);
+    }
+
+    public string RemoveDefaultValueSql(string sourceCode, string entityName, string propertyName)
+    {
+        return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasDefaultValueSql");
+    }
+
     public string RemoveTable(string sourceCode, string entityName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

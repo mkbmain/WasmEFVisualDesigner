@@ -223,6 +223,19 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyDefaultValueSqls(EntityModel entity, IReadOnlyList<DefaultValueSqlConfig> configs)
+    {
+        var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var config)
+                ? property with { DefaultValueSql = config.Sql }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     public static EntityModel ApplyIgnoredProperties(EntityModel entity, IReadOnlyList<IgnoreConfig> configs)
     {
         var ignoredNames = configs
