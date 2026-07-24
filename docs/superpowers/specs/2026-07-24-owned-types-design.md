@@ -33,6 +33,15 @@ independently-existing one.
 - Inheritance (W2) combined with ownership in the same chain — EF disallows
   registering an owned type as an independent entity elsewhere, so no
   conflict is expected in practice; not specifically tested.
+- Nested owned types (an `OwnsOne`/`OwnsMany` call inside another owned
+  type's builder lambda, e.g. `entity.OwnsOne(e => e.Address, b => {
+  b.OwnsOne(a => a.Country); })`) — the builder lambda isn't a recognized
+  scope boundary, so the inner call gets attributed to the *outer* entity as
+  if it had called `OwnsOne`/`OwnsMany` directly. Usually harmless (the
+  outer entity typically has no matching nav property, so nothing folds),
+  but not guaranteed if it happens to have an unrelated same-named property
+  resolving to a known entity. Documented, not fixed, this pass — see
+  `ParseOwnedTypeCalls`'s XML doc in `FluentConfigParser.cs`.
 
 ## Model changes
 

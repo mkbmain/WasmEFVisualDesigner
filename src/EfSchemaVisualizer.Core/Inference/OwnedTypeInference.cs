@@ -64,6 +64,12 @@ public static class OwnedTypeInference
 
                 properties = properties
                     .Where(p => p.Name != call.NavigationPropertyName)
+                    // Note: for a multi-level chain (Order owns Address owns Country), Country's
+                    // properties were already re-stamped with OwnerNavigationProperty="Country" one
+                    // recursion level down; this re-stamp overwrites that with the outer nav name
+                    // ("ShippingAddress"), so the UI groups all folded rows under the outermost
+                    // owner's navigation property rather than preserving the intermediate grouping.
+                    // Read-only UI behavior, considered acceptable.
                     .Concat(targetProperties.Select(p => p with
                     {
                         IsOwned = true,

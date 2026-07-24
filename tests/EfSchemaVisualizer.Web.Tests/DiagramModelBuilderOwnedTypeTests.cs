@@ -1,5 +1,6 @@
 using System.Linq;
 using EfSchemaVisualizer.Core.Model;
+using EfSchemaVisualizer.Core.Parsing;
 using EfSchemaVisualizer.Web;
 using Xunit;
 
@@ -81,5 +82,94 @@ public class DiagramModelBuilderOwnedTypeTests
         Assert.True(note.IsOwned);
         Assert.Contains(result.Relationships, r => r.Kind == RelationshipKind.Owned
             && r.PrincipalEntity == "Order" && r.DependentEntity == "OrderNote");
+    }
+
+    [Fact]
+    public void Build_OwnsOneAndOwnsManyOnSameOwner_BothFoldAndLinkCorrectly()
+    {
+        const string classSource = """
+            public class Order
+            {
+                public int Id { get; set; }
+                public Address ShippingAddress { get; set; }
+                public ICollection<OrderNote> Notes { get; set; }
+            }
+
+            public class Address
+            {
+                public string Street { get; set; }
+                public string City { get; set; }
+            }
+
+            public class OrderNote
+            {
+                public string Text { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress);
+                        entity.OwnsMany(e => e.Notes);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.DoesNotContain(result.Entities, e => e.Name == "Address");
+        var order = result.Entities.Single(e => e.Name == "Order");
+        Assert.Contains(order.Properties, p => p.Name == "Street" && p.IsOwned);
+        Assert.Contains(order.Properties, p => p.Name == "City" && p.IsOwned);
+        Assert.DoesNotContain(order.Properties, p => p.Name == "ShippingAddress");
+
+        var note = result.Entities.Single(e => e.Name == "OrderNote");
+        Assert.True(note.IsOwned);
+        Assert.Contains(result.Relationships, r => r.Kind == RelationshipKind.Owned
+            && r.PrincipalEntity == "Order" && r.DependentEntity == "OrderNote");
+    }
+
+    [Fact]
+    public void Build_OwnsOneWithNestedBuilderCalls_SurfacesOwnedNestedConfigIgnoredDiagnostic()
+    {
+        const string classSource = """
+            public class Order
+            {
+                public int Id { get; set; }
+                public Address ShippingAddress { get; set; }
+            }
+
+            public class Address
+            {
+                public string Street { get; set; }
+                public string City { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasMaxLength(100);
+                        });
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.Contains(result.Diagnostics, d => d.Code == DiagnosticCodes.OwnedNestedConfigIgnored);
     }
 }

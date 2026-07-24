@@ -347,6 +347,15 @@
       `WithOwner` customization, and `ComplexProperty`/EF7+ complex types remain out of scope
       (see the design spec at `docs/superpowers/specs/2026-07-24-owned-types-design.md`).
 
+      **Known low-harm side effect:** since convention-relationship inference (W1) runs on
+      post-fold entities, an `OwnsOne` target that itself has a foreign key to a third entity
+      (e.g. `Address` has a `Country`/`CountryId` nav+FK pair) can produce a spurious inferred
+      relationship edge after its properties fold into the owner — e.g. a `Country→Order` edge
+      inferred from the folded-in `CountryId`, even though `Order` never configured that
+      relationship itself. This is directly analogous to the W2 side effect above: a defensible
+      read of the folded data, renders muted-gray like any other inferred edge, and isn't tested;
+      revisit if it proves confusing in practice.
+
 - [ ] **`[found]/[verified]` W4 — Model-level config is invisible, with no
       diagnostic.**
       `FluentConfigParser.ParseUnrecognizedCalls` only walks calls *inside* an

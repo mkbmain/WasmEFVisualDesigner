@@ -822,6 +822,21 @@ public sealed class FluentConfigParser
     /// two-lambda-argument shape (`OwnsOne(nav, builder)`); the single-argument fluently-chained
     /// overload (`OwnsOne(nav).Property(...)`) is not specifically detected for this diagnostic —
     /// same scope cut as `ToTable`/`SplitToTable`'s documented builder-lambda-only reads.
+    ///
+    /// Known misattribution risk: a nested `OwnsOne`/`OwnsMany` call inside another owned type's
+    /// builder lambda (e.g. `entity.OwnsOne(e => e.Address, b => { b.OwnsOne(a => a.Country); })`)
+    /// is not a recognized scope boundary — only `Entity&lt;T&gt;()` is (see
+    /// `FluentSyntaxHelpers.FindAllCalls`/`FindCallsNamed`) — so `FindCallsNamed` walks into the
+    /// inner call and this method attributes it to the *outer* entity (`Order` above), as if
+    /// `Order` itself had called `OwnsOne(..., "Country", ...)`. In practice this is almost always
+    /// a harmless no-op: `Order` typically has no "Country" nav property, so
+    /// `OwnedTypeInference.Fold` finds nothing matching to act on, and the outer `OwnsOne` call
+    /// still fires `OwnedNestedConfigIgnored` as a visible signal that something inside its builder
+    /// wasn't read. But if the outer entity happens to have an unrelated property with the same
+    /// name as the inner nav property, whose type also resolves to a known entity, the fold could
+    /// incorrectly act on that unrelated property. Not fixed here — would require treating an
+    /// owned-type builder lambda as an opaque boundary the way `Entity&lt;T&gt;()` is, which is
+    /// beyond this pass's scope.
     public ParseResult<IReadOnlyList<OwnedTypeConfig>> ParseOwnedTypeCalls(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
