@@ -96,13 +96,17 @@ editor UI already iterate `result.Relationships` uniformly; branching on
 ## Editing: routing property edits to the declaring entity
 
 Per user decision, folded properties are fully editable from the derived
-card. `DiagramEditor`'s property-scoped methods (`RenameProperty`,
-`ChangePropertyType`, `RemoveProperty`, `ToggleKey`, `SetColumnName`,
-`SetColumnType`, `SetMaxLength`, `SetRequiredOverride`, `SetRowVersion`,
-`SetConcurrencyToken`, `SetPrecision`, `SetDefaultValue`,
-`SetDefaultValueSql`, `AddIndex`/index & alternate-key membership methods —
-every method that currently forwards `(entityName, propertyName)` straight
-into `_classRewriter`/`_configRewriter`) gain one resolution step:
+card. `DiagramEditor`'s 13 single-scalar-property-scoped methods
+(`RenameProperty`, `ChangePropertyType`, `RemoveProperty`, `ToggleKey`,
+`SetColumnName`, `SetColumnType`, `SetMaxLength`, `SetRequiredOverride`,
+`SetRowVersion`, `SetConcurrencyToken`, `SetPrecision`, `SetDefaultValue`,
+`SetDefaultValueSql`) gain one resolution step. `AddIndex` and the
+index/alternate-key membership methods operate on multi-property sets with
+no single well-defined "owning" entity when the set spans both own and
+inherited properties, so composite index/alternate-key ownership routing
+across inheritance is explicitly out of scope for this pass (see the
+plan's Global Constraints) — those methods are unchanged and continue to
+write against whichever entity the caller names.
 
 ```csharp
 private string ResolveDeclaringEntity(string entityName, string propertyName)

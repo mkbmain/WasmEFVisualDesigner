@@ -310,6 +310,15 @@
       routing across inheritance boundaries remain out of scope (see the design
       spec at `docs/superpowers/specs/2026-07-24-inheritance-tph-design.md`).
 
+      **Known low-harm side effect:** since convention-relationship inference
+      (W1) runs on post-fold entities, a derived entity that inherits a
+      navigation+FK pair from its base now gets its own inferred relationship
+      edge alongside the base's — e.g. `Person.Company`/`CompanyId` produces
+      both `Company→Person` and `Company→Student`. This is a defensible read
+      of TPH (the derived rows do share that FK column), renders muted-gray
+      like any other inferred edge, and isn't tested; revisit if it proves
+      confusing in practice.
+
 - [ ] **`[found]/[verified]` W3 — Owned types render as their own tables.**
       `OwnsOne(e => e.ShippingAddress, ...)` is flagged unrecognized, but the
       owned `Address` class is still parsed from the class file and drawn as a
