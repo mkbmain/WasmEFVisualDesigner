@@ -324,6 +324,58 @@ public class DiagramEditorPropertyPanelTests
         Assert.False(editor.CanUndo);
     }
 
+    private const string InferredRelationshipClassSource = """
+        public class Blog
+        {
+            public int Id { get; set; }
+            public ICollection<Post> Posts { get; set; } = new List<Post>();
+        }
+
+        public class Post
+        {
+            public int Id { get; set; }
+            public int BlogId { get; set; }
+            public Blog Blog { get; set; } = null!;
+        }
+        """;
+
+    private const string EmptyConfigSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetRelationshipShape_OnInferredRelationship_MaterializesExplicitConfig()
+    {
+        var editor = new DiagramEditor(InferredRelationshipClassSource, EmptyConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+        Assert.True(relationship.IsInferred);
+
+        var result = editor.SetRelationshipShape(relationship, relationship.Kind, relationship.ForeignKeyProperties, "Cascade");
+
+        Assert.True(result.Success);
+        var updated = editor.Current.Relationships.Single();
+        Assert.False(updated.IsInferred);
+        Assert.Equal("Cascade", updated.OnDeleteBehavior);
+        Assert.Contains("OnDelete(DeleteBehavior.Cascade)", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void RemoveRelationship_OnInferredRelationship_FailsWithClearMessage()
+    {
+        var editor = new DiagramEditor(InferredRelationshipClassSource, EmptyConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+
+        var result = editor.RemoveRelationship(relationship);
+
+        Assert.False(result.Success);
+        Assert.Contains("inferred from naming convention", result.Error);
+    }
+
     [Fact]
     public void AddAlternateKey_NewProperty_InsertsHasAlternateKey()
     {

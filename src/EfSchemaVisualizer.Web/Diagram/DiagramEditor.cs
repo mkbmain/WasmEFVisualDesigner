@@ -1025,8 +1025,11 @@ public sealed class DiagramEditor
             OnDeleteBehavior = newOnDeleteBehavior,
         };
 
-        var withoutOld = _configRewriter.RemoveRelationship(ConfigSource, relationship);
-        if (withoutOld == ConfigSource)
+        var withoutOld = relationship.IsInferred
+            ? ConfigSource
+            : _configRewriter.RemoveRelationship(ConfigSource, relationship);
+
+        if (!relationship.IsInferred && withoutOld == ConfigSource)
         {
             return DiagramEditResult.Fail("Could not locate this relationship's existing configuration to update.");
         }
@@ -1041,6 +1044,13 @@ public sealed class DiagramEditor
         if (!Current.Relationships.Contains(relationship))
         {
             return DiagramEditResult.Fail("Relationship no longer exists.");
+        }
+
+        if (relationship.IsInferred)
+        {
+            return DiagramEditResult.Fail(
+                "This relationship is inferred from naming convention and isn't backed by explicit " +
+                "configuration yet — change its kind or foreign key first to make it explicit.");
         }
 
         var newConfigSource = _configRewriter.RemoveRelationship(ConfigSource, relationship);
