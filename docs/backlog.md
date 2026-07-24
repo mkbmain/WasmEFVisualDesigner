@@ -319,13 +319,32 @@
       like any other inferred edge, and isn't tested; revisit if it proves
       confusing in practice.
 
-- [ ] **`[found]/[verified]` W3 — Owned types render as their own tables.**
+- [x] **`[found]/[verified]` W3 — Owned types render as their own tables.**
       `OwnsOne(e => e.ShippingAddress, ...)` is flagged unrecognized, but the
       owned `Address` class is still parsed from the class file and drawn as a
       standalone table with its own columns. The DBA sees a table that does not
       exist in the database. At minimum, suppress the standalone node and show
       the owned columns inline on the owner with a diagnostic; full `OwnsOne`/
       `OwnsMany` parsing is the real fix (see P2).
+
+      **Fixed 2026-07-24.** Added `PropertyModel.IsOwned`, `PropertyModel.OwnerNavigationProperty`,
+      `EntityModel.IsOwned`, and new `RelationshipKind.Owned` model fields. `FluentConfigParser.ParseOwnedTypeCalls`
+      detects `OwnsOne`/`OwnsMany` calls; builder-lambda config that isn't parsed is flagged via new
+      `DiagnosticCodes.OwnedNestedConfigIgnored` diagnostic instead of silently dropped. New
+      `Core.Inference.OwnedTypeInference.Fold` module folds `OwnsOne` targets' properties inline
+      into the owner (target entity removed from the diagram entirely), and marks `OwnsMany`
+      targets `IsOwned=true` while keeping them standalone with a new `Owned`-kind relationship.
+      Wired into `DiagramModelBuilder.Build` right after key and inheritance inference. Rendering:
+      `RelationshipLabels.For(Owned)` returns "◆", `DiagramSync` gives `Owned` edges a distinct
+      color (`#8a6a4a`), `EntityNode.razor` groups folded owned properties under a read-only
+      sub-header per navigation property, and `RelationshipLinkLabel.razor` shows a read-only
+      "X owns Y via Z" line for `Owned` relationships. Both `OwnsOne` folding and `OwnsMany`
+      marking were verified against the exact repro this finding was originally written from:
+      `Order.ShippingAddress` (type `Address`, via `OwnsOne`) no longer renders `Address` as a
+      standalone entity; `Order`'s card shows the folded properties instead. Nested builder-lambda
+      config parsing, editing owned properties, table splitting via `OwnsOne(...).ToTable(...)`,
+      `WithOwner` customization, and `ComplexProperty`/EF7+ complex types remain out of scope
+      (see the design spec at `docs/superpowers/specs/2026-07-24-owned-types-design.md`).
 
 - [ ] **`[found]/[verified]` W4 — Model-level config is invisible, with no
       diagnostic.**
