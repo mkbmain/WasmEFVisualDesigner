@@ -48,6 +48,7 @@ public static class DiagramModelBuilder
         var concurrencyTokens = configParser.ParseConcurrencyTokens(configSource);
         var shadowProperties = configParser.ParseShadowProperties(configSource);
         var ignoredEntityNames = configParser.ParseIgnoredEntities(configSource).ToHashSet();
+        var ownedTypeCalls = configParser.ParseOwnedTypeCalls(configSource);
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
         var annotationRelationships = entityParser.ParseRelationships(classSource, entityResult.Value);
         var unrecognizedCalls = configParser.ParseUnrecognizedCalls(configSource);
@@ -81,6 +82,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(fluentRelationships.Diagnostics);
         diagnostics.AddRange(annotationRelationships.Diagnostics);
         diagnostics.AddRange(unrecognizedCalls);
+        diagnostics.AddRange(ownedTypeCalls.Diagnostics);
 
         var fluentIndexKeys = indexes.Value.Select(IndexDedupeKey).ToHashSet();
         var mergedIndexConfigs = indexAttributes.Value
@@ -88,7 +90,7 @@ public static class DiagramModelBuilder
             .Concat(indexes.Value)
             .ToList();
 
-        IReadOnlyList<EntityModel> entities = entityResult.Value
+        IReadOnlyList<EntityModel> mergedEntities = entityResult.Value
             .Where(entity => !ignoredEntityNames.Contains(entity.Name))
             .Select(entity => ModelMerger.ApplyMaxLengths(entity, maxLengths.Value))
             .Select(entity => ModelMerger.ApplyPrecisions(entity, precisions.Value))
@@ -119,6 +121,11 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyConcurrencyTokens(entity, concurrencyTokens.Value))
             .Select(entity => ModelMerger.ApplyIgnoredProperties(entity, ignoredProperties.Value))
             .Select(entity => ModelMerger.ApplyShadowProperties(entity, shadowProperties.Value))
+            .ToList();
+
+        var ownedTypeFold = OwnedTypeInference.Fold(mergedEntities, ownedTypeCalls.Value);
+
+        IReadOnlyList<EntityModel> entities = ownedTypeFold.Entities
             .Select(ConventionInference.InferKey)
             .ToList();
 
@@ -153,6 +160,7 @@ public static class DiagramModelBuilder
         var allRelationships = relationshipModels
             .Concat(inferredRelationships)
             .Concat(inheritanceFold.Relationships)
+            .Concat(ownedTypeFold.Relationships)
             .ToList();
 
         return new DiagramModelResult(entities, allRelationships, diagnostics);
