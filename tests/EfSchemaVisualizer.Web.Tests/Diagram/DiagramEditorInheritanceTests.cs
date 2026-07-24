@@ -94,7 +94,7 @@ public class DiagramEditorInheritanceTests
         const string classSourceNoOwnKey = """
             public class Person
             {
-                public int Id { get; set; }
+                public string Ssn { get; set; }
             }
 
             public class Student : Person
@@ -105,7 +105,7 @@ public class DiagramEditorInheritanceTests
 
         var editor = new DiagramEditor(classSourceNoOwnKey, ConfigSource);
 
-        var result = editor.ToggleKey("Student", "Id", isKey: true);
+        var result = editor.ToggleKey("Student", "Ssn", isKey: true);
 
         Assert.True(result.Success);
         Assert.Contains("modelBuilder.Entity<Person>", editor.ConfigSource);

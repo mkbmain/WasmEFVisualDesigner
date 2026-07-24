@@ -293,7 +293,7 @@ public sealed class DiagramEditor
         }
 
         var alreadyKey = entity.KeyPropertyNames.Contains(propertyName);
-        if (isKey == alreadyKey && !(isKey && entity.IsKeyInferred))
+        if (isKey == alreadyKey)
         {
             return DiagramEditResult.Ok();
         }
