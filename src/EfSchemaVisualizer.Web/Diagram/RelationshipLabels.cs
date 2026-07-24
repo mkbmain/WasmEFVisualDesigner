@@ -10,6 +10,7 @@ public static class RelationshipLabels
         RelationshipKind.OneToMany => "1—*",
         RelationshipKind.ManyToMany => "*—*",
         RelationshipKind.Inheritance => "▷",
+        RelationshipKind.Owned => "◆",
         _ => "?",
     };
 }

@@ -70,6 +70,10 @@ public static class DiagramSync
             {
                 link.Color = "#4a5a8a";
             }
+            else if (relationship.Kind == RelationshipKind.Owned)
+            {
+                link.Color = "#8a6a4a";
+            }
             else if (relationship.IsInferred)
             {
                 link.Color = "#aaaaaa";

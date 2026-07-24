@@ -16,6 +16,10 @@
     <div style="font-size: 0.65em; color: #888; padding: 2px 8px 0;">Double-click a name or type to edit. Drag from the child (many) entity to the parent (one) entity to connect. Click ▸ next to a property for more options (primary key, column mapping, indexes).</div>
     <div class="card-header" style="font-weight: bold; padding: 4px 8px; background: #eee; display: flex; justify-content: space-between; align-items: center;">
         <span style="flex: 1;">
+            @if (Node.Entity.IsOwned)
+            {
+                <span title="Owned type (OwnsMany): this is its own table, but it cannot exist independently of its owner." style="opacity: 0.6; margin-right: 2px;">◆</span>
+            }
             @if (_isEditingName)
             {
                 <input value="@_editingName"
@@ -89,11 +93,25 @@
         <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_nameError</div>
     }
     <ul style="list-style: none; margin: 0; padding: 0;">
+        @{ string? _lastOwnerNav = null; }
         @foreach (var property in Node.Entity.Properties)
         {
             var isKey = Node.Entity.KeyPropertyNames.Contains(property.Name);
-            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "")">
-                @if (property.IsShadow)
+            if (property.IsOwned && property.OwnerNavigationProperty != _lastOwnerNav)
+            {
+                _lastOwnerNav = property.OwnerNavigationProperty;
+                <li style="padding: 4px 8px 0; font-size: 0.7em; color: #888; border-top: 1px dashed #ccc;">@_lastOwnerNav (owned)</li>
+            }
+            else if (!property.IsOwned)
+            {
+                _lastOwnerNav = null;
+            }
+            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "") @(property.IsOwned ? "opacity: 0.75;" : "")">
+                @if (property.IsOwned)
+                {
+                    <span title="Folded in from the owned type via @property.OwnerNavigationProperty. Read-only.">@property.Name : @property.ClrType@(property.IsNullable ? "?" : "")</span>
+                }
+                else if (property.IsShadow)
                 {
                     <span class="shadow-property" title="Shadow property: configured in code but has no matching CLR member. Read-only here."
                           style="font-style: italic; color: #888;">@property.Name : @property.ClrType@(property.IsNullable ? "?" : "") (shadow)</span>

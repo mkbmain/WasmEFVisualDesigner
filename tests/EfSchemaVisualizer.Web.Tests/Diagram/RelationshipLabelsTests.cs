@@ -16,4 +16,12 @@ public class RelationshipLabelsTests
         Assert.NotEqual(RelationshipLabels.For(RelationshipKind.OneToMany), label);
         Assert.NotEqual(RelationshipLabels.For(RelationshipKind.ManyToMany), label);
     }
+
+    [Fact]
+    public void For_Owned_ReturnsDistinctGlyph()
+    {
+        var label = RelationshipLabels.For(RelationshipKind.Owned);
+
+        Assert.Equal("◆", label);
+    }
 }
