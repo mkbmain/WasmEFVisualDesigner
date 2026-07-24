@@ -157,8 +157,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"'{entityName}' already has a property named '{newPropertyName}'.");
         }
 
-        var newClassSource = _classRewriter.RenameProperty(ClassSource, entityName, oldPropertyName, newPropertyName);
-        var newConfigSource = _configRewriter.RenamePropertyReferences(ConfigSource, entityName, oldPropertyName, newPropertyName);
+        var owningEntityName = ResolveDeclaringEntity(entityName, oldPropertyName);
+        var newClassSource = _classRewriter.RenameProperty(ClassSource, owningEntityName, oldPropertyName, newPropertyName);
+        var newConfigSource = _configRewriter.RenamePropertyReferences(ConfigSource, owningEntityName, oldPropertyName, newPropertyName);
         Apply(newClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -181,7 +182,8 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
         }
 
-        var newClassSource = _classRewriter.ChangePropertyType(ClassSource, entityName, propertyName, newClrType, newIsNullable);
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+        var newClassSource = _classRewriter.ChangePropertyType(ClassSource, owningEntityName, propertyName, newClrType, newIsNullable);
         Apply(newClassSource, ConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -271,7 +273,8 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Cannot remove '{propertyName}': it is used by a relationship.");
         }
 
-        var newClassSource = _classRewriter.RemoveProperty(ClassSource, entityName, propertyName);
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+        var newClassSource = _classRewriter.RemoveProperty(ClassSource, owningEntityName, propertyName);
         Apply(newClassSource, ConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1061,6 +1064,15 @@ public sealed class DiagramEditor
 
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
+    }
+
+    private string ResolveDeclaringEntity(string entityName, string propertyName)
+    {
+        var property = Current.Entities
+            .FirstOrDefault(e => e.Name == entityName)?.Properties
+            .FirstOrDefault(p => p.Name == propertyName);
+
+        return property?.DeclaringEntityName ?? entityName;
     }
 
     private static string GenerateUniquePropertyName(EntityModel entity)
