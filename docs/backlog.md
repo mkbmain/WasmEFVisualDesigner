@@ -334,7 +334,8 @@
       `Core.Inference.OwnedTypeInference.Fold` module folds `OwnsOne` targets' properties inline
       into the owner (target entity removed from the diagram entirely), and marks `OwnsMany`
       targets `IsOwned=true` while keeping them standalone with a new `Owned`-kind relationship.
-      Wired into `DiagramModelBuilder.Build` right after key and inheritance inference. Rendering:
+      Wired into `DiagramModelBuilder.Build` before key and inheritance inference run, so a
+      folded-away owned entity never picks up a spurious inferred key. Rendering:
       `RelationshipLabels.For(Owned)` returns "◆", `DiagramSync` gives `Owned` edges a distinct
       color (`#8a6a4a`), `EntityNode.razor` groups folded owned properties under a read-only
       sub-header per navigation property, and `RelationshipLinkLabel.razor` shows a read-only
