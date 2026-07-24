@@ -210,4 +210,23 @@ public class DiagramSyncTests
         var link = diagram.Links.OfType<LinkModel>().Single();
         Assert.Null(link.Color);
     }
+
+    [Fact]
+    public void Rebuild_InheritanceRelationship_RendersWithDistinctColorNotInferredGray()
+    {
+        var diagram = NewDiagram();
+        var entityIds = new Dictionary<string, Guid> { ["Person"] = Guid.NewGuid(), ["Student"] = Guid.NewGuid() };
+        var relationship = new RelationshipModel(
+            "Person", "Student", RelationshipKind.Inheritance,
+            PrincipalNavigation: null, DependentNavigation: null);
+
+        DiagramSync.Rebuild(diagram, new DiagramModelResult(
+            new[] { Entity("Person"), Entity("Student") },
+            new[] { relationship },
+            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+
+        var link = diagram.Links.OfType<LinkModel>().Single();
+        Assert.NotNull(link.Color);
+        Assert.NotEqual("#aaaaaa", link.Color);
+    }
 }

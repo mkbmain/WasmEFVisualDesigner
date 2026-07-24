@@ -9,6 +9,7 @@ public static class RelationshipLabels
         RelationshipKind.OneToOne => "1—1",
         RelationshipKind.OneToMany => "1—*",
         RelationshipKind.ManyToMany => "*—*",
+        RelationshipKind.Inheritance => "▷",
         _ => "?",
     };
 }

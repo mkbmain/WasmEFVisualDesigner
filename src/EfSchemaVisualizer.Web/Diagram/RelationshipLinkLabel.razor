@@ -15,53 +15,60 @@
     <div style="position: absolute; background: white; border: 1px solid #999; border-radius: 3px; padding: 6px; font-size: 0.75em; white-space: nowrap; z-index: 1000;"
          @onpointerdown:stopPropagation="true"
          @onmousedown:stopPropagation="true">
-        <label style="display: block;">
-            Kind:
-            <select value="@_kind" @onchange="e => CommitKind(e.Value?.ToString())">
-                <option value="OneToMany">One-to-many</option>
-                <option value="OneToOne">One-to-one</option>
-                <option value="ManyToMany">Many-to-many</option>
-            </select>
-        </label>
-        @if (_kind != RelationshipKind.ManyToMany)
+        @if (Label.Relationship.Kind == RelationshipKind.Inheritance)
         {
-            <div style="display: block;">
-                Foreign key:
-                @if (!DependentProperties.Any())
-                {
-                    <span>(none — shadow FK)</span>
-                }
-                @foreach (var property in DependentProperties)
-                {
-                    <label style="display: block;">
-                        <input type="checkbox" checked="@_foreignKeyProperties.Contains(property.Name)"
-                               @onchange="e => ToggleForeignKeyProperty(property.Name, (bool)(e.Value ?? false))"
-                               @onpointerdown:stopPropagation="true"
-                               @onmousedown:stopPropagation="true" />
-                        @property.Name
-                    </label>
-                }
-            </div>
+            <div style="display: block;">@Label.Relationship.DependentEntity extends @Label.Relationship.PrincipalEntity</div>
+        }
+        else
+        {
             <label style="display: block;">
-                On delete:
-                <select value="@_onDeleteBehavior" @onchange="e => CommitOnDeleteBehavior(e.Value?.ToString())">
-                    <option value="">(default)</option>
-                    <option value="Cascade">Cascade</option>
-                    <option value="Restrict">Restrict</option>
-                    <option value="SetNull">SetNull</option>
-                    <option value="NoAction">NoAction</option>
+                Kind:
+                <select value="@_kind" @onchange="e => CommitKind(e.Value?.ToString())">
+                    <option value="OneToMany">One-to-many</option>
+                    <option value="OneToOne">One-to-one</option>
+                    <option value="ManyToMany">Many-to-many</option>
                 </select>
             </label>
+            @if (_kind != RelationshipKind.ManyToMany)
+            {
+                <div style="display: block;">
+                    Foreign key:
+                    @if (!DependentProperties.Any())
+                    {
+                        <span>(none — shadow FK)</span>
+                    }
+                    @foreach (var property in DependentProperties)
+                    {
+                        <label style="display: block;">
+                            <input type="checkbox" checked="@_foreignKeyProperties.Contains(property.Name)"
+                                   @onchange="e => ToggleForeignKeyProperty(property.Name, (bool)(e.Value ?? false))"
+                                   @onpointerdown:stopPropagation="true"
+                                   @onmousedown:stopPropagation="true" />
+                            @property.Name
+                        </label>
+                    }
+                </div>
+                <label style="display: block;">
+                    On delete:
+                    <select value="@_onDeleteBehavior" @onchange="e => CommitOnDeleteBehavior(e.Value?.ToString())">
+                        <option value="">(default)</option>
+                        <option value="Cascade">Cascade</option>
+                        <option value="Restrict">Restrict</option>
+                        <option value="SetNull">SetNull</option>
+                        <option value="NoAction">NoAction</option>
+                    </select>
+                </label>
+            }
+            else if (Label.Relationship.JoinEntityName is not null)
+            {
+                <div style="display: block;">Join entity: @Label.Relationship.JoinEntityName</div>
+            }
+            @if (_error is not null)
+            {
+                <div style="color: red;">@_error</div>
+            }
+            <button type="button" @onclick="Remove">Remove relationship</button>
         }
-        else if (Label.Relationship.JoinEntityName is not null)
-        {
-            <div style="display: block;">Join entity: @Label.Relationship.JoinEntityName</div>
-        }
-        @if (_error is not null)
-        {
-            <div style="color: red;">@_error</div>
-        }
-        <button type="button" @onclick="Remove">Remove relationship</button>
     </div>
 }
 

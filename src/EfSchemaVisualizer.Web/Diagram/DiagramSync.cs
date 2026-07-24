@@ -66,7 +66,11 @@ public static class DiagramSync
             }
 
             var link = new LinkModel(dependentNode, principalNode);
-            if (relationship.IsInferred)
+            if (relationship.Kind == RelationshipKind.Inheritance)
+            {
+                link.Color = "#4a5a8a";
+            }
+            else if (relationship.IsInferred)
             {
                 link.Color = "#aaaaaa";
             }
