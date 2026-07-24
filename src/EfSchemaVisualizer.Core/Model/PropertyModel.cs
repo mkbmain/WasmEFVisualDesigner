@@ -21,4 +21,6 @@ public sealed record PropertyModel(
     bool? IsFixedLength = null,
     string? Collation = null,
     string? InverseProperty = null,
-    string? DeclaringEntityName = null);
+    string? DeclaringEntityName = null,
+    bool IsOwned = false,
+    string? OwnerNavigationProperty = null);

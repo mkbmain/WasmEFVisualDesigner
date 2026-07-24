@@ -6,4 +6,5 @@ public enum RelationshipKind
     OneToMany,
     ManyToMany,
     Inheritance,
+    Owned,
 }

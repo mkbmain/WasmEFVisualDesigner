@@ -20,7 +20,8 @@ public sealed record EntityModel(
     string? JsonColumnName = null,
     bool IsTemporal = false,
     IReadOnlyList<string>? SplitTables = null,
-    string? BaseEntityName = null)
+    string? BaseEntityName = null,
+    bool IsOwned = false)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();
