@@ -1056,4 +1056,82 @@ public class EntityClassParserTests
         Assert.Empty(result.Value);
         Assert.Empty(result.Diagnostics);
     }
+
+    [Fact]
+    public void Parse_ClassInheritsFromSiblingEntity_SetsBaseEntityName()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Name { get; set; }
+            }
+
+            public class Student : Person
+            {
+                public string Course { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var student = result.Value.Single(e => e.Name == "Student");
+        Assert.Equal("Person", student.BaseEntityName);
+
+        var person = result.Value.Single(e => e.Name == "Person");
+        Assert.Null(person.BaseEntityName);
+    }
+
+    [Fact]
+    public void Parse_ClassInheritsFromInterfaceOnly_BaseEntityNameStaysNull()
+    {
+        const string source = """
+            public interface IAuditable
+            {
+                DateTime CreatedAt { get; set; }
+            }
+
+            public class Person : IAuditable
+            {
+                public int Id { get; set; }
+                public DateTime CreatedAt { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var person = result.Value.Single(e => e.Name == "Person");
+        Assert.Null(person.BaseEntityName);
+    }
+
+    [Fact]
+    public void Parse_ClassInheritsFromUnmappedExternalType_BaseEntityNameStaysNull()
+    {
+        const string source = """
+            public class DomainException : Exception
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        var entity = result.Value.Single();
+        Assert.Null(entity.BaseEntityName);
+    }
+
+    [Fact]
+    public void Parse_ClassWithNoBaseList_BaseEntityNameIsNull()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().Parse(source);
+
+        Assert.Null(result.Value.Single().BaseEntityName);
+    }
 }

@@ -66,7 +66,14 @@ public sealed class EntityClassParser
             .Select(g => g.First())
             .ToList();
 
-        return new ParseResult<IReadOnlyList<EntityModel>>(deduplicatedEntities, diagnostics);
+        var entityNames = deduplicatedEntities.Select(e => e.Name).ToHashSet();
+        var resolvedEntities = deduplicatedEntities
+            .Select(e => e.BaseEntityName is not null && entityNames.Contains(e.BaseEntityName)
+                ? e
+                : e with { BaseEntityName = null })
+            .ToList();
+
+        return new ParseResult<IReadOnlyList<EntityModel>>(resolvedEntities, diagnostics);
     }
 
     private static EntityModel ParseEntity(TypeDeclarationSyntax typeDeclaration)
@@ -87,6 +94,7 @@ public sealed class EntityClassParser
         var keyPropertyNames = ResolveKeyPropertyNames(mappedProperties);
         var (tableName, schema) = ParseTableAttribute(typeDeclaration.AttributeLists);
         var isKeyless = FindAttribute(typeDeclaration.AttributeLists, "Keyless") is not null;
+        var baseEntityCandidate = ParseBaseEntityCandidate(typeDeclaration);
 
         return new EntityModel(
             typeDeclaration.Identifier.Text,
@@ -94,7 +102,8 @@ public sealed class EntityClassParser
             keyPropertyNames,
             TableName: tableName,
             Schema: schema,
-            IsKeyless: isKeyless);
+            IsKeyless: isKeyless,
+            BaseEntityName: baseEntityCandidate);
     }
 
     private static IReadOnlyList<string> ResolveKeyPropertyNames(List<PropertyDeclarationSyntax> mappedProperties)
@@ -133,6 +142,21 @@ public sealed class EntityClassParser
         var tableName = TryReadStringArg(GetPositionalArg(tableAttr, 0));
         var schema = TryReadStringArg(GetNamedArg(tableAttr, "Schema"));
         return (tableName, schema);
+    }
+
+    private static string? ParseBaseEntityCandidate(TypeDeclarationSyntax typeDeclaration)
+    {
+        if (typeDeclaration is not ClassDeclarationSyntax { BaseList.Types.Count: > 0 } classDeclaration)
+        {
+            return null;
+        }
+
+        return classDeclaration.BaseList!.Types[0].Type switch
+        {
+            IdentifierNameSyntax id => id.Identifier.Text,
+            QualifiedNameSyntax { Right: IdentifierNameSyntax id } => id.Identifier.Text,
+            _ => null,
+        };
     }
 
     public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexAttributes(string sourceCode)
