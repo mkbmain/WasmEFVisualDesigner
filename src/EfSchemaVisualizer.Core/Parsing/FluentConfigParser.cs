@@ -22,7 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable",
+        "SplitToTable", "OwnsOne", "OwnsMany",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -812,6 +812,72 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<SplitToTableConfig>>(results, diagnostics);
+    }
+
+    /// Detects `OwnsOne`/`OwnsMany` calls per entity scope, recording which navigation property
+    /// each targets so `OwnedTypeInference` can resolve the owned type and fold (`OwnsOne`) or
+    /// link (`OwnsMany`) it. The builder (second) lambda's body is intentionally not walked for
+    /// column-level configuration — only whether it contains any call at all is checked, to flag
+    /// `OwnedNestedConfigIgnored` rather than silently dropping it. This only recognizes the
+    /// two-lambda-argument shape (`OwnsOne(nav, builder)`); the single-argument fluently-chained
+    /// overload (`OwnsOne(nav).Property(...)`) is not specifically detected for this diagnostic —
+    /// same scope cut as `ToTable`/`SplitToTable`'s documented builder-lambda-only reads.
+    public ParseResult<IReadOnlyList<OwnedTypeConfig>> ParseOwnedTypeCalls(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<OwnedTypeConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var (callName, isMany) in new[] { ("OwnsOne", false), ("OwnsMany", true) })
+            {
+                foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+                {
+                    var navigationPropertyName = FluentSyntaxHelpers.TryReadSinglePropertyNameArgument(call);
+
+                    if (navigationPropertyName is null)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnresolvablePropertyName,
+                            $"Could not determine which navigation property this {callName} call configures.",
+                            entityName,
+                            PropertyName: null,
+                            call.Span));
+                        continue;
+                    }
+
+                    results.Add(new OwnedTypeConfig(entityName, navigationPropertyName, isMany));
+
+                    if (HasNestedConfigCalls(call))
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.OwnedNestedConfigIgnored,
+                            $"Configuration inside this {callName} call's builder is not read and was ignored.",
+                            entityName,
+                            navigationPropertyName,
+                            call.Span));
+                    }
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<OwnedTypeConfig>>(results, diagnostics);
+    }
+
+    /// True if `call`'s second lambda argument (the builder) has any invocation inside it.
+    /// The first lambda argument is always the navigation-property selector, never the builder.
+    private static bool HasNestedConfigCalls(InvocationExpressionSyntax call)
+    {
+        var builderLambda = call.ArgumentList.Arguments
+            .Select(a => a.Expression)
+            .OfType<AnonymousFunctionExpressionSyntax>()
+            .Skip(1)
+            .FirstOrDefault();
+
+        return builderLambda is not null && builderLambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any();
     }
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)
