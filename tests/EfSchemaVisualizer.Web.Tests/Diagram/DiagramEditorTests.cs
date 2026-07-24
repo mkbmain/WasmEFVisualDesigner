@@ -48,6 +48,40 @@ public class DiagramEditorTests
     }
 
     [Fact]
+    public void RenameEntity_ToReservedKeyword_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.RenameEntity("Blog", "class");
+
+        Assert.False(result.Success);
+        Assert.Contains("Blog", editor.ClassSource);
+        Assert.DoesNotContain("public class class", editor.ClassSource);
+    }
+
+    [Fact]
+    public void RenameProperty_ToReservedKeyword_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.RenameProperty("Blog", "Title", "class");
+
+        Assert.False(result.Success);
+        Assert.Contains("Title", editor.ClassSource);
+    }
+
+    [Fact]
+    public void RenameProperty_ToSameNameAsEnclosingEntity_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.RenameProperty("Blog", "Title", "Blog");
+
+        Assert.False(result.Success);
+        Assert.Contains("Title", editor.ClassSource);
+    }
+
+    [Fact]
     public void AddProperty_WithClrType_UsesRequestedType()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);

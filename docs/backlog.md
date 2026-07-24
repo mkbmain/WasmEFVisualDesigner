@@ -158,10 +158,10 @@
       project with a migration + snapshot file, confirming both are absent
       from `ClassSource` and byte-identical in the downloaded zip.
 
-- [ ] **`[found]/[verified]` F5 — Renaming to a C# keyword corrupts the source.**
+- [x] **`[found]/[verified]` F5 — Renaming to a C# keyword corrupts the source.** — Fixed 2026-07-24.
       `DiagramEditor.cs:51` guards with `SyntaxFacts.IsValidIdentifier`, which
       validates lexical identifier *shape* and therefore accepts reserved words.
-      Renaming `Blog` → `class` produces:
+      Renaming `Blog` → `class` produced:
 
       ```csharp
       public class class            // from RenameClass
@@ -177,10 +177,17 @@
 
       The follow-up `RenamePropertyTypeReferences` reinterprets the navigation
       property as a nested class declaration. Recoverable only via Undo.
-      `RenameProperty` (`DiagramEditor.cs:94`) has the same gap and additionally
-      permits a property named identically to its enclosing type (CS0542). Fix:
-      reject `SyntaxFacts.GetKeywordKind(name) != None` (and contextual keywords
-      where they'd break), and reject a property name equal to its entity name.
+      `RenameProperty` (`DiagramEditor.cs:94`) had the same gap and additionally
+      permitted a property named identically to its enclosing type (CS0542).
+
+      Fix: `RenameEntity` and `RenameProperty` now both reject
+      `SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None` (reserved keywords
+      only — contextual keywords like `var`/`async` remain valid identifiers and
+      still work), and `RenameProperty` additionally rejects a new property name
+      equal to its entity's name. Added
+      `RenameEntity_ToReservedKeyword_Fails`, `RenameProperty_ToReservedKeyword_Fails`,
+      and `RenameProperty_ToSameNameAsEnclosingEntity_Fails` regression tests in
+      `DiagramEditorTests`.
 
 - [ ] **`[found]/[verified]` F6 — The "Default value" field emits raw unquoted
       text.**

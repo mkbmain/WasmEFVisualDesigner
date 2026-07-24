@@ -63,7 +63,7 @@ public sealed class DiagramEditor
 
     public DiagramEditResult RenameEntity(string oldName, string newName)
     {
-        if (!SyntaxFacts.IsValidIdentifier(newName))
+        if (!SyntaxFacts.IsValidIdentifier(newName) || IsReservedKeyword(newName))
         {
             return DiagramEditResult.Fail($"'{newName}' is not a valid entity name.");
         }
@@ -124,7 +124,7 @@ public sealed class DiagramEditor
 
     public DiagramEditResult RenameProperty(string entityName, string oldPropertyName, string newPropertyName)
     {
-        if (!SyntaxFacts.IsValidIdentifier(newPropertyName))
+        if (!SyntaxFacts.IsValidIdentifier(newPropertyName) || IsReservedKeyword(newPropertyName))
         {
             return DiagramEditResult.Fail($"'{newPropertyName}' is not a valid property name.");
         }
@@ -138,6 +138,11 @@ public sealed class DiagramEditor
         if (newPropertyName == oldPropertyName)
         {
             return DiagramEditResult.Ok();
+        }
+
+        if (newPropertyName == entityName)
+        {
+            return DiagramEditResult.Fail($"A property cannot have the same name as its entity '{entityName}'.");
         }
 
         if (!entity.Properties.Any(p => p.Name == oldPropertyName))
@@ -1123,6 +1128,8 @@ public sealed class DiagramEditor
             _configFileOrigins.Remove(staleName);
         }
     }
+
+    private static bool IsReservedKeyword(string name) => SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None;
 
     private static bool IsValidTypeToken(string typeText)
     {
