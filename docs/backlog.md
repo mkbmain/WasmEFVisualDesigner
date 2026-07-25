@@ -453,11 +453,25 @@
 > would miss it.
 
 - [ ] **`[found]` SQL-shaped mapping the DBA will look for first:**
-      `HasDefaultValueSql`, `HasComputedColumnSql`, `HasCheckConstraint`,
-      `HasConstraintName` (FK name), `HasName` / `HasDatabaseName` (PK and index
-      names), `HasSequence` / `UseSequence`, `HasDefaultSchema`. These are the
-      most conspicuous holes for the target user — they're all things visible in
-      SSMS that the diagram simply doesn't have.
+      `HasDefaultValueSql` and `HasDefaultSchema` were already implemented.
+      `HasConstraintName` (FK name) and `HasName` / `HasDatabaseName` (PK and
+      index constraint names) are now parsed, modeled, editable, and rewritten
+      (see `docs/superpowers/plans/2026-07-25-constraint-naming-plan.md`).
+      Still missing: `HasComputedColumnSql`, `HasCheckConstraint`,
+      `HasSequence` / `UseSequence`.
+      - Follow-up from the naming work: `RecognizedCallNames` in
+        `FluentConfigParser` is one flat set shared across every fluent-call
+        context, so recognizing `HasName` (to support PK/index naming) also
+        silently suppresses `UnrecognizedConfigCall` for `HasName` chained
+        onto constructs that don't actually read it — e.g.
+        `HasAlternateKey(...).HasName("AK_Foo")` or
+        `HasSequence(...).HasName(...)`. Previously these fired a diagnostic
+        alerting the user the construct wasn't understood; now they parse
+        clean and the name is silently dropped on rewrite. Low practical
+        impact (alternate-key/sequence naming are themselves unparsed and
+        out of scope, and untouched statements still round-trip verbatim),
+        but worth fixing by scoping name-recognition to the specific call
+        it's chained onto rather than recognizing `HasName` globally.
 - [ ] **`[found]` Owned & complex types:** `OwnsOne`, `OwnsMany`,
       `ComplexProperty`. See W3 — currently actively misleading, not just absent.
 - [ ] **`[found]` Inheritance:** `HasDiscriminator` / `HasValue`, TPT
