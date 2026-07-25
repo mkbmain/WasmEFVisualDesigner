@@ -651,6 +651,35 @@ public class OnModelCreatingRewriterTests
         Assert.DoesNotContain("HasName", result);
     }
 
+    private const string SourceWithArrowBodyKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity => entity.HasKey(e => e.Id));
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetKey_ArrowBodyEntityConfig_ExistingKeyChangesPropertyWithoutDroppingWrapper()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithArrowBodyKey, entityName: "Person", propertyNames: new List<string> { "Guid" });
+
+        Assert.Contains("modelBuilder.Entity<Person>(entity => entity.HasKey(e => e.Guid))", result);
+        Assert.DoesNotContain("e.Id", result);
+    }
+
+    [Fact]
+    public void SetKey_ArrowBodyEntityConfig_WithName_AppendsHasNameWithoutDroppingWrapper()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithArrowBodyKey, entityName: "Person", propertyNames: new List<string> { "Id" }, name: "PK_Person");
+
+        Assert.Contains("modelBuilder.Entity<Person>(entity => entity.HasKey(e => e.Id).HasName(\"PK_Person\"))", result);
+    }
+
     [Fact]
     public void RemoveKey_ExistingCall_RemovesHasKeyStatementEntirely()
     {

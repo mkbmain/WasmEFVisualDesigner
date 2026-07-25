@@ -386,11 +386,39 @@ public sealed class OnModelCreatingRewriter
         CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, IReadOnlyList<string> propertyNames, string? name)
     {
         var blockReceiverName = ((MemberAccessExpressionSyntax)targetCall.Expression).Expression.ToString();
-        var existingStatement = targetCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
-        var newStatement = BuildHasKeyStatement(blockReceiverName, propertyNames, name);
+        var newExpression = BuildHasKeyExpression(blockReceiverName, propertyNames, name);
 
-        var newRoot = root.ReplaceNode(existingStatement, newStatement);
-        return newRoot.NormalizeWhitespace().ToFullString();
+        var outermostChainedCall = FindOutermostChainedCall(targetCall);
+
+        if (outermostChainedCall.Parent is ExpressionStatementSyntax existingStatement)
+        {
+            var newStatement = SyntaxFactory.ExpressionStatement(newExpression);
+            var newRoot = root.ReplaceNode(existingStatement, newStatement);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+        else
+        {
+            var newRoot = root.ReplaceNode(outermostChainedCall, newExpression);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+    }
+
+    /// Starting from a call in a fluent chain (e.g. `HasKey(...)`), walks up through any
+    /// calls already chained onto it (e.g. a pre-existing `.HasName(...)`) to find the
+    /// outermost invocation that is still part of the same chain. Mirrors the traversal
+    /// direction of FluentSyntaxHelpers.WalkChainedTail, but walking up instead of down.
+    private static InvocationExpressionSyntax FindOutermostChainedCall(InvocationExpressionSyntax invocation)
+    {
+        var current = invocation;
+
+        while (current.Parent is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Expression == current
+            && memberAccess.Parent is InvocationExpressionSyntax outer)
+        {
+            current = outer;
+        }
+
+        return current;
     }
 
     private static string InsertKeyStatement(
@@ -424,6 +452,9 @@ public sealed class OnModelCreatingRewriter
     }
 
     private static ExpressionStatementSyntax BuildHasKeyStatement(string blockReceiverName, IReadOnlyList<string> propertyNames, string? name)
+        => SyntaxFactory.ExpressionStatement(BuildHasKeyExpression(blockReceiverName, propertyNames, name));
+
+    private static ExpressionSyntax BuildHasKeyExpression(string blockReceiverName, IReadOnlyList<string> propertyNames, string? name)
     {
         ExpressionSyntax expression = SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(
@@ -438,7 +469,7 @@ public sealed class OnModelCreatingRewriter
                 SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(name))));
         }
 
-        return SyntaxFactory.ExpressionStatement(expression);
+        return expression;
     }
 
     private static ArgumentListSyntax BuildHasKeyArgumentList(IReadOnlyList<string> propertyNames)
