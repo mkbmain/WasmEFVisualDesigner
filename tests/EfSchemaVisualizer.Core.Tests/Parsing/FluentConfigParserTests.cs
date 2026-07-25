@@ -1101,6 +1101,86 @@ public class FluentConfigParserTests
     }
 
     [Fact]
+    public void ParseIndexes_ChainedHasDatabaseName_IsReadAsIndexName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).HasDatabaseName("IX_Person_Email");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("IX_Person_Email", config.Name);
+    }
+
+    [Fact]
+    public void ParseIndexes_ChainedHasName_IsReadAsIndexName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).HasName("IX_Person_Email");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("IX_Person_Email", config.Name);
+    }
+
+    [Fact]
+    public void ParseIndexes_StringArgNameOverload_TakesPrecedenceOverChainedName()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email, "IX_FromArg").HasDatabaseName("IX_FromChain");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal("IX_FromArg", config.Name);
+    }
+
+    [Fact]
+    public void ParseIndexes_ChainedHasDatabaseName_UnreadableArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            class Ctx : DbContext {
+                protected override void OnModelCreating(ModelBuilder modelBuilder) {
+                    modelBuilder.Entity<Person>(entity => {
+                        entity.HasIndex(e => e.Email).HasDatabaseName(someVariable);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseIndexes(source);
+
+        var config = Assert.Single(result.Value);
+        Assert.Null(config.Name);
+        var diag = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasIndexArgument, diag.Code);
+    }
+
+    [Fact]
     public void ParseIndexes_IsDescending_BareCall_ReadsEmptyList()
     {
         const string source = """

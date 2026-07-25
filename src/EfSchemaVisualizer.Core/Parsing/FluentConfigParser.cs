@@ -22,7 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName",
+        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName", "HasDatabaseName",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -1211,7 +1211,7 @@ public sealed class FluentConfigParser
                     entityName,
                     indexArgs.Value.PropertyNames,
                     extras.IsUnique,
-                    indexArgs.Value.Name,
+                    indexArgs.Value.Name ?? extras.Name,
                     extras.Filter,
                     extras.IsDescending,
                     extras.IncludeProperties));
@@ -1692,6 +1692,7 @@ public sealed class FluentConfigParser
 
     private sealed record IndexExtras(
         bool IsUnique,
+        string? Name,
         string? Filter,
         IReadOnlyList<bool>? IsDescending,
         IReadOnlyList<string>? IncludeProperties,
@@ -1703,6 +1704,7 @@ public sealed class FluentConfigParser
     private static IndexExtras ReadIndexExtras(InvocationExpressionSyntax hasIndexCall, string entityName)
     {
         var isUnique = false;
+        string? name = null;
         string? filter = null;
         IReadOnlyList<bool>? isDescending = null;
         IReadOnlyList<string>? includeProperties = null;
@@ -1752,6 +1754,25 @@ public sealed class FluentConfigParser
                         diagnostics.Add(new Diagnostic(
                             DiagnosticCodes.UnreadableHasFilterArgument,
                             "HasFilter argument is not a string literal and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            (arg ?? (SyntaxNode)chained).Span));
+                        break;
+                    }
+
+                case "HasDatabaseName":
+                case "HasName":
+                    {
+                        var arg = chained.ArgumentList.Arguments.FirstOrDefault();
+                        if (arg?.Expression is LiteralExpressionSyntax nameLiteral && nameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                        {
+                            name = nameLiteral.Token.ValueText;
+                            break;
+                        }
+
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableHasIndexArgument,
+                            $"{methodName} argument is not a string literal and could not be read.",
                             entityName,
                             PropertyName: null,
                             (arg ?? (SyntaxNode)chained).Span));
@@ -1818,6 +1839,6 @@ public sealed class FluentConfigParser
             }
         });
 
-        return new IndexExtras(isUnique, filter, isDescending, includeProperties, diagnostics);
+        return new IndexExtras(isUnique, name, filter, isDescending, includeProperties, diagnostics);
     }
 }
