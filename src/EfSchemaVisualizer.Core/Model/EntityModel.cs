@@ -21,7 +21,8 @@ public sealed record EntityModel(
     bool IsTemporal = false,
     IReadOnlyList<string>? SplitTables = null,
     string? BaseEntityName = null,
-    bool IsOwned = false)
+    bool IsOwned = false,
+    string? KeyName = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();

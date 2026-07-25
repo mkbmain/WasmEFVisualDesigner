@@ -575,6 +575,78 @@ public class FluentConfigParserTests
         Assert.Empty(result.Value);
     }
 
+    private const string SourceWithKeyName = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id).HasName("PK_Person");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_HasName_IsReadAsKeyName()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithKeyName);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("PK_Person", config.Name);
+        Assert.Equal(new[] { "Id" }, config.PropertyNames);
+    }
+
+    private const string SourceWithUnreadableKeyName = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id).HasName(someVariable);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_HasName_UnreadableArgument_EmitsDiagnosticButKeepsPropertyNames()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithUnreadableKeyName);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasKeyNameArgument, diagnostic.Code);
+        var config = Assert.Single(result.Value);
+        Assert.Null(config.Name);
+        Assert.Equal(new[] { "Id" }, config.PropertyNames);
+    }
+
+    private const string SourceWithKeyNoName = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_NoHasNameChained_NameIsNull()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceWithKeyNoName);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Null(config.Name);
+    }
+
     // ─── ParseAlternateKeys ──────────────────────────────────────────────────────
 
     private const string SourceWithSingleAndCompositeAlternateKeys = """

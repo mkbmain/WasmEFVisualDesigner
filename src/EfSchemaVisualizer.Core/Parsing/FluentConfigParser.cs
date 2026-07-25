@@ -22,7 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable", "OwnsOne", "OwnsMany",
+        "SplitToTable", "OwnsOne", "OwnsMany", "HasName",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -332,7 +332,30 @@ public sealed class FluentConfigParser
                     continue;
                 }
 
-                results.Add(new KeyConfig(entityName, propertyNames));
+                string? name = null;
+                FluentSyntaxHelpers.WalkChainedTail(hasKeyCall, chained =>
+                {
+                    if (chained.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "HasName" })
+                    {
+                        return;
+                    }
+
+                    var arg = chained.ArgumentList.Arguments.FirstOrDefault();
+                    if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                    {
+                        name = literal.Token.ValueText;
+                        return;
+                    }
+
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasKeyNameArgument,
+                        "HasName argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        (arg ?? (SyntaxNode)chained).Span));
+                });
+
+                results.Add(new KeyConfig(entityName, propertyNames, name));
             }
         }
 

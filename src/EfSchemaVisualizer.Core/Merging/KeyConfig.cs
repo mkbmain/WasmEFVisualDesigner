@@ -2,4 +2,4 @@ using System.Collections.Generic;
 
 namespace EfSchemaVisualizer.Core.Merging;
 
-public sealed record KeyConfig(string EntityName, IReadOnlyList<string> PropertyNames);
+public sealed record KeyConfig(string EntityName, IReadOnlyList<string> PropertyNames, string? Name = null);

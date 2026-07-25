@@ -12,6 +12,7 @@ public static class DiagnosticCodes
     public const string UnreadableIsUnicodeArgument = nameof(UnreadableIsUnicodeArgument);
     public const string UnreadableIsFixedLengthArgument = nameof(UnreadableIsFixedLengthArgument);
     public const string UnreadableHasKeyArgument = nameof(UnreadableHasKeyArgument);
+    public const string UnreadableHasKeyNameArgument = nameof(UnreadableHasKeyNameArgument);
     public const string UnreadableToTableArgument = nameof(UnreadableToTableArgument);
     public const string UnreadableHasColumnNameArgument = nameof(UnreadableHasColumnNameArgument);
     public const string UnreadableHasColumnTypeArgument = nameof(UnreadableHasColumnTypeArgument);
