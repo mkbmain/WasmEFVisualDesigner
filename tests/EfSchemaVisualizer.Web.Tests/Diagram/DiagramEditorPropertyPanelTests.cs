@@ -466,4 +466,52 @@ public class DiagramEditorPropertyPanelTests
 
         Assert.False(result.Success);
     }
+
+    [Fact]
+    public void SetKeyName_NoExistingName_WritesHasNameCall()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetKeyName("Person", "PK_Person");
+
+        Assert.True(result.Success);
+        Assert.Equal("PK_Person", editor.Current.Entities.Single().KeyName);
+        Assert.Contains("HasName(\"PK_Person\")", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetKeyName_ClearingExistingName_RemovesHasNameCall()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetKeyName("Person", "PK_Person");
+
+        var result = editor.SetKeyName("Person", null);
+
+        Assert.True(result.Success);
+        Assert.Null(editor.Current.Entities.Single().KeyName);
+        Assert.DoesNotContain("HasName", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetKeyName_SameName_IsNoOp()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetKeyName("Person", "PK_Person");
+        var configSourceBefore = editor.ConfigSource;
+
+        var result = editor.SetKeyName("Person", "PK_Person");
+
+        Assert.True(result.Success);
+        Assert.Equal(configSourceBefore, editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetKeyName_UnknownEntity_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetKeyName("DoesNotExist", "PK_Foo");
+
+        Assert.False(result.Success);
+    }
 }

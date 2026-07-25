@@ -406,6 +406,25 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetKeyName(string entityName, string? newName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var normalizedName = string.IsNullOrWhiteSpace(newName) ? null : newName.Trim();
+        if (normalizedName == entity.KeyName)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetKey(ConfigSource, entityName, entity.KeyPropertyNames, normalizedName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     public DiagramEditResult RenameIndex(string entityName, IReadOnlyList<string> propertyNames, string? newName)
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);

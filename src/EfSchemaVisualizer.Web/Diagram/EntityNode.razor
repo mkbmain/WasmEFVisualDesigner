@@ -69,6 +69,19 @@
         </label>
     </div>
     <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
+        <span title="Primary key constraint name (HasKey().HasName(...)).">PK name:</span>
+        <input style="width: 120px;" value="@Node.Entity.KeyName" placeholder="(default)"
+               disabled="@(Node.Entity.KeyPropertyNames.Count == 0)"
+               title="Primary key constraint name (HasKey().HasName(...))."
+               @onchange="e => CommitKeyName(e.Value?.ToString())"
+               @onpointerdown:stopPropagation="true"
+               @onmousedown:stopPropagation="true" />
+    </div>
+    @if (_keyNameError is not null)
+    {
+        <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_keyNameError</div>
+    }
+    <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
         <span title="Raw SQL query source (.ToSqlQuery).">SQL query:</span>
         <input style="width: 200px;" value="@Node.Entity.SqlQuery" placeholder="(none)"
                title="Raw SQL query source (.ToSqlQuery)."
@@ -513,6 +526,22 @@
         }
 
         await EditContext.NotifyChangedAsync();
+    }
+
+    private string? _keyNameError;
+
+    private async Task CommitKeyName(string? newKeyName)
+    {
+        var result = SafeEdit(() => EditContext.Editor.SetKeyName(Node.Entity.Name, newKeyName));
+        if (result.Success)
+        {
+            _keyNameError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _keyNameError = result.Error;
+        }
     }
 
     private string? _editingPropertyName;
