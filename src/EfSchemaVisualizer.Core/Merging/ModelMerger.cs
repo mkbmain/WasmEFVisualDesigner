@@ -50,7 +50,7 @@ public static class ModelMerger
     {
         var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
 
-        return config is null ? entity : entity with { KeyPropertyNames = config.PropertyNames };
+        return config is null ? entity : entity with { KeyPropertyNames = config.PropertyNames, KeyName = config.Name };
     }
 
     public static EntityModel ApplyIndexes(EntityModel entity, IReadOnlyList<IndexConfig> configs)

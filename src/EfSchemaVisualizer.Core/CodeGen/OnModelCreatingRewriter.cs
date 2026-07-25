@@ -354,7 +354,7 @@ public sealed class OnModelCreatingRewriter
         return SyntaxFactory.ExpressionStatement(BuildIsRequiredCall(propertyCall, isRequired));
     }
 
-    public string SetKey(string sourceCode, string entityName, IReadOnlyList<string> propertyNames)
+    public string SetKey(string sourceCode, string entityName, IReadOnlyList<string> propertyNames, string? name = null)
     {
         var withoutKeyless = RemoveKeyless(sourceCode, entityName);
 
@@ -369,39 +369,44 @@ public sealed class OnModelCreatingRewriter
 
         if (existingHasKeyCall is not null)
         {
-            return MutateExistingKey(root, existingHasKeyCall, propertyNames);
+            return MutateExistingKey(root, existingHasKeyCall, propertyNames, name);
         }
 
         var existingScope = scopes.FirstOrDefault();
 
         if (existingScope is not null)
         {
-            return InsertKeyStatement(root, existingScope, propertyNames);
+            return InsertKeyStatement(root, existingScope, propertyNames, name);
         }
 
-        return InsertKeyEntityBlock(root, entityName, propertyNames);
+        return InsertKeyEntityBlock(root, entityName, propertyNames, name);
     }
 
-    private static string MutateExistingKey(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, IReadOnlyList<string> propertyNames)
+    private static string MutateExistingKey(
+        CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, IReadOnlyList<string> propertyNames, string? name)
     {
-        var newCall = targetCall.WithArgumentList(BuildHasKeyArgumentList(propertyNames));
+        var blockReceiverName = ((MemberAccessExpressionSyntax)targetCall.Expression).Expression.ToString();
+        var existingStatement = targetCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
+        var newStatement = BuildHasKeyStatement(blockReceiverName, propertyNames, name);
 
-        var newRoot = root.ReplaceNode(targetCall, newCall);
+        var newRoot = root.ReplaceNode(existingStatement, newStatement);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertKeyStatement(CompilationUnitSyntax root, SyntaxNode scope, IReadOnlyList<string> propertyNames)
+    private static string InsertKeyStatement(
+        CompilationUnitSyntax root, SyntaxNode scope, IReadOnlyList<string> propertyNames, string? name)
     {
         var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
 
-        var newStatement = BuildHasKeyStatement(blockReceiverName, propertyNames);
+        var newStatement = BuildHasKeyStatement(blockReceiverName, propertyNames, name);
         var newBlock = block.AddStatements(newStatement);
 
         var newRoot = root.ReplaceNode(block, newBlock);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertKeyEntityBlock(CompilationUnitSyntax root, string entityName, IReadOnlyList<string> propertyNames)
+    private static string InsertKeyEntityBlock(
+        CompilationUnitSyntax root, string entityName, IReadOnlyList<string> propertyNames, string? name)
     {
         var method = FindOnModelCreatingMethod(root);
 
@@ -410,7 +415,7 @@ public sealed class OnModelCreatingRewriter
 
         var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
 
-        var keyStatement = BuildHasKeyStatement("entity", propertyNames);
+        var keyStatement = BuildHasKeyStatement("entity", propertyNames, name);
         var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(keyStatement));
 
         var newMethodBody = methodBody.AddStatements(entityBlockStatement);
@@ -418,15 +423,22 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static ExpressionStatementSyntax BuildHasKeyStatement(string blockReceiverName, IReadOnlyList<string> propertyNames)
+    private static ExpressionStatementSyntax BuildHasKeyStatement(string blockReceiverName, IReadOnlyList<string> propertyNames, string? name)
     {
-        return SyntaxFactory.ExpressionStatement(
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    SyntaxFactory.IdentifierName(blockReceiverName),
-                    SyntaxFactory.IdentifierName("HasKey")),
-                BuildHasKeyArgumentList(propertyNames)));
+        ExpressionSyntax expression = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("HasKey")),
+            BuildHasKeyArgumentList(propertyNames));
+
+        if (name is not null)
+        {
+            expression = ChainCall(expression, "HasName", SyntaxFactory.Argument(
+                SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(name))));
+        }
+
+        return SyntaxFactory.ExpressionStatement(expression);
     }
 
     private static ArgumentListSyntax BuildHasKeyArgumentList(IReadOnlyList<string> propertyNames)

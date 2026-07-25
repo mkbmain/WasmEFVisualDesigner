@@ -111,6 +111,24 @@ public class ModelMergerTests
     }
 
     [Fact]
+    public void ApplyKeys_ConfigHasName_SetsKeyNameOnMatchingEntity()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<KeyConfig>
+        {
+            new("Person", new List<string> { "Id" }, "PK_Person"),
+        };
+
+        var merged = ModelMerger.ApplyKeys(entity, configs);
+
+        Assert.Equal("PK_Person", merged.KeyName);
+    }
+
+    [Fact]
     public void ApplyKeys_NoMatchingConfig_LeavesKeyPropertyNamesEmpty()
     {
         var entity = new EntityModel("Person", new List<PropertyModel>

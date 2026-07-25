@@ -617,6 +617,41 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void SetKey_WithName_AppendsHasNameCall()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithSingleKey, entityName: "Person", propertyNames: new List<string> { "Id" }, name: "PK_Person");
+
+        Assert.Contains("entity.HasKey(e => e.Id).HasName(\"PK_Person\")", result);
+    }
+
+    [Fact]
+    public void SetKey_ExistingNamedKey_ChangingNameReplacesHasNameCall()
+    {
+        var withName = new OnModelCreatingRewriter()
+            .SetKey(SourceWithSingleKey, entityName: "Person", propertyNames: new List<string> { "Id" }, name: "PK_Person");
+
+        var result = new OnModelCreatingRewriter()
+            .SetKey(withName, entityName: "Person", propertyNames: new List<string> { "Id" }, name: "PK_PersonRenamed");
+
+        Assert.Contains("entity.HasKey(e => e.Id).HasName(\"PK_PersonRenamed\")", result);
+        Assert.DoesNotContain("PK_Person\")", result.Replace("PK_PersonRenamed\")", ""));
+    }
+
+    [Fact]
+    public void SetKey_ExistingNamedKey_ClearingNameRemovesHasNameCall()
+    {
+        var withName = new OnModelCreatingRewriter()
+            .SetKey(SourceWithSingleKey, entityName: "Person", propertyNames: new List<string> { "Id" }, name: "PK_Person");
+
+        var result = new OnModelCreatingRewriter()
+            .SetKey(withName, entityName: "Person", propertyNames: new List<string> { "Id" });
+
+        Assert.Contains("entity.HasKey(e => e.Id);", result);
+        Assert.DoesNotContain("HasName", result);
+    }
+
+    [Fact]
     public void RemoveKey_ExistingCall_RemovesHasKeyStatementEntirely()
     {
         var result = new OnModelCreatingRewriter()
