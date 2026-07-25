@@ -3,6 +3,7 @@ using EfSchemaVisualizer.Core.Inference;
 using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
+using EfSchemaVisualizer.Core.Validation;
 
 namespace EfSchemaVisualizer.Web;
 
@@ -167,6 +168,8 @@ public static class DiagramModelBuilder
             .Concat(inheritanceFold.Relationships)
             .Concat(ownedTypeFold.Relationships)
             .ToList();
+
+        diagnostics.AddRange(ModelValidityChecker.Check(entities, allRelationships));
 
         return new DiagramModelResult(entities, allRelationships, diagnostics);
     }

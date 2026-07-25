@@ -39,4 +39,13 @@ public static class DiagnosticCodes
     public const string ArchiveBuildArtifactSkipped = nameof(ArchiveBuildArtifactSkipped);
     public const string OwnedNestedConfigIgnored = nameof(OwnedNestedConfigIgnored);
     public const string UnreadableHasDefaultSchemaArgument = nameof(UnreadableHasDefaultSchemaArgument);
+
+    // Model-validity diagnostics: unlike the codes above (all "I couldn't read this syntax"),
+    // these mean "this parsed fine, but the resulting model would fail at EF's model-build time".
+    public const string EntityHasNoKey = nameof(EntityHasNoKey);
+    public const string DuplicateColumnName = nameof(DuplicateColumnName);
+    public const string IsRequiredFalseOnNonNullableProperty = nameof(IsRequiredFalseOnNonNullableProperty);
+    public const string PrecisionOrScaleOnUnsupportedType = nameof(PrecisionOrScaleOnUnsupportedType);
+    public const string IndexReferencesMissingProperty = nameof(IndexReferencesMissingProperty);
+    public const string ForeignKeyTargetsKeylessPrincipal = nameof(ForeignKeyTargetsKeylessPrincipal);
 }

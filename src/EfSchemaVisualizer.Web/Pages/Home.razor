@@ -60,10 +60,19 @@
         <pre style="color: red;">@_error</pre>
     }
 
-    @if (_diagnostics is { Count: > 0 })
+    @if (_diagnostics is { Count: > 0 } && _diagnostics.Any(d => d.Category == DiagnosticCategory.ModelValidity))
+    {
+        <pre style="color: crimson;">Model problems:
+@foreach (var diagnostic in _diagnostics.Where(d => d.Category == DiagnosticCategory.ModelValidity))
+{
+    @($"  [{diagnostic.Code}] {diagnostic.Message}{Environment.NewLine}")
+}</pre>
+    }
+
+    @if (_diagnostics is { Count: > 0 } && _diagnostics.Any(d => d.Category == DiagnosticCategory.Parse))
     {
         <pre style="color: darkorange;">Diagnostics:
-@foreach (var diagnostic in _diagnostics)
+@foreach (var diagnostic in _diagnostics.Where(d => d.Category == DiagnosticCategory.Parse))
 {
     @($"  [{diagnostic.Code}] {diagnostic.Message}{Environment.NewLine}")
 }</pre>

@@ -392,15 +392,58 @@
       remains covered by the "SQL-shaped mapping" item under Priority 2, which
       already lists `HasCheckConstraint` as its own parser gap.
 
-- [ ] **`[found]` W5 — No EF-validity diagnostics at all.**
-      All 33 codes in `DiagnosticCodes.cs` mean "I couldn't read this syntax".
-      Nothing means "your model is invalid". A no-code user needs the second
-      kind: entity with no key (and not `HasNoKey`), FK targeting a non-key/
-      non-alternate-key, duplicate column names on one table, entity with no
-      `DbSet` and no `Entity<T>()` registration, `IsRequired()` on a nullable CLR
-      property, precision/scale on a non-decimal, index over a property that no
-      longer exists. Surface these as a separate "model problems" panel, distinct
-      from parse diagnostics.
+- [x] **`[found]` W5 — No EF-validity diagnostics at all.** — Fixed 2026-07-25.
+      All 33 codes in `DiagnosticCodes.cs` meant "I couldn't read this syntax".
+      Nothing meant "your model is invalid".
+
+      Fix: new `DiagnosticCategory` enum (`Parse` / `ModelValidity`) added to
+      `Diagnostic` (default `Parse`, so none of the ~30 existing call sites
+      needed to change), and a new `EfSchemaVisualizer.Core.Validation.
+      ModelValidityChecker` (parallel to `Inference`/`Merging`) that runs last
+      in `DiagramModelBuilder.Build`, once, against the fully-resolved
+      `EntityModel`/`RelationshipModel` lists — after all parsing, merging, and
+      inference stages. Six checks implemented: entity with no key and not
+      `HasNoKey`/`[Keyless]`/owned (`EntityHasNoKey`); two properties mapped to
+      the same column (`DuplicateColumnName`); `HasPrecision`/scale set on a type
+      that doesn't support it — `decimal` for both, temporal types
+      (`DateTime`/`DateTimeOffset`/`TimeSpan`/`TimeOnly`) for precision only
+      (`PrecisionOrScaleOnUnsupportedType`); an index naming a property that no
+      longer exists on the entity, e.g. after a rename (`IndexReferencesMissingProperty`);
+      a foreign key targeting a keyless principal (`ForeignKeyTargetsKeylessPrincipal`);
+      `IsRequired(false)` on a non-nullable CLR value type (`IsRequiredFalseOnNonNullableProperty`).
+      `Home.razor` now renders model-validity diagnostics in their own "Model
+      problems" panel (crimson), separate from the existing orange parse-
+      diagnostics panel. Verified with 15 new tests in
+      `DiagramModelBuilderValidityTests.cs`, one positive/negative pair per
+      check; full suite (639 Core + 172 Web) green, no existing test needed a
+      fixture change.
+
+      **Two checks deliberately reworded from how this item originally described
+      them, because the literal wording described EF behavior that doesn't
+      actually throw:** "`IsRequired()` on a nullable CLR property" is legal EF
+      usage (it makes the column stricter than the CLR type) — the actual
+      model-build error is the reverse, `IsRequired(false)` on a CLR type that
+      can *never* be null (checked only against a known set of built-in value
+      types, to avoid false positives on `string`/reference-type nullability,
+      which depends on project-wide NRT settings this model can't see).
+      "FK targeting a non-key/non-alternate-key" was narrowed to "FK targeting a
+      keyless principal", since `RelationshipModel` has no field recording which
+      principal property an FK targets — `HasPrincipalKey` isn't parsed yet (see
+      Priority 2), so today every relationship implicitly targets the
+      principal's own key, and the only detectable failure of that assumption is
+      a keyless principal.
+
+      **Not done — deferred, scoped out to avoid false positives:** "entity with
+      no `DbSet` and no `Entity<T>()` registration" was dropped from this pass.
+      EF actually includes an entity in the model via three routes, not two —
+      `DbSet<T>`, explicit `Entity<T>()`, *or* navigation-property reachability
+      from an already-registered entity (e.g. `Order` reachable via
+      `Customer.Orders` with no `DbSet<Order>` at all is valid, convention-based
+      EF). Implementing the check as literally described would have false-
+      positived on that common, legitimate shape — and on this project's own
+      test fixtures, most of which have no `DbContext`/`DbSet` at all. A correct
+      version needs a reachability graph from registered roots, which is a
+      bigger, separate change.
 
 ## Priority 2 — EF surface not parsed at all
 
