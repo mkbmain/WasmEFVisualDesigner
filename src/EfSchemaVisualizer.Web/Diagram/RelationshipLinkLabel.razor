@@ -165,7 +165,7 @@
 
     private async Task CommitConstraintName(string? name)
     {
-        _constraintName = string.IsNullOrWhiteSpace(name) ? null : name;
+        _constraintName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
         await Commit();
     }
 
