@@ -661,6 +661,16 @@ public class OnModelCreatingRewriterTests
         }
         """;
 
+    private const string SourceWithArrowBodyNamedKey = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity => entity.HasKey(e => e.Id).HasName("PK_Person"));
+            }
+        }
+        """;
+
     [Fact]
     public void SetKey_ArrowBodyEntityConfig_ExistingKeyChangesPropertyWithoutDroppingWrapper()
     {
@@ -678,6 +688,26 @@ public class OnModelCreatingRewriterTests
             .SetKey(SourceWithArrowBodyKey, entityName: "Person", propertyNames: new List<string> { "Id" }, name: "PK_Person");
 
         Assert.Contains("modelBuilder.Entity<Person>(entity => entity.HasKey(e => e.Id).HasName(\"PK_Person\"))", result);
+    }
+
+    [Fact]
+    public void SetKey_ArrowBodyEntityConfig_ExistingChainedName_RenamingReplacesHasNameWithoutDroppingWrapper()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithArrowBodyNamedKey, entityName: "Person", propertyNames: new List<string> { "Id" }, name: "PK_PersonRenamed");
+
+        Assert.Contains("modelBuilder.Entity<Person>(entity => entity.HasKey(e => e.Id).HasName(\"PK_PersonRenamed\"))", result);
+        Assert.DoesNotContain("PK_Person\")", result.Replace("PK_PersonRenamed\")", ""));
+    }
+
+    [Fact]
+    public void SetKey_ArrowBodyEntityConfig_ExistingChainedName_ClearingRemovesHasNameWithoutDroppingWrapper()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetKey(SourceWithArrowBodyNamedKey, entityName: "Person", propertyNames: new List<string> { "Id" });
+
+        Assert.Contains("modelBuilder.Entity<Person>(entity => entity.HasKey(e => e.Id))", result);
+        Assert.DoesNotContain("HasName", result);
     }
 
     [Fact]
