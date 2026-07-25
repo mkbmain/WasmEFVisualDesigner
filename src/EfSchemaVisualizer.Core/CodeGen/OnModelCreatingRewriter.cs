@@ -1501,6 +1501,7 @@ public sealed class OnModelCreatingRewriter
             chain = BuildRelationshipCall(chain, "WithOne", targetEntityName: null, relationship.PrincipalNavigation);
             chain = AppendHasForeignKey(chain, relationship.ForeignKeyProperties, relationship.DependentEntity);
             chain = AppendOnDelete(chain, relationship.OnDeleteBehavior);
+            chain = AppendHasConstraintName(chain, relationship.ConstraintName);
             return SyntaxFactory.ExpressionStatement(chain);
         }
 
@@ -1509,6 +1510,7 @@ public sealed class OnModelCreatingRewriter
         chain = BuildRelationshipCall(chain, "WithMany", targetEntityName: null, relationship.PrincipalNavigation);
         chain = AppendHasForeignKey(chain, relationship.ForeignKeyProperties, dependentGeneric: null);
         chain = AppendOnDelete(chain, relationship.OnDeleteBehavior);
+        chain = AppendHasConstraintName(chain, relationship.ConstraintName);
         return SyntaxFactory.ExpressionStatement(chain);
     }
 
@@ -1587,6 +1589,21 @@ public sealed class OnModelCreatingRewriter
 
         return SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, chain, SyntaxFactory.IdentifierName("OnDelete")),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(argument)));
+    }
+
+    private static ExpressionSyntax AppendHasConstraintName(ExpressionSyntax chain, string? constraintName)
+    {
+        if (constraintName is null)
+        {
+            return chain;
+        }
+
+        var argument = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(constraintName)));
+
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, chain, SyntaxFactory.IdentifierName("HasConstraintName")),
             SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(argument)));
     }
 

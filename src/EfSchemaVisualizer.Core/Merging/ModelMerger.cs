@@ -351,7 +351,8 @@ public static class ModelMerger
                 c.DependentNavigation,
                 c.ForeignKeyProperties,
                 c.OnDeleteBehavior,
-                c.JoinEntityName))
+                c.JoinEntityName,
+                ConstraintName: c.ConstraintName))
             .ToList();
     }
 }

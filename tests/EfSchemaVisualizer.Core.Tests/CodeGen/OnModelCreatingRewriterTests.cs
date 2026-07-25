@@ -2423,6 +2423,33 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void SetRelationship_WithConstraintName_AppendsHasConstraintNameCall()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogId" },
+            ConstraintName: "FK_Post_Blog");
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithMany().HasForeignKey(d => d.BlogId).HasConstraintName(\"FK_Post_Blog\")", result);
+    }
+
+    [Fact]
+    public void SetRelationship_NoConstraintName_OmitsHasConstraintNameCall()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogId" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.DoesNotContain("HasConstraintName", result);
+    }
+
+    [Fact]
     public void SetRelationship_OneToMany_WithCompositeForeignKey_EmitsAnonymousObject()
     {
         var relationship = new RelationshipModel(
