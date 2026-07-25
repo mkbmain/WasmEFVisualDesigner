@@ -338,6 +338,35 @@ public class DiagramEditorPropertyPanelTests
         Assert.False(editor.CanUndo);
     }
 
+    [Fact]
+    public void SetRelationshipShape_SettingConstraintName_WritesHasConstraintNameCall()
+    {
+        var editor = new DiagramEditor(RelationshipClassSource, RelationshipConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+
+        var result = editor.SetRelationshipShape(
+            relationship, relationship.Kind, relationship.ForeignKeyProperties, relationship.OnDeleteBehavior, "FK_Post_Blog");
+
+        Assert.True(result.Success);
+        Assert.Equal("FK_Post_Blog", editor.Current.Relationships.Single().ConstraintName);
+        Assert.Contains("HasConstraintName(\"FK_Post_Blog\")", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetRelationshipShape_SameConstraintName_IsNoOp()
+    {
+        var editor = new DiagramEditor(RelationshipClassSource, RelationshipConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+        editor.SetRelationshipShape(relationship, relationship.Kind, relationship.ForeignKeyProperties, relationship.OnDeleteBehavior, "FK_Post_Blog");
+        var updated = editor.Current.Relationships.Single();
+        var configSourceBefore = editor.ConfigSource;
+
+        var result = editor.SetRelationshipShape(updated, updated.Kind, updated.ForeignKeyProperties, updated.OnDeleteBehavior, updated.ConstraintName);
+
+        Assert.True(result.Success);
+        Assert.Equal(configSourceBefore, editor.ConfigSource);
+    }
+
     private const string InferredRelationshipClassSource = """
         public class Blog
         {

@@ -1034,7 +1034,11 @@ public sealed class DiagramEditor
     }
 
     public DiagramEditResult SetRelationshipShape(
-        RelationshipModel relationship, RelationshipKind newKind, IReadOnlyList<string> newForeignKeyProperties, string? newOnDeleteBehavior)
+        RelationshipModel relationship,
+        RelationshipKind newKind,
+        IReadOnlyList<string> newForeignKeyProperties,
+        string? newOnDeleteBehavior,
+        string? newConstraintName = null)
     {
         if (!Current.Relationships.Contains(relationship))
         {
@@ -1043,7 +1047,8 @@ public sealed class DiagramEditor
 
         if (newKind == relationship.Kind
             && newForeignKeyProperties.SequenceEqual(relationship.ForeignKeyProperties)
-            && newOnDeleteBehavior == relationship.OnDeleteBehavior)
+            && newOnDeleteBehavior == relationship.OnDeleteBehavior
+            && newConstraintName == relationship.ConstraintName)
         {
             return DiagramEditResult.Ok();
         }
@@ -1065,6 +1070,7 @@ public sealed class DiagramEditor
             Kind = newKind,
             ForeignKeyProperties = newForeignKeyProperties,
             OnDeleteBehavior = newOnDeleteBehavior,
+            ConstraintName = newConstraintName,
         };
 
         var withoutOld = relationship.IsInferred
