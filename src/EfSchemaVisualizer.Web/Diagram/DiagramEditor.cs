@@ -415,6 +415,11 @@ public sealed class DiagramEditor
         }
 
         var normalizedName = string.IsNullOrWhiteSpace(newName) ? null : newName.Trim();
+        if (normalizedName is not null && entity.KeyPropertyNames.Count == 0)
+        {
+            return DiagramEditResult.Fail($"'{entityName}' has no primary key to name.");
+        }
+
         if (normalizedName == entity.KeyName)
         {
             return DiagramEditResult.Ok();

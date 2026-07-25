@@ -20,6 +20,20 @@ public class DiagramEditorPropertyPanelTests
         });
         """;
 
+    private const string KeylessClassSource = """
+        public class Person
+        {
+            public int Id { get; set; }
+        }
+        """;
+
+    private const string KeylessConfigSource = """
+        modelBuilder.Entity<Person>(entity =>
+        {
+            entity.HasNoKey();
+        });
+        """;
+
     [Fact]
     public void SetMaxLength_NoExistingConfig_InsertsHasMaxLength()
     {
@@ -511,6 +525,16 @@ public class DiagramEditorPropertyPanelTests
         var editor = new DiagramEditor(ClassSource, ConfigSource);
 
         var result = editor.SetKeyName("DoesNotExist", "PK_Foo");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void SetKeyName_EntityHasNoKey_Fails()
+    {
+        var editor = new DiagramEditor(KeylessClassSource, KeylessConfigSource);
+
+        var result = editor.SetKeyName("Person", "PK_Person");
 
         Assert.False(result.Success);
     }
