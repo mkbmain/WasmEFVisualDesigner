@@ -1,5 +1,6 @@
 using System.Linq;
 using EfSchemaVisualizer.Core.CodeGen;
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 
@@ -177,6 +178,99 @@ public class RoundTripFuzzTests
 
         var postContentDefault = parser.ParseDefaultValues(ConfigSource).Value.Single(c => c is { EntityName: "Post", PropertyName: "Content" });
         Assert.Equal(ConfigSource, rewriter.SetDefaultValue(ConfigSource, "Post", "Content", postContentDefault.LiteralText));
+    }
+
+    private const string NamingEntitySource = """
+        public class Blog
+        {
+            public int BlogId { get; set; }
+            public string Url { get; set; }
+            public List<Post> Posts { get; set; }
+        }
+
+        public class Post
+        {
+            public int PostId { get; set; }
+            public int BlogId { get; set; }
+            public Blog Blog { get; set; }
+        }
+        """;
+
+    private const string NamingConfigSource = """
+        public class BloggingContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasKey(e => e.BlogId).HasName("PK_Blog");
+                    entity.HasIndex(e => e.Url).HasDatabaseName("IX_Blog_Url");
+                });
+
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasKey(e => e.PostId);
+                    entity.HasOne(e => e.Blog).WithMany(b => b.Posts).HasForeignKey(e => e.BlogId).HasConstraintName("FK_Post_Blog");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void NoOpEdits_PreservePkFkAndIndexNames()
+    {
+        var parser = new FluentConfigParser();
+        var rewriter = new OnModelCreatingRewriter();
+
+        var blogKey = parser.ParseKeys(NamingConfigSource).Value.Single(c => c.EntityName == "Blog");
+        Assert.Equal("PK_Blog", blogKey.Name);
+        AssertOnlyLineEndingsDiffer(NamingConfigSource, rewriter.SetKey(NamingConfigSource, "Blog", blogKey.PropertyNames, blogKey.Name));
+
+        // Unlike SetKey/SetRelationship above, SetIndex always regenerates its call in the
+        // canonical positional-arg form (`HasIndex(props, "name")`) regardless of how the name
+        // was originally authored — it does not preserve a chained `.HasDatabaseName(...)` form.
+        // So a "no-op" edit here is not byte/whitespace-identical to the original chained-form
+        // source; the invariant that matters is that the parsed value survives a rewrite +
+        // reparse, not that the original chain syntax is preserved.
+        var blogIndex = parser.ParseIndexes(NamingConfigSource).Value.Single(c => c.EntityName == "Blog");
+        Assert.Equal("IX_Blog_Url", blogIndex.Name);
+        var rewrittenIndexSource = rewriter.SetIndex(
+            NamingConfigSource, "Blog", blogIndex.PropertyNames, blogIndex.IsUnique, blogIndex.Name);
+        var reparsedIndex = parser.ParseIndexes(rewrittenIndexSource).Value.Single(c => c.EntityName == "Blog");
+        Assert.Equal("IX_Blog_Url", reparsedIndex.Name);
+        Assert.Equal(blogIndex.PropertyNames, reparsedIndex.PropertyNames);
+        Assert.Equal(blogIndex.IsUnique, reparsedIndex.IsUnique);
+
+        // Like SetIndex above, SetRelationship always regenerates its call chain canonically
+        // (e.g. it may switch to the generic HasOne<T>(...) form and use its own lambda
+        // parameter names) rather than echoing back the original navigation-lambda syntax, so
+        // remove+re-set is not a byte/whitespace-identical no-op here either — the invariant
+        // that matters is that the parsed relationship's values (including ConstraintName)
+        // survive a remove + re-set + reparse cycle.
+        var entities = new EntityClassParser().Parse(NamingEntitySource).Value;
+        var relationship = parser.ParseRelationships(NamingConfigSource, entities).Value.Single();
+        Assert.Equal("FK_Post_Blog", relationship.ConstraintName);
+
+        var relationshipModel = new RelationshipModel(
+            relationship.PrincipalEntity,
+            relationship.DependentEntity,
+            relationship.Kind,
+            relationship.PrincipalNavigation,
+            relationship.DependentNavigation,
+            relationship.ForeignKeyProperties,
+            relationship.OnDeleteBehavior,
+            relationship.JoinEntityName,
+            ConstraintName: relationship.ConstraintName);
+
+        var withoutRelationship = rewriter.RemoveRelationship(NamingConfigSource, relationshipModel);
+        var rewrittenRelationshipSource = rewriter.SetRelationship(withoutRelationship, relationshipModel);
+
+        var reparsedRelationship = parser.ParseRelationships(rewrittenRelationshipSource, entities).Value.Single();
+        Assert.Equal("FK_Post_Blog", reparsedRelationship.ConstraintName);
+        Assert.Equal(relationship.PrincipalEntity, reparsedRelationship.PrincipalEntity);
+        Assert.Equal(relationship.DependentEntity, reparsedRelationship.DependentEntity);
+        Assert.Equal(relationship.Kind, reparsedRelationship.Kind);
+        Assert.Equal(relationship.ForeignKeyProperties, reparsedRelationship.ForeignKeyProperties);
     }
 
     [Fact]
