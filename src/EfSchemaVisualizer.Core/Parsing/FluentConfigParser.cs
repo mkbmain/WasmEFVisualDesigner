@@ -61,6 +61,83 @@ public sealed class FluentConfigParser
         return diagnostics;
     }
 
+    /// Model-level calls recognized elsewhere: `Entity<T>()` (the entity-scope call itself, read by
+    /// `FindConfigurationScopes`), `Ignore<T>()` (whole-entity ignore, read by `ParseIgnoredEntities`),
+    /// and `HasDefaultSchema` (read by `ParseDefaultSchema` below). Anything else called directly on
+    /// the `ModelBuilder` receiver — `HasSequence`, `ApplyConfigurationsFromAssembly`,
+    /// `HasAnnotation`, etc. — has no parser and is flagged here instead of silently dropped.
+    private static readonly HashSet<string> RecognizedModelLevelCallNames = new() { "Entity", "Ignore", "HasDefaultSchema" };
+
+    /// Flags every call made directly on the `ModelBuilder` receiver (as opposed to one chained onto
+    /// an `Entity&lt;T&gt;()` result, which `ParseUnrecognizedCalls` already covers) whose method name
+    /// isn't recognized. This is the model-level counterpart to `ParseUnrecognizedCalls` — see W4:
+    /// `modelBuilder.HasDefaultSchema(...)`/`HasSequence(...)`/`ApplyConfigurationsFromAssembly(...)`
+    /// were previously neither parsed nor flagged.
+    public IReadOnlyList<Diagnostic> ParseUnrecognizedModelLevelCalls(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var call in FluentSyntaxHelpers.FindModelLevelCalls(root))
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var methodName })
+            {
+                continue;
+            }
+
+            if (RecognizedModelLevelCallNames.Contains(methodName))
+            {
+                continue;
+            }
+
+            diagnostics.Add(new Diagnostic(
+                DiagnosticCodes.UnrecognizedConfigCall,
+                $"'{methodName}' is not a recognized model-level configuration call and was ignored.",
+                EntityName: null,
+                PropertyName: null,
+                call.Span));
+        }
+
+        return diagnostics;
+    }
+
+    /// Reads `modelBuilder.HasDefaultSchema("schema")` — applies to every entity that doesn't
+    /// otherwise set its own schema via `ToTable`/`ToView`. Only the first call found is used; a
+    /// model only has one default schema in practice.
+    public ParseResult<string?> ParseDefaultSchema(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var call in FluentSyntaxHelpers.FindModelLevelCalls(root))
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "HasDefaultSchema" })
+            {
+                continue;
+            }
+
+            var arg = call.ArgumentList.Arguments.FirstOrDefault();
+
+            if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                return new ParseResult<string?>(literal.Token.ValueText, diagnostics);
+            }
+
+            diagnostics.Add(new Diagnostic(
+                DiagnosticCodes.UnreadableHasDefaultSchemaArgument,
+                "HasDefaultSchema argument is not a string literal and could not be read.",
+                EntityName: null,
+                PropertyName: null,
+                (arg ?? (SyntaxNode)call).Span));
+        }
+
+        return new ParseResult<string?>(null, diagnostics);
+    }
+
     public ParseResult<IReadOnlyList<MaxLengthConfig>> ParseMaxLengths(string sourceCode)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

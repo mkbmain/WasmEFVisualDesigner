@@ -323,6 +323,36 @@ public class ModelMergerTests
     }
 
     [Fact]
+    public void ApplyDefaultSchema_EntityHasNoSchema_FillsInDefault()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplyDefaultSchema(entity, "sales");
+
+        Assert.Equal("sales", merged.Schema);
+    }
+
+    [Fact]
+    public void ApplyDefaultSchema_EntityAlreadyHasExplicitSchema_LeavesItUnchanged()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>()) { Schema = "dbo" };
+
+        var merged = ModelMerger.ApplyDefaultSchema(entity, "sales");
+
+        Assert.Equal("dbo", merged.Schema);
+    }
+
+    [Fact]
+    public void ApplyDefaultSchema_NoDefaultConfigured_LeavesSchemaNull()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>());
+
+        var merged = ModelMerger.ApplyDefaultSchema(entity, null);
+
+        Assert.Null(merged.Schema);
+    }
+
+    [Fact]
     public void ApplySqlQuery_SetsSqlQuery_OnMatchingEntity()
     {
         var entity = new EntityModel("Person", new List<PropertyModel>());

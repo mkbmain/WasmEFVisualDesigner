@@ -836,4 +836,74 @@ public class DiagramModelBuilderTests
         Assert.Contains(inheritanceEdges, r => r.PrincipalEntity == "Person" && r.DependentEntity == "Student");
         Assert.Contains(inheritanceEdges, r => r.PrincipalEntity == "Person" && r.DependentEntity == "Teacher");
     }
+
+    [Fact]
+    public void Build_HasDefaultSchema_AppliesToEntitiesWithoutExplicitSchema()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+            }
+
+            public class Order
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.HasDefaultSchema("sales");
+
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.ToTable("Orders", "audit");
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var customer = result.Entities.Single(e => e.Name == "Customer");
+        Assert.Equal("sales", customer.Schema);
+
+        var order = result.Entities.Single(e => e.Name == "Order");
+        Assert.Equal("audit", order.Schema);
+    }
+
+    [Fact]
+    public void Build_ModelLevelUnrecognizedCall_EmitsDiagnostic()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.HasSequence<int>("OrderNumbers");
+
+                    modelBuilder.Entity<Customer>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.Contains(result.Diagnostics, d =>
+            d.Code == DiagnosticCodes.UnrecognizedConfigCall && d.Message.Contains("HasSequence"));
+    }
 }

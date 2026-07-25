@@ -38,4 +38,5 @@ public static class DiagnosticCodes
     public const string ArchiveGeneratedFileExcluded = nameof(ArchiveGeneratedFileExcluded);
     public const string ArchiveBuildArtifactSkipped = nameof(ArchiveBuildArtifactSkipped);
     public const string OwnedNestedConfigIgnored = nameof(OwnedNestedConfigIgnored);
+    public const string UnreadableHasDefaultSchemaArgument = nameof(UnreadableHasDefaultSchemaArgument);
 }

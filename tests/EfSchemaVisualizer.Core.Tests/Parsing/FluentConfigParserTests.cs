@@ -3530,4 +3530,146 @@ public class FluentConfigParserTests
         Assert.Equal(DiagnosticCodes.UnreadableSplitToTableArgument, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
     }
+
+    [Fact]
+    public void ParseDefaultSchema_ReadsStringLiteral()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.HasDefaultSchema("sales");
+
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseDefaultSchema(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal("sales", result.Value);
+    }
+
+    [Fact]
+    public void ParseDefaultSchema_NoCall_ReturnsNull()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseDefaultSchema(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Null(result.Value);
+    }
+
+    [Fact]
+    public void ParseDefaultSchema_NonLiteralArgument_EmitsUnreadableDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                private const string Schema = "sales";
+
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.HasDefaultSchema(Schema);
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseDefaultSchema(source);
+
+        Assert.Null(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasDefaultSchemaArgument, diagnostic.Code);
+        Assert.Null(diagnostic.EntityName);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedModelLevelCalls_FlagsHasSequenceAndApplyConfigurationsFromAssembly()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.HasSequence<int>("OrderNumbers");
+                    modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedModelLevelCalls(source);
+
+        Assert.Equal(2, diagnostics.Count);
+        Assert.All(diagnostics, d => Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, d.Code));
+        Assert.All(diagnostics, d => Assert.Null(d.EntityName));
+        Assert.Contains(diagnostics, d => d.Message.Contains("HasSequence"));
+        Assert.Contains(diagnostics, d => d.Message.Contains("ApplyConfigurationsFromAssembly"));
+    }
+
+    [Fact]
+    public void ParseUnrecognizedModelLevelCalls_HasDefaultSchemaEntityAndIgnore_AreNotFlagged()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.HasDefaultSchema("sales");
+                    modelBuilder.Ignore<Address>();
+
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedModelLevelCalls(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedModelLevelCalls_ChainedOntoEntityResult_IsNotFlaggedHere()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasConversion(typeof(string));
+                    });
+                }
+            }
+            """;
+
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedModelLevelCalls(source);
+
+        Assert.Empty(diagnostics);
+    }
 }

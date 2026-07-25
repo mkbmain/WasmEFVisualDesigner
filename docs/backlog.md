@@ -356,23 +356,41 @@
       read of the folded data, renders muted-gray like any other inferred edge, and isn't tested;
       revisit if it proves confusing in practice.
 
-- [ ] **`[found]/[verified]` W4 — Model-level config is invisible, with no
-      diagnostic.**
+- [x] **`[found]/[verified]` W4 — Model-level config is invisible, with no
+      diagnostic.** — Fixed 2026-07-24.
       `FluentConfigParser.ParseUnrecognizedCalls` only walks calls *inside* an
       `Entity<T>()` scope (`FluentSyntaxHelpers.FindConfigurationScopes`), so
-      anything hung off `modelBuilder` directly is neither parsed nor flagged.
-      Verified silently dropped:
+      anything hung off `modelBuilder` directly was neither parsed nor flagged
+      — e.g. `modelBuilder.HasDefaultSchema("sales")` (every table's schema
+      wrong, no warning), `modelBuilder.HasSequence<int>(...)`,
+      `modelBuilder.ApplyConfigurationsFromAssembly(...)`.
 
-      - `modelBuilder.HasDefaultSchema("sales")` — every table's schema is wrong
-        in the diagram, no warning
-      - `modelBuilder.HasSequence<int>(...)`
-      - `modelBuilder.ApplyConfigurationsFromAssembly(...)`
-      - `ToTable(t => t.HasCheckConstraint(...))` — argument lambda bodies aren't
-        walked either, so check constraints vanish without a diagnostic
+      Fix: new `FluentSyntaxHelpers.FindModelLevelCalls` finds every invocation
+      called directly on the `ModelBuilder` receiver (found via the
+      `OnModelCreating(ModelBuilder ...)` parameter name, or via any
+      `receiver.Entity<T>(...)` call's receiver for a bare fluent-config
+      source with no `OnModelCreating` method) — as opposed to one chained
+      onto an `Entity<T>()` result, which `ParseUnrecognizedCalls` already
+      covers. New `FluentConfigParser.ParseUnrecognizedModelLevelCalls` flags
+      anything there whose name isn't `Entity`/`Ignore`/`HasDefaultSchema` with
+      `UnrecognizedConfigCall` (`EntityName: null`, since it's model-wide, not
+      entity-scoped). New `FluentConfigParser.ParseDefaultSchema` reads
+      `HasDefaultSchema`'s string-literal argument (`UnreadableHasDefaultSchemaArgument`
+      diagnostic if it isn't one); `ModelMerger.ApplyDefaultSchema` fills it
+      into every entity that didn't already get an explicit schema from
+      `ToTable`/`ToView` (those always win as a per-entity override). Wired
+      into `DiagramModelBuilder.Build` after table/view mapping so the
+      explicit-wins ordering holds. Verified: a model with `HasDefaultSchema
+      ("sales")` and one entity explicitly `ToTable("Orders", "audit")` now
+      renders the explicit entity with schema `audit` and every other entity
+      with schema `sales`; a bare `modelBuilder.HasSequence<int>(...)` now
+      emits `UnrecognizedConfigCall` instead of vanishing silently.
 
-      Fix: extend the unrecognized-call scan to model-level calls and to
-      recognized calls' lambda arguments, then parse `HasDefaultSchema` (cheap,
-      and it corrects every entity's rendered schema).
+      **Not done — separate backlog item:** walking into recognized calls'
+      lambda arguments (e.g. `ToTable(t => t.HasCheckConstraint(...))`, whose
+      builder-lambda body still isn't read) is a distinct, larger change and
+      remains covered by the "SQL-shaped mapping" item under Priority 2, which
+      already lists `HasCheckConstraint` as its own parser gap.
 
 - [ ] **`[found]` W5 — No EF-validity diagnostics at all.**
       All 33 codes in `DiagnosticCodes.cs` mean "I couldn't read this syntax".

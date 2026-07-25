@@ -153,6 +153,16 @@ public static class ModelMerger
         return config is null ? entity : entity with { TableName = config.TableName, Schema = config.Schema };
     }
 
+    /// Fills in `modelBuilder.HasDefaultSchema(...)` only for an entity that didn't already get an
+    /// explicit schema from `ToTable`/`ToView` — those always win, since they're a per-entity override
+    /// of the model-wide default.
+    public static EntityModel ApplyDefaultSchema(EntityModel entity, string? defaultSchema)
+    {
+        return entity.Schema is null && defaultSchema is not null
+            ? entity with { Schema = defaultSchema }
+            : entity;
+    }
+
     public static EntityModel ApplyTemporal(EntityModel entity, IReadOnlyList<TemporalConfig> configs)
     {
         return configs.Any(c => c.EntityName == entity.Name)

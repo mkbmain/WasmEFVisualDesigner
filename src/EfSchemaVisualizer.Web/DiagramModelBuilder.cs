@@ -52,6 +52,8 @@ public static class DiagramModelBuilder
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
         var annotationRelationships = entityParser.ParseRelationships(classSource, entityResult.Value);
         var unrecognizedCalls = configParser.ParseUnrecognizedCalls(configSource);
+        var unrecognizedModelLevelCalls = configParser.ParseUnrecognizedModelLevelCalls(configSource);
+        var defaultSchema = configParser.ParseDefaultSchema(configSource);
 
         diagnostics.AddRange(maxLengths.Diagnostics);
         diagnostics.AddRange(precisions.Diagnostics);
@@ -82,6 +84,8 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(fluentRelationships.Diagnostics);
         diagnostics.AddRange(annotationRelationships.Diagnostics);
         diagnostics.AddRange(unrecognizedCalls);
+        diagnostics.AddRange(unrecognizedModelLevelCalls);
+        diagnostics.AddRange(defaultSchema.Diagnostics);
         diagnostics.AddRange(ownedTypeCalls.Diagnostics);
 
         var fluentIndexKeys = indexes.Value.Select(IndexDedupeKey).ToHashSet();
@@ -108,6 +112,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyTableMapping(entity, tables.Value.Tables))
             .Select(entity => ModelMerger.ApplyTemporal(entity, tables.Value.Temporal))
             .Select(entity => ModelMerger.ApplyViewMapping(entity, views.Value))
+            .Select(entity => ModelMerger.ApplyDefaultSchema(entity, defaultSchema.Value))
             .Select(entity => ModelMerger.ApplySqlQuery(entity, sqlQueries.Value))
             .Select(entity => entity.IsKeyless || fluentKeylessNames.Contains(entity.Name)
                 ? entity with { IsKeyless = true }

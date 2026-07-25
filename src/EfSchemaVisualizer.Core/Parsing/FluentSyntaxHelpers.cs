@@ -341,6 +341,65 @@ internal static class FluentSyntaxHelpers
             : null;
     }
 
+    /// Finds every name the source uses for its `ModelBuilder` — from the parameter of an
+    /// `OnModelCreating(ModelBuilder ...)` override (covers a file with model-level calls only, e.g.
+    /// just `modelBuilder.HasDefaultSchema(...)`, no `Entity&lt;T&gt;()` calls at all) and from every
+    /// identifier used as the receiver of a `receiver.Entity&lt;T&gt;(...)` call (covers a bare
+    /// fluent-config source with no `OnModelCreating` method, where the receiver name may differ).
+    private static HashSet<string> FindModelBuilderReceiverNames(CompilationUnitSyntax root)
+    {
+        var names = new HashSet<string>();
+
+        foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
+        {
+            if (method.Identifier.Text == "OnModelCreating"
+                && method.ParameterList.Parameters.SingleOrDefault() is { } parameter
+                && parameter.Type is IdentifierNameSyntax { Identifier.Text: "ModelBuilder" })
+            {
+                names.Add(parameter.Identifier.Text);
+            }
+        }
+
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (invocation.Expression is MemberAccessExpressionSyntax
+                {
+                    Expression: IdentifierNameSyntax receiver,
+                    Name: GenericNameSyntax { Identifier.Text: "Entity" },
+                })
+            {
+                names.Add(receiver.Identifier.Text);
+            }
+        }
+
+        return names;
+    }
+
+    /// Finds every invocation called directly on the `ModelBuilder` receiver itself — e.g.
+    /// `modelBuilder.HasDefaultSchema(...)`, `modelBuilder.HasSequence&lt;int&gt;(...)`,
+    /// `modelBuilder.ApplyConfigurationsFromAssembly(...)` — as opposed to a call chained onto an
+    /// `Entity&lt;T&gt;(...)` result or nested inside an entity's configuration scope. This also
+    /// yields the `Entity&lt;T&gt;(...)`/`Ignore&lt;T&gt;()` calls themselves, since they too are
+    /// called directly on the receiver; callers distinguish those by method name.
+    internal static IEnumerable<InvocationExpressionSyntax> FindModelLevelCalls(CompilationUnitSyntax root)
+    {
+        var modelBuilderNames = FindModelBuilderReceiverNames(root);
+
+        if (modelBuilderNames.Count == 0)
+        {
+            yield break;
+        }
+
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (invocation.Expression is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: var receiverName } }
+                && modelBuilderNames.Contains(receiverName))
+            {
+                yield return invocation;
+            }
+        }
+    }
+
     internal static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)
     {
         return invocation.Expression is MemberAccessExpressionSyntax
