@@ -22,7 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable", "OwnsOne", "OwnsMany", "HasName",
+        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -1487,6 +1487,7 @@ public sealed class FluentConfigParser
         InvocationExpressionSyntax? hasForeignKeyCall = null;
         InvocationExpressionSyntax? onDeleteCall = null;
         InvocationExpressionSyntax? usingEntityCall = null;
+        InvocationExpressionSyntax? hasConstraintNameCall = null;
 
         FluentSyntaxHelpers.WalkChainedTail(withCall, invocation =>
         {
@@ -1495,6 +1496,7 @@ public sealed class FluentConfigParser
                 case "HasForeignKey": hasForeignKeyCall = invocation; break;
                 case "OnDelete": onDeleteCall = invocation; break;
                 case "UsingEntity": usingEntityCall = invocation; break;
+                case "HasConstraintName": hasConstraintNameCall = invocation; break;
             }
         });
 
@@ -1598,6 +1600,26 @@ public sealed class FluentConfigParser
             }
         }
 
+        string? constraintName = null;
+        if (hasConstraintNameCall is not null)
+        {
+            var arg = hasConstraintNameCall.ArgumentList.Arguments.FirstOrDefault();
+
+            if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                constraintName = literal.Token.ValueText;
+            }
+            else
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticCodes.UnreadableHasConstraintNameArgument,
+                    "HasConstraintName argument is not a string literal and could not be read.",
+                    dependentEntity,
+                    PropertyName: null,
+                    (arg ?? (SyntaxNode)hasConstraintNameCall).Span));
+            }
+        }
+
         var joinEntityName = kind == RelationshipKind.ManyToMany ? TryGetGenericTypeArgument(usingEntityCall) : null;
 
         results.Add(new RelationshipConfig(
@@ -1608,7 +1630,8 @@ public sealed class FluentConfigParser
             dependentNavigation,
             foreignKeyProperties,
             onDeleteBehavior,
-            joinEntityName));
+            joinEntityName,
+            constraintName));
     }
 
     private static (string? EntityName, bool Resolved) ResolveRelatedEntity(

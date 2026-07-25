@@ -11,7 +11,8 @@ public sealed record RelationshipModel(
     IReadOnlyList<string>? ForeignKeyProperties = null,
     string? OnDeleteBehavior = null,
     string? JoinEntityName = null,
-    bool IsInferred = false)
+    bool IsInferred = false,
+    string? ConstraintName = null)
 {
     public IReadOnlyList<string> ForeignKeyProperties { get; init; } = ForeignKeyProperties ?? new List<string>();
 }

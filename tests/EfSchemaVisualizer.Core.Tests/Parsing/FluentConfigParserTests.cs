@@ -2172,6 +2172,84 @@ public class FluentConfigParserTests
         Assert.Equal("Restrict", relationship.OnDeleteBehavior);
     }
 
+    [Fact]
+    public void ParseRelationships_HasConstraintName_IsRead()
+    {
+        const string source = """
+            public class Ctx : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .HasForeignKey(d => d.CustomerId)
+                              .HasConstraintName("FK_Order_Customer");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal("FK_Order_Customer", relationship.ConstraintName);
+    }
+
+    [Fact]
+    public void ParseRelationships_HasConstraintName_UnreadableArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            public class Ctx : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .HasForeignKey(d => d.CustomerId)
+                              .HasConstraintName(someVariable);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasConstraintNameArgument, diagnostic.Code);
+        var relationship = Assert.Single(result.Value);
+        Assert.Null(relationship.ConstraintName);
+    }
+
+    [Fact]
+    public void ParseRelationships_NoHasConstraintName_ConstraintNameIsNull()
+    {
+        const string source = """
+            public class Ctx : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .HasForeignKey(d => d.CustomerId);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Null(relationship.ConstraintName);
+    }
+
     private static readonly IReadOnlyList<EntityModel> PersonAddressEntities = new List<EntityModel>
     {
         new("Person", new List<PropertyModel>
