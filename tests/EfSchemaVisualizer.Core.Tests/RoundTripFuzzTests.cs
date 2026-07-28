@@ -402,7 +402,7 @@ public class RoundTripFuzzTests
         """;
 
     [Fact]
-    public void ComputedColumnAndSequenceRoundTrip_EditingBothLeavesUnmodeledCheckConstraintUntouched()
+    public void ComputedColumnAndSequenceRoundTrip_EditingBothLeavesCheckConstraintUnchanged()
     {
         var editor = new DiagramEditor(ComputedSequenceEntitySource, ComputedSequenceConfigSource);
 
@@ -425,7 +425,7 @@ public class RoundTripFuzzTests
         var sequence = parser.ParseSequences(editor.ConfigSource).Value.Single(s => s.Name == "OrderNumbers");
         Assert.Equal(2000, sequence.StartsAt);
 
-        // The check constraint the parser doesn't model at all survives byte-for-byte.
+        // The check constraint this edit doesn't target survives byte-for-byte.
         Assert.Contains(
             "entity.HasCheckConstraint(\"CK_Order_Quantity\", \"[Quantity] >= 0\");",
             editor.ConfigSource);
