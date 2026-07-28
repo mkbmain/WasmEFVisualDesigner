@@ -22,7 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable", "OwnsOne", "OwnsMany", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
+        "SplitToTable", "OwnsOne", "OwnsMany", "ComplexProperty", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
     };
 
     /// Method names whose recognition depends on what they're chained onto — unlike every
@@ -1135,6 +1135,80 @@ public sealed class FluentConfigParser
 
         return builderLambda is not null && builderLambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any();
     }
+
+    /// Detects `ComplexProperty` calls per entity scope, mirroring `ParseOwnedTypeCalls` but without
+    /// the `IsMany` dimension — a complex type is always singular. If the resolved navigation
+    /// property's declared type is a collection shape (recognized by
+    /// `FluentSyntaxHelpers.TryGetElementTypeName`'s wrapper-name check), the call is NOT folded —
+    /// `ComplexPropertyCollectionUnsupported` is emitted instead and no `ComplexTypeConfig` is
+    /// produced for it, leaving the property to render as a plain scalar/class reference.
+    public ParseResult<IReadOnlyList<ComplexTypeConfig>> ParseComplexPropertyCalls(
+        string sourceCode, IReadOnlyList<EntityModel> entities)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+        var entitiesByName = entities.ToDictionary(e => e.Name);
+
+        var results = new List<ComplexTypeConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "ComplexProperty"))
+            {
+                var navigationPropertyName = FluentSyntaxHelpers.TryReadSinglePropertyNameArgument(call);
+
+                if (navigationPropertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which navigation property this ComplexProperty call configures.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                var isCollection = entitiesByName.TryGetValue(entityName, out var owner)
+                    && owner.Properties.FirstOrDefault(p => p.Name == navigationPropertyName) is { } navProperty
+                    && IsCollectionClrType(navProperty.ClrType);
+
+                if (isCollection)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.ComplexPropertyCollectionUnsupported,
+                        $"ComplexProperty targets a collection-typed navigation property ('{navigationPropertyName}'), which isn't supported; left unfolded.",
+                        entityName,
+                        navigationPropertyName,
+                        call.Span));
+                    continue;
+                }
+
+                results.Add(new ComplexTypeConfig(entityName, navigationPropertyName));
+
+                if (HasNestedConfigCalls(call))
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.ComplexNestedConfigIgnored,
+                        "Configuration inside this ComplexProperty call's builder is not read and was ignored.",
+                        entityName,
+                        navigationPropertyName,
+                        call.Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<ComplexTypeConfig>>(results, diagnostics);
+    }
+
+    /// True when `clrType` is a recognized collection-wrapper shape or an array — reuses
+    /// `FluentSyntaxHelpers.TryGetElementTypeName`'s wrapper-name allowlist so "collection" is
+    /// defined identically everywhere in this codebase (ICollection/IList/List/IEnumerable/HashSet/ISet/T[]).
+    private static bool IsCollectionClrType(string clrType) =>
+        clrType.EndsWith("[]", System.StringComparison.Ordinal)
+        || (clrType.IndexOf('<') is var openIdx && openIdx >= 0
+            && FluentSyntaxHelpers.TryGetElementTypeName(clrType) is not null
+            && FluentSyntaxHelpers.TryGetElementTypeName(clrType) != clrType);
 
     public ParseResult<IReadOnlyList<ColumnNameConfig>> ParseColumnNames(string sourceCode)
     {

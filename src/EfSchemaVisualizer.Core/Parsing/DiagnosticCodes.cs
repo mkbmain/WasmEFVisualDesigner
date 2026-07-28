@@ -42,6 +42,8 @@ public static class DiagnosticCodes
     public const string ArchiveGeneratedFileExcluded = nameof(ArchiveGeneratedFileExcluded);
     public const string ArchiveBuildArtifactSkipped = nameof(ArchiveBuildArtifactSkipped);
     public const string OwnedNestedConfigIgnored = nameof(OwnedNestedConfigIgnored);
+    public const string ComplexPropertyCollectionUnsupported = nameof(ComplexPropertyCollectionUnsupported);
+    public const string ComplexNestedConfigIgnored = nameof(ComplexNestedConfigIgnored);
     public const string UnreadableHasDefaultSchemaArgument = nameof(UnreadableHasDefaultSchemaArgument);
     public const string UnreadableHasSequenceArgument = nameof(UnreadableHasSequenceArgument);
     public const string UnreadableUseSequenceArgument = nameof(UnreadableUseSequenceArgument);
