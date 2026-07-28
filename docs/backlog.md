@@ -488,8 +488,8 @@
       `HasSequence(...).HasName(...)`. Previously these fired diagnostics
       alerting the user the construct wasn't understood. New
       `ContextSensitiveCallNames` map (ownerCallName, chainedName) pairs,
-      limiting `HasName` recognition to `HasKey`, `HasIndex`, and the
-      newly-added `HasSequence`, so these constructs now correctly re-surface
+      limiting `HasName` recognition to `HasKey` and `HasIndex`, so
+      `HasAlternateKey(...).HasName(...)` now correctly re-surfaces
       `UnrecognizedConfigCall` diagnostics again. Future maintainers extending
       `ContextSensitiveCallNames` should follow this same pair pattern.
 
@@ -497,10 +497,15 @@
       `Type`-first-argument overload (`HasSequence(Type clrType, string name,
       ...)`) is not parsed — only the generic `HasSequence<T>(...)` and the
       plain `HasSequence(string name, ...)` (no type) overloads are.
-      `HasAlternateKey` and `HasSequence` naming via chained `.HasName(...)`
-      remain unparsed/unsupported (only `HasKey`/`HasIndex` chains are read);
-      the scoping fix means these now correctly re-surface as
-      `UnrecognizedConfigCall` diagnostics instead of silently dropping the name.
+      `HasAlternateKey` naming via chained `.HasName(...)` is now correctly
+      re-flagged as `UnrecognizedConfigCall` (scoping fix for entity-scoped
+      constructs). `HasSequence(...).HasName(...)` is a separate, model-level
+      construct not added to the scoping table; it remains a known gap where
+      neither `ParseUnrecognizedCalls` (entity-scoped only) nor
+      `ParseUnrecognizedModelLevelCalls` (only inspects calls made directly on
+      modelBuilder, not their chained tails) ever visits the chained
+      `.HasName(...)`, producing no diagnostic at all — this is pre-existing,
+      documented, acceptable behavior unrelated to this fix.
 - [ ] **`[found]` Owned & complex types:** `OwnsOne`, `OwnsMany`,
       `ComplexProperty`. See W3 — currently actively misleading, not just absent.
 - [ ] **`[found]` Inheritance:** `HasDiscriminator` / `HasValue`, TPT
