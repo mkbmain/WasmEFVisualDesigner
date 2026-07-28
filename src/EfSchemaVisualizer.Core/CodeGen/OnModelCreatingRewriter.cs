@@ -1880,6 +1880,14 @@ public sealed class OnModelCreatingRewriter
             return (configureMethod.Body, configureMethod.ParameterList.Parameters.Single().Identifier.Text);
         }
 
+        if (scope is BlockSyntax { Parent: SimpleLambdaExpressionSyntax builderLambda } builderBlock)
+        {
+            // An OwnsOne/OwnsMany/ComplexProperty builder-lambda block, as returned by
+            // FindOrCreateOwnedConfigScope — the scope IS the block itself, not an invocation
+            // wrapping one, so the receiver name comes from the enclosing lambda's parameter.
+            return (builderBlock, builderLambda.Parameter.Identifier.Text);
+        }
+
         throw new InvalidOperationException($"Unsupported configuration scope node type: {scope.GetType().Name}");
     }
 
@@ -1894,6 +1902,145 @@ public sealed class OnModelCreatingRewriter
             .Where(s => s.EntityName == entityName)
             .Select(s => s.Scope)
             .ToList();
+    }
+
+    /// Locates the builder-lambda block of an existing `OwnsOne(nav, builder)`/`OwnsMany(nav, builder)`/
+    /// `ComplexProperty(nav, builder)` call for `navPropertyName` within `ownerEntityName`'s own
+    /// Entity&lt;T&gt;()/Configure scope(s), or synthesizes one by adding a second lambda argument to a
+    /// currently-bare `OwnsOne(nav)`-shaped call if the call exists but has no builder lambda yet.
+    /// Mirrors FindConfigScopes/InsertEntityBlock's "find, else synthesize" shape for Entity&lt;T&gt;(), but
+    /// targets the call's own builder lambda instead of a top-level Entity&lt;T&gt;() block — a plain
+    /// InsertEntityBlock-style `modelBuilder.Entity&lt;Address&gt;(...)` would be wrong here, since Address
+    /// isn't a real top-level Entity&lt;T&gt;() target once it's owned/complex-folded.
+    /// Returns null if no OwnsOne/OwnsMany/ComplexProperty call targeting `navPropertyName` exists
+    /// anywhere in `ownerEntityName`'s scope(s) — callers should surface this as an edit failure
+    /// rather than silently no-op'ing.
+    private static (SyntaxNode Scope, CompilationUnitSyntax NewRoot)? FindOrCreateOwnedConfigScope(
+        CompilationUnitSyntax root, string ownerEntityName, string navPropertyName)
+    {
+        var ownerScopes = FindConfigScopes(root, ownerEntityName);
+
+        foreach (var callName in new[] { "OwnsOne", "OwnsMany", "ComplexProperty" })
+        {
+            var call = ownerScopes
+                .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+                .FirstOrDefault(c => FluentSyntaxHelpers.TryReadSinglePropertyNameArgument(c) == navPropertyName);
+
+            if (call is null)
+            {
+                continue;
+            }
+
+            var builderLambda = call.ArgumentList.Arguments
+                .Select(a => a.Expression)
+                .OfType<AnonymousFunctionExpressionSyntax>()
+                .Skip(1)
+                .FirstOrDefault();
+
+            if (builderLambda?.Block is { } existingBlock)
+            {
+                return (existingBlock, root);
+            }
+
+            // Bare OwnsOne(e => e.Foo) — synthesize the second (builder) lambda argument:
+            // OwnsOne(e => e.Foo, b => { }).
+            var navLambdaParam = call.ArgumentList.Arguments[0].Expression is SimpleLambdaExpressionSyntax navLambda
+                ? navLambda.Parameter.Identifier.Text
+                : "e";
+            var builderParamName = navLambdaParam == "b" ? "builder" : "b";
+
+            var newBlock = SyntaxFactory.Block();
+            var newBuilderArgument = SyntaxFactory.Argument(
+                SyntaxFactory.SimpleLambdaExpression(
+                    SyntaxFactory.Parameter(SyntaxFactory.Identifier(builderParamName)),
+                    newBlock));
+
+            var newCall = call.WithArgumentList(
+                call.ArgumentList.WithArguments(call.ArgumentList.Arguments.Add(newBuilderArgument)));
+
+            var newRoot = (CompilationUnitSyntax)root.ReplaceNode(call, newCall);
+
+            // Re-locate the block in the new tree (the old `newBlock` node instance isn't part of
+            // `newRoot` — ReplaceNode produces fresh nodes throughout the ancestor chain) by
+            // re-running the same lookup against it.
+            var relocatedCall = FindConfigScopes(newRoot, ownerEntityName)
+                .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+                .First(c => FluentSyntaxHelpers.TryReadSinglePropertyNameArgument(c) == navPropertyName);
+            var relocatedBlock = ((SimpleLambdaExpressionSyntax)relocatedCall.ArgumentList.Arguments[1].Expression).Block!;
+
+            return (relocatedBlock, newRoot);
+        }
+
+        return null;
+    }
+
+    /// Representative public entry point exercising the new scope resolver — this is the minimal
+    /// slice needed to prove FindOrCreateOwnedConfigScope works; Task 3.4 wires DiagramEditor's real
+    /// attribute-edit call sites (SetColumnName, RewriteMaxLength, etc.) through the same
+    /// find-scope-or-owned-scope branch instead of duplicating this per method.
+    public string SetColumnNameOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string columnName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var resolved = FindOrCreateOwnedConfigScope(root, ownerEntityName, navPropertyName)
+            ?? throw new InvalidOperationException(
+                $"No OwnsOne/OwnsMany/ComplexProperty call for '{navPropertyName}' found on '{ownerEntityName}'.");
+
+        var (scope, newRoot) = resolved;
+
+        var existingColumnNameCall = FluentSyntaxHelpers.FindCallsNamed(scope, "HasColumnName")
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingColumnNameCall is not null)
+        {
+            var newArgument = SyntaxFactory.Argument(
+                SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(columnName)));
+            var newCall = existingColumnNameCall.WithArgumentList(
+                existingColumnNameCall.ArgumentList.WithArguments(SyntaxFactory.SingletonSeparatedList(newArgument)));
+            return newRoot.ReplaceNode(existingColumnNameCall, newCall).NormalizeWhitespace().ToFullString();
+        }
+
+        var existingPropertyCall = FluentSyntaxHelpers.FindCallsNamed(scope, "Property")
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+
+        ExpressionSyntax propertyCallExpression = existingPropertyCall
+            ?? SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("Property")),
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.SimpleLambdaExpression(
+                                SyntaxFactory.Parameter(SyntaxFactory.Identifier(propertyLambdaParam)),
+                                SyntaxFactory.MemberAccessExpression(
+                                    SyntaxKind.SimpleMemberAccessExpression,
+                                    SyntaxFactory.IdentifierName(propertyLambdaParam),
+                                    SyntaxFactory.IdentifierName(propertyName)))))));
+
+        var columnNameCall = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression, propertyCallExpression, SyntaxFactory.IdentifierName("HasColumnName")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(columnName))))));
+
+        var newStatement = SyntaxFactory.ExpressionStatement(columnNameCall);
+
+        if (existingPropertyCall is not null)
+        {
+            return newRoot.ReplaceNode(existingPropertyCall, columnNameCall).NormalizeWhitespace().ToFullString();
+        }
+
+        var newBlock = block.AddStatements(newStatement);
+        return newRoot.ReplaceNode(block, newBlock).NormalizeWhitespace().ToFullString();
     }
 
     private static ExpressionStatementSyntax BuildEntityInvocationStatement(string modelBuilderParamName, string entityName, BlockSyntax block)
