@@ -150,20 +150,16 @@
             {
                 _lastOwnerNav = null;
             }
-            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "") @(property.FoldKind != FoldKind.None ? "opacity: 0.75;" : "")">
+            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "") @(property.FoldKind != FoldKind.None ? "opacity: 0.9;" : "")">
                 @if (property.FoldKind == FoldKind.Owned)
                 {
-                    <span title="Folded in from the owned type via @property.OwnerNavigationProperty. Read-only.">
-                        <span style="opacity: 0.6; margin-right: 2px;">◆</span>@property.Name : @property.ClrType@(property.IsNullable ? "?" : "")
-                    </span>
+                    <span style="opacity: 0.6; margin-right: 2px;" title="Folded in from the owned type via @property.OwnerNavigationProperty.">◆</span>
                 }
                 else if (property.FoldKind == FoldKind.Complex)
                 {
-                    <span title="Folded in from the complex type via @property.OwnerNavigationProperty. Read-only.">
-                        <span style="opacity: 0.6; margin-right: 2px; color: #4a8a6a;">●</span>@property.Name : @property.ClrType@(property.IsNullable ? "?" : "")
-                    </span>
+                    <span style="opacity: 0.6; margin-right: 2px; color: #4a8a6a;" title="Folded in from the complex type via @property.OwnerNavigationProperty.">●</span>
                 }
-                else if (property.IsShadow)
+                @if (property.IsShadow)
                 {
                     <span class="shadow-property" title="Shadow property: configured in code but has no matching CLR member. Read-only here."
                           style="font-style: italic; color: #888;">@property.Name : @property.ClrType@(property.IsNullable ? "?" : "") (shadow)</span>
