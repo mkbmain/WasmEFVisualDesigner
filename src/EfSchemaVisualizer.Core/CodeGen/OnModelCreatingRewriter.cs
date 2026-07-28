@@ -2445,4 +2445,106 @@ public sealed class OnModelCreatingRewriter
         var newRoot = root.RemoveNodes(nodesToRemove, SyntaxRemoveOptions.KeepNoTrivia)!;
         return newRoot.NormalizeWhitespace().ToFullString();
     }
+
+    public string AddCheckConstraint(string sourceCode, string entityName, string name, string sql)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            var (block, blockReceiverName) = GetScopeBlockAndReceiver(existingScope);
+            var newStatement = BuildCheckConstraintStatement(blockReceiverName, name, sql);
+            var newBlock = block.AddStatements(newStatement);
+
+            var newRoot = root.ReplaceNode(block, newBlock);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var method = FindOnModelCreatingMethod(root);
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+        var checkConstraintStatement = BuildCheckConstraintStatement("entity", name, sql);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(checkConstraintStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot2 = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot2.NormalizeWhitespace().ToFullString();
+    }
+
+    public string SetCheckConstraint(string sourceCode, string entityName, string oldName, string newName, string newSql)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasCheckConstraint"))
+            .FirstOrDefault(call => IsCheckConstraintNamed(call, oldName));
+
+        if (existingCall is null)
+        {
+            return sourceCode;
+        }
+
+        var newArguments = SyntaxFactory.SeparatedList(new[]
+        {
+            SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(newName))),
+            SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(newSql))),
+        });
+
+        var newCall = existingCall.WithArgumentList(existingCall.ArgumentList.WithArguments(newArguments));
+        var newRoot = root.ReplaceNode(existingCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string RemoveCheckConstraint(string sourceCode, string entityName, string name)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasCheckConstraint"))
+            .FirstOrDefault(call => IsCheckConstraintNamed(call, name));
+
+        if (existingCall is null)
+        {
+            return sourceCode;
+        }
+
+        var statement = existingCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static bool IsCheckConstraintNamed(InvocationExpressionSyntax call, string name)
+    {
+        var nameArg = call.ArgumentList.Arguments.FirstOrDefault();
+        return nameArg?.Expression is LiteralExpressionSyntax literal
+            && literal.IsKind(SyntaxKind.StringLiteralExpression)
+            && literal.Token.ValueText == name;
+    }
+
+    private static ExpressionStatementSyntax BuildCheckConstraintStatement(string blockReceiverName, string name, string sql)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("HasCheckConstraint")),
+                SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[]
+                {
+                    SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(name))),
+                    SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(sql))),
+                }))));
+    }
 }

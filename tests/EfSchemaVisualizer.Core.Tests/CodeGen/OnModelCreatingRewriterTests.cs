@@ -3128,4 +3128,67 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("expression-bodied", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Configure", exception.Message);
     }
+
+    private const string SourceWithEmptyOrderScope = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void AddCheckConstraint_NoExisting_InsertsStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddCheckConstraint(SourceWithEmptyOrderScope, entityName: "Order", name: "CK_Order_Quantity", sql: "[Quantity] >= 0");
+
+        Assert.Contains("entity.HasCheckConstraint(\"CK_Order_Quantity\", \"[Quantity] >= 0\")", result);
+    }
+
+    [Fact]
+    public void AddCheckConstraint_SecondOne_AppendsWithoutRemovingFirst()
+    {
+        var source = new OnModelCreatingRewriter()
+            .AddCheckConstraint(SourceWithEmptyOrderScope, entityName: "Order", name: "CK_Order_Quantity", sql: "[Quantity] >= 0");
+
+        var result = new OnModelCreatingRewriter()
+            .AddCheckConstraint(source, entityName: "Order", name: "CK_Order_Total", sql: "[Total] >= 0");
+
+        Assert.Contains("CK_Order_Quantity", result);
+        Assert.Contains("CK_Order_Total", result);
+    }
+
+    [Fact]
+    public void SetCheckConstraint_ExistingName_ReplacesNameAndSql()
+    {
+        var source = new OnModelCreatingRewriter()
+            .AddCheckConstraint(SourceWithEmptyOrderScope, entityName: "Order", name: "CK_Order_Quantity", sql: "[Quantity] >= 0");
+
+        var result = new OnModelCreatingRewriter()
+            .SetCheckConstraint(source, entityName: "Order", oldName: "CK_Order_Quantity", newName: "CK_Order_Qty", newSql: "[Quantity] > 0");
+
+        Assert.Contains("entity.HasCheckConstraint(\"CK_Order_Qty\", \"[Quantity] > 0\")", result);
+        Assert.DoesNotContain("CK_Order_Quantity", result);
+    }
+
+    [Fact]
+    public void RemoveCheckConstraint_ExistingName_RemovesOnlyThatStatement()
+    {
+        var source = new OnModelCreatingRewriter()
+            .AddCheckConstraint(SourceWithEmptyOrderScope, entityName: "Order", name: "CK_Order_Quantity", sql: "[Quantity] >= 0");
+        source = new OnModelCreatingRewriter()
+            .AddCheckConstraint(source, entityName: "Order", name: "CK_Order_Total", sql: "[Total] >= 0");
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveCheckConstraint(source, entityName: "Order", name: "CK_Order_Quantity");
+
+        Assert.DoesNotContain("CK_Order_Quantity", result);
+        Assert.Contains("CK_Order_Total", result);
+    }
 }
