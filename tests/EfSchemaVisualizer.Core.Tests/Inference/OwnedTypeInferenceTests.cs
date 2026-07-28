@@ -146,6 +146,40 @@ public class OwnedTypeInferenceTests
     }
 
     [Fact]
+    public void Fold_OwnsOne_StampsDeclaringEntityNameToTargetType()
+    {
+        var order = new EntityModel("Order", new[] { Property("Id", "int"), Property("ShippingAddress", "Address") });
+        var address = new EntityModel("Address", new[] { Property("Street", "string") });
+
+        var result = OwnedTypeInference.Fold(
+            new[] { order, address },
+            new[] { new OwnedTypeConfig("Order", "ShippingAddress", IsMany: false) });
+
+        var street = result.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Street");
+        Assert.Equal("Address", street.DeclaringEntityName);
+    }
+
+    [Fact]
+    public void Fold_MultiLevelOwnedChain_PreservesInnerDeclaringEntityNameOnOuterReSplice()
+    {
+        var order = new EntityModel("Order", new[] { Property("ShippingAddress", "Address") });
+        var address = new EntityModel("Address", new[] { Property("Street", "string"), Property("Country", "Country") });
+        var country = new EntityModel("Country", new[] { Property("Name", "string") });
+
+        var result = OwnedTypeInference.Fold(
+            new[] { order, address, country },
+            new[]
+            {
+                new OwnedTypeConfig("Order", "ShippingAddress", IsMany: false),
+                new OwnedTypeConfig("Address", "Country", IsMany: false),
+            });
+
+        var foldedOrder = Assert.Single(result.Entities);
+        Assert.Equal("Address", foldedOrder.Properties.Single(p => p.Name == "Street").DeclaringEntityName);
+        Assert.Equal("Country", foldedOrder.Properties.Single(p => p.Name == "Name").DeclaringEntityName);
+    }
+
+    [Fact]
     public void Fold_OwnsMany_KeepsTargetStandaloneMarkedOwnedAndEmitsOwnedRelationship()
     {
         var order = new EntityModel("Order", new[] { Property("Notes", "ICollection<OrderNote>") });

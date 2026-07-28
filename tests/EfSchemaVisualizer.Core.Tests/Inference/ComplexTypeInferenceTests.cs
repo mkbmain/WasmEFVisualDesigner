@@ -76,6 +76,20 @@ public class ComplexTypeInferenceTests
     }
 
     [Fact]
+    public void Fold_ComplexProperty_StampsDeclaringEntityNameToTargetType()
+    {
+        var order = new EntityModel("Order", new[] { Property("ShippingAddress", "Address") });
+        var address = new EntityModel("Address", new[] { Property("Street", "string") });
+
+        var result = ComplexTypeInference.Fold(
+            new[] { order, address },
+            new[] { new ComplexTypeConfig("Order", "ShippingAddress") });
+
+        var street = result.Entities.Single().Properties.Single(p => p.Name == "Street");
+        Assert.Equal("Address", street.DeclaringEntityName);
+    }
+
+    [Fact]
     public void Fold_MalformedComplexCycle_DoesNotThrowAndStopsAtCycle()
     {
         var a = new EntityModel("A", new[] { Property("BNav", "B") });

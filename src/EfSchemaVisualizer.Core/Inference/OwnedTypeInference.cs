@@ -74,6 +74,7 @@ public static class OwnedTypeInference
                     {
                         FoldKind = FoldKind.Owned,
                         OwnerNavigationProperty = call.NavigationPropertyName,
+                        DeclaringEntityName = p.DeclaringEntityName ?? targetName,
                     }))
                     .ToList();
 

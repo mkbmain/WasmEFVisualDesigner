@@ -62,6 +62,7 @@ public static class ComplexTypeInference
                     {
                         FoldKind = FoldKind.Complex,
                         OwnerNavigationProperty = call.NavigationPropertyName,
+                        DeclaringEntityName = p.DeclaringEntityName ?? targetName,
                     }))
                     .ToList();
 
