@@ -690,6 +690,31 @@ public class FluentConfigParserTests
         Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCodes.UnrecognizedConfigCall && d.Message.Contains("HasName"));
     }
 
+    private const string HasIndexWithIsUniqueThenHasNameSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasIndex(e => e.Email).IsUnique().HasName("IX_Person_Email");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUnrecognizedCalls_HasNameChainedOntoHasIndexThroughIsUnique_IsNotFlagged()
+    {
+        // `.HasName(...)` here is chained onto `.IsUnique()`, not directly onto `.HasIndex(...)`.
+        // GetOwnerCallName must walk down through the intermediate `.IsUnique()` modifier to the
+        // chain's root (`HasIndex`) rather than resolving the "owner" to `IsUnique` (which isn't
+        // in HasName's allowed-owners set) and wrongly flagging this legitimate construct.
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(HasIndexWithIsUniqueThenHasNameSource);
+
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCodes.UnrecognizedConfigCall && d.Message.Contains("HasName"));
+    }
+
     private const string SequenceWithHasNameSource = """
         public class AppDbContext : DbContext
         {

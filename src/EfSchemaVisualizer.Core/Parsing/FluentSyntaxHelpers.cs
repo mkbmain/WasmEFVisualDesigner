@@ -307,14 +307,28 @@ internal static class FluentSyntaxHelpers
                 : null;
     }
 
-    /// Returns the method name of the invocation `call` is chained onto — e.g. given the
-    /// `HasName` call in `entity.HasKey(e => e.Id).HasName("PK_Id")`, returns "HasKey". Returns
-    /// null when `call` is chained directly onto the entity/builder receiver (an identifier),
-    /// not onto another invocation.
+    /// Returns the method name of the invocation the fluent chain containing `call` is ROOTED
+    /// in — e.g. given the `HasName` call in `entity.HasKey(e => e.Id).HasName("PK_Id")`, returns
+    /// "HasKey"; given the `HasName` call in
+    /// `entity.HasIndex(e => e.Email).IsUnique().HasName("IX_Person_Email")` (where `HasName` is
+    /// chained onto `IsUnique()`, not directly onto `HasIndex(...)`), still returns "HasIndex" by
+    /// walking down through every intermediate modifier call to the chain's root. Returns null
+    /// when `call` is chained directly onto the entity/builder receiver (an identifier), not onto
+    /// another invocation at all.
     internal static string? GetOwnerCallName(InvocationExpressionSyntax call)
     {
-        return call.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner }
-            && inner.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var ownerName }
+        if (call.Expression is not MemberAccessExpressionSyntax { Expression: var receiver }
+            || receiver is not InvocationExpressionSyntax current)
+        {
+            return null;
+        }
+
+        while (current.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner })
+        {
+            current = inner;
+        }
+
+        return current.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var ownerName }
             ? ownerName
             : null;
     }
