@@ -2593,7 +2593,22 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(withoutExisting);
         var root = tree.GetCompilationUnitRoot();
 
-        var method = FindOnModelCreatingMethod(root);
+        var method = TryFindOnModelCreatingMethod(root);
+
+        if (method is null)
+        {
+            // Bare fluent-config source: just top-level `modelBuilder.HasSequence(...)`-shaped
+            // statements, with no wrapping OnModelCreating method or DbContext class at all - the
+            // form the app's own sample data and pasted-snippet workflow both use (see
+            // AddEntity's identical bare-config branch). There's no method body to append into,
+            // so append the new sequence statement as another top-level statement instead.
+            var bareModelBuilderParamName = FindBareReceiverName(root) ?? "modelBuilder";
+            var bareStatement = SyntaxFactory.ExpressionStatement(
+                BuildSequenceExpression(bareModelBuilderParamName, name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic));
+            var newBareRoot = root.AddMembers(SyntaxFactory.GlobalStatement(bareStatement));
+            return newBareRoot.NormalizeWhitespace().ToFullString();
+        }
+
         var methodBody = method.Body
             ?? throw new InvalidOperationException("OnModelCreating has no method body.");
 
@@ -2623,7 +2638,16 @@ public sealed class OnModelCreatingRewriter
 
         var outermostChainedCall = FindOutermostChainedCall(existingCall);
         var statement = outermostChainedCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
-        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+
+        // Bare top-level fluent statements (no wrapping class/method) are parsed as
+        // GlobalStatementSyntax. Removing only the inner ExpressionStatementSyntax leaves the
+        // GlobalStatementSyntax with a null Statement child, which Roslyn rejects (see
+        // RemoveEntity's identical fix above).
+        SyntaxNode nodeToRemove = statement.Parent is GlobalStatementSyntax globalStatement
+            ? globalStatement
+            : statement;
+
+        var newRoot = root.RemoveNode(nodeToRemove, SyntaxRemoveOptions.KeepNoTrivia)!;
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 

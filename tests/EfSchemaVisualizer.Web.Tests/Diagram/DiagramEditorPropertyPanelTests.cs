@@ -745,4 +745,69 @@ public class DiagramEditorPropertyPanelTests
         Assert.True(result.Success);
         Assert.Equal(configSourceBefore, editor.ConfigSource);
     }
+
+    [Fact]
+    public void AddCheckConstraint_NameAndSqlWithSurroundingWhitespace_AreTrimmed()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddCheckConstraint("Person", "  CK_Person_Name  ", "  LEN([Name]) > 0  ");
+
+        Assert.True(result.Success);
+        var constraint = editor.Current.Entities.Single().CheckConstraints.Single();
+        Assert.Equal("CK_Person_Name", constraint.Name);
+        Assert.Equal("LEN([Name]) > 0", constraint.Sql);
+    }
+
+    [Fact]
+    public void SetCheckConstraint_NameAndSqlWithSurroundingWhitespace_AreTrimmed()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddCheckConstraint("Person", "CK_Person_Name", "LEN([Name]) > 0");
+
+        var result = editor.SetCheckConstraint("Person", "CK_Person_Name", "  CK_Person_NonEmptyName  ", "  LEN([Name]) >= 1  ");
+
+        Assert.True(result.Success);
+        var constraint = editor.Current.Entities.Single().CheckConstraints.Single();
+        Assert.Equal("CK_Person_NonEmptyName", constraint.Name);
+        Assert.Equal("LEN([Name]) >= 1", constraint.Sql);
+    }
+
+    [Fact]
+    public void SetCheckConstraint_SameNameAndSql_IsNoOp()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddCheckConstraint("Person", "CK_Person_Name", "LEN([Name]) > 0");
+        var configSourceBefore = editor.ConfigSource;
+
+        var result = editor.SetCheckConstraint("Person", "CK_Person_Name", "CK_Person_Name", "LEN([Name]) > 0");
+
+        Assert.True(result.Success);
+        Assert.Equal(configSourceBefore, editor.ConfigSource);
+    }
+
+    [Fact]
+    public void AddSequence_NameWithSurroundingWhitespace_IsTrimmed()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddSequence("  PersonIds  ", schema: null, clrType: "int", startsAt: 1, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        Assert.True(result.Success);
+        var sequence = editor.Current.Sequences.Single();
+        Assert.Equal("PersonIds", sequence.Name);
+    }
+
+    [Fact]
+    public void SetSequence_SameValues_IsNoOp()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddSequence("PersonIds", "shared", "int", 1, null, null, null, null);
+        var configSourceBefore = editor.ConfigSource;
+
+        var result = editor.SetSequence("PersonIds", "shared", "int", 1, null, null, null, null);
+
+        Assert.True(result.Success);
+        Assert.Equal(configSourceBefore, editor.ConfigSource);
+    }
 }

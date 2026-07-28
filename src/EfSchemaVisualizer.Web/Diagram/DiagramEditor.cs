@@ -568,17 +568,20 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
         }
 
-        if (string.IsNullOrWhiteSpace(name))
+        var normalizedName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        var normalizedSql = string.IsNullOrWhiteSpace(sql) ? null : sql.Trim();
+
+        if (normalizedName is null)
         {
             return DiagramEditResult.Fail("Check constraint name cannot be empty.");
         }
 
-        if (entity.CheckConstraints.Any(c => c.Name == name))
+        if (entity.CheckConstraints.Any(c => c.Name == normalizedName))
         {
-            return DiagramEditResult.Fail($"'{entityName}' already has a check constraint named '{name}'.");
+            return DiagramEditResult.Fail($"'{entityName}' already has a check constraint named '{normalizedName}'.");
         }
 
-        var newConfigSource = _configRewriter.AddCheckConstraint(ConfigSource, entityName, name, sql);
+        var newConfigSource = _configRewriter.AddCheckConstraint(ConfigSource, entityName, normalizedName, normalizedSql ?? sql);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -591,22 +594,31 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
         }
 
-        if (!entity.CheckConstraints.Any(c => c.Name == oldName))
+        var existing = entity.CheckConstraints.FirstOrDefault(c => c.Name == oldName);
+        if (existing is null)
         {
             return DiagramEditResult.Fail($"'{entityName}' has no check constraint named '{oldName}'.");
         }
 
-        if (string.IsNullOrWhiteSpace(newName))
+        var normalizedNewName = string.IsNullOrWhiteSpace(newName) ? null : newName.Trim();
+        var normalizedNewSql = string.IsNullOrWhiteSpace(newSql) ? null : newSql.Trim();
+
+        if (normalizedNewName is null)
         {
             return DiagramEditResult.Fail("Check constraint name cannot be empty.");
         }
 
-        if (newName != oldName && entity.CheckConstraints.Any(c => c.Name == newName))
+        if (normalizedNewName != oldName && entity.CheckConstraints.Any(c => c.Name == normalizedNewName))
         {
-            return DiagramEditResult.Fail($"'{entityName}' already has a check constraint named '{newName}'.");
+            return DiagramEditResult.Fail($"'{entityName}' already has a check constraint named '{normalizedNewName}'.");
         }
 
-        var newConfigSource = _configRewriter.SetCheckConstraint(ConfigSource, entityName, oldName, newName, newSql);
+        if (normalizedNewName == existing.Name && normalizedNewSql == existing.Sql)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetCheckConstraint(ConfigSource, entityName, oldName, normalizedNewName, normalizedNewSql ?? newSql);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1381,19 +1393,21 @@ public sealed class DiagramEditor
         string name, string? schema, string? clrType,
         long? startsAt, int? incrementsBy, long? minValue, long? maxValue, bool? isCyclic)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        var normalizedName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+
+        if (normalizedName is null)
         {
             return DiagramEditResult.Fail("Sequence name cannot be empty.");
         }
 
-        if (Current.Sequences.Any(s => s.Name == name))
+        if (Current.Sequences.Any(s => s.Name == normalizedName))
         {
-            return DiagramEditResult.Fail($"A sequence named '{name}' already exists.");
+            return DiagramEditResult.Fail($"A sequence named '{normalizedName}' already exists.");
         }
 
         var normalizedSchema = string.IsNullOrWhiteSpace(schema) ? null : schema.Trim();
         var normalizedClrType = string.IsNullOrWhiteSpace(clrType) ? null : clrType.Trim();
-        var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, normalizedSchema, normalizedClrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
+        var newConfigSource = _configRewriter.SetSequence(ConfigSource, normalizedName, normalizedSchema, normalizedClrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1402,13 +1416,26 @@ public sealed class DiagramEditor
         string name, string? schema, string? clrType,
         long? startsAt, int? incrementsBy, long? minValue, long? maxValue, bool? isCyclic)
     {
-        if (!Current.Sequences.Any(s => s.Name == name))
+        var existing = Current.Sequences.FirstOrDefault(s => s.Name == name);
+        if (existing is null)
         {
             return DiagramEditResult.Fail($"No sequence named '{name}' exists.");
         }
 
         var normalizedSchema = string.IsNullOrWhiteSpace(schema) ? null : schema.Trim();
         var normalizedClrType = string.IsNullOrWhiteSpace(clrType) ? null : clrType.Trim();
+
+        if (normalizedSchema == existing.Schema
+            && normalizedClrType == existing.ClrType
+            && startsAt == existing.StartsAt
+            && incrementsBy == existing.IncrementsBy
+            && minValue == existing.MinValue
+            && maxValue == existing.MaxValue
+            && isCyclic == existing.IsCyclic)
+        {
+            return DiagramEditResult.Ok();
+        }
+
         var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, normalizedSchema, normalizedClrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();

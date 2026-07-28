@@ -258,6 +258,18 @@ public sealed class FluentConfigParser
                             isCyclic = false;
                         }
                         break;
+                    default:
+                        // Anything chained onto HasSequence(...) that isn't one of the five known
+                        // options above (e.g. HasName, or any other EF sequence configuration call)
+                        // is silently dropped when SetSequence rebuilds the chain from only the
+                        // known values - flag it instead of letting it disappear without a trace.
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnrecognizedConfigCall,
+                            $"'{methodName}' is not a recognized configuration call and was ignored.",
+                            EntityName: null,
+                            PropertyName: null,
+                            chained.Span));
+                        break;
                 }
             });
 

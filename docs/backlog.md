@@ -465,19 +465,24 @@
       `ModelMerger.ApplyComputedColumnSqls`, rewritten by
       `OnModelCreatingRewriter.SetComputedColumnSql` / `RemoveComputedColumnSql`,
       edited via `DiagramEditor.SetComputedColumnSql`, and UI-exposed in
-      `EntityNode.razor` as "Computed column SQL"). New model-level
-      `CheckConstraintModel` and entity-scoped parsing/merging/rewriting
-      (parser: `ParseCheckConstraints`; merger: `ApplyCheckConstraints`; rewriter:
-      `SetCheckConstraint` / `RemoveCheckConstraint`; editor:
-      `AddCheckConstraint` / `RemoveCheckConstraint`; UI: `EntityNode.razor`
+      `EntityNode.razor` as "Computed column SQL"). New entity-level
+      `CheckConstraintModel` (`EntityModel.CheckConstraints`) with
+      parsing/merging/rewriting (parser: `ParseCheckConstraints`; merger:
+      `ApplyCheckConstraints`; rewriter: `SetCheckConstraint` /
+      `RemoveCheckConstraint`; editor: `AddCheckConstraint` /
+      `SetCheckConstraint` / `RemoveCheckConstraint`; UI: `EntityNode.razor`
       "Check constraints" list). New model-level `SequenceModel` with
-      parse/merge/rewrite entry points mirroring check constraints, plus
-      `PropertyModel.IsUsingSequence` / `SequenceName` for per-property
-      `UseSequence()` configuration (editor: `SetUsingSequence` / properties;
-      UI: property-level "Use sequence" toggle and name picker). Verified
-      end-to-end: a model with `HasComputedColumnSql`, `HasCheckConstraint`,
-      and `HasSequence` now parses completely, round-trips through edits
-      unchanged, and all three surface as editable items in the diagram.
+      parse/merge/rewrite entry points mirroring check constraints (parser:
+      `ParseSequences`; merger: `ApplySequences`; rewriter: `SetSequence` /
+      `RemoveSequence`; editor: `AddSequence` / `SetSequence` /
+      `RemoveSequence`), plus `PropertyModel.SequenceName` / `SequenceSchema`
+      for per-property `UseSequence()` configuration (editor:
+      `SetUseSequence` / `RemoveUseSequence`; UI: a single "Uses sequence:"
+      text input backed by a datalist of existing sequence names, not a
+      toggle). Verified end-to-end: a model with `HasComputedColumnSql`,
+      `HasCheckConstraint`, and `HasSequence` now parses completely,
+      round-trips through edits unchanged, and all three surface as editable
+      items in the diagram.
 
       Also fixed a scoping bug discovered during the naming work: `RecognizedCallNames`
       in `FluentConfigParser` is one flat set shared across every fluent-call
@@ -487,11 +492,13 @@
       `HasAlternateKey(...).HasName("AK_Foo")` or
       `HasSequence(...).HasName(...)`. Previously these fired diagnostics
       alerting the user the construct wasn't understood. New
-      `ContextSensitiveCallNames` map (ownerCallName, chainedName) pairs,
-      limiting `HasName` recognition to `HasKey` and `HasIndex`, so
-      `HasAlternateKey(...).HasName(...)` now correctly re-surfaces
-      `UnrecognizedConfigCall` diagnostics again. Future maintainers extending
-      `ContextSensitiveCallNames` should follow this same pair pattern.
+      `ContextSensitiveCallNames` map — keyed by the *chained* call name (e.g.
+      `HasName`), each mapping to the `HashSet` of owner call names it's
+      actually recognized under — limits `HasName` recognition to `HasKey`
+      and `HasIndex`, so `HasAlternateKey(...).HasName(...)` now correctly
+      re-surfaces `UnrecognizedConfigCall` diagnostics again. Future
+      maintainers extending `ContextSensitiveCallNames` should follow this
+      same chained-name-keyed pattern.
 
       **Documented limitations (not defects):** `HasSequence`'s non-generic
       `Type`-first-argument overload (`HasSequence(Type clrType, string name,

@@ -394,7 +394,10 @@ public class RoundTripFuzzTests
                     entity.HasKey(e => e.OrderId);
                     entity.Property(e => e.Total).HasComputedColumnSql("[Quantity] * [UnitPrice]", stored: true);
                     entity.Property(e => e.Number).UseSequence("OrderNumbers", "shared");
-                    // Business rule intentionally left unmodeled by the parser.
+                    // This check constraint IS modeled by ParseCheckConstraints (see
+                    // FluentConfigParserTests/OnModelCreatingRewriterTests for its own round-trip
+                    // coverage) - it's simply not one of the two fields this particular test edits,
+                    // so it's here to prove those edits leave it untouched.
                     entity.HasCheckConstraint("CK_Order_Quantity", "[Quantity] >= 0");
                 });
             }
@@ -425,7 +428,9 @@ public class RoundTripFuzzTests
         var sequence = parser.ParseSequences(editor.ConfigSource).Value.Single(s => s.Name == "OrderNumbers");
         Assert.Equal(2000, sequence.StartsAt);
 
-        // The check constraint this edit doesn't target survives byte-for-byte.
+        // SetSequence reformats the whole file via NormalizeWhitespace(), so this isn't a
+        // byte-for-byte comparison against the original source - it only asserts that the
+        // check constraint's own statement text (untouched by either edit above) is still present.
         Assert.Contains(
             "entity.HasCheckConstraint(\"CK_Order_Quantity\", \"[Quantity] >= 0\");",
             editor.ConfigSource);

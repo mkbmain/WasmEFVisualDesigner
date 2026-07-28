@@ -3373,4 +3373,64 @@ public class OnModelCreatingRewriterTests
 
         Assert.DoesNotContain("HasSequence", result);
     }
+
+    // Bare fluent-config source: just top-level `modelBuilder.Entity<T>(...)` statements, with no
+    // wrapping OnModelCreating method or DbContext class at all. This is the app's actual
+    // out-of-the-box default (Home.razor's default _configSource) and the shape
+    // ProjectArchiveWriter produces on every download, so SetSequence/RemoveSequence must not
+    // require an OnModelCreating method to exist (see AddEntity's identical bare-config handling).
+    private const string SourceWithBareTopLevelStatementsNoSequence = """
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+        });
+        """;
+
+    [Fact]
+    public void SetSequence_BareFluentConfigSource_AppendsTopLevelStatementWithoutThrowing()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetSequence(SourceWithBareTopLevelStatementsNoSequence, name: "OrderNumbers", schema: null, clrType: "int",
+                startsAt: 1000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        Assert.Contains("modelBuilder.HasSequence<int>(\"OrderNumbers\")", result);
+        Assert.Contains(".StartsAt(1000)", result);
+
+        // Existing bare statement untouched.
+        Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
+        Assert.Contains("entity.HasKey(e => e.Id)", result);
+    }
+
+    [Fact]
+    public void RemoveSequence_BareFluentConfigSource_RemovesStatementWithoutThrowing()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetSequence(SourceWithBareTopLevelStatementsNoSequence, name: "OrderNumbers", schema: null, clrType: "int",
+                startsAt: 1000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveSequence(source, name: "OrderNumbers");
+
+        Assert.DoesNotContain("HasSequence", result);
+
+        // Rest of the bare config survives.
+        Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
+        Assert.Contains("entity.HasKey(e => e.Id)", result);
+    }
+
+    [Fact]
+    public void SetSequence_BareFluentConfigSource_MutatingExistingSequence_DoesNotThrow()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetSequence(SourceWithBareTopLevelStatementsNoSequence, name: "OrderNumbers", schema: null, clrType: "int",
+                startsAt: 1000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        var result = new OnModelCreatingRewriter()
+            .SetSequence(source, name: "OrderNumbers", schema: null, clrType: "int",
+                startsAt: 2000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        Assert.Contains(".StartsAt(2000)", result);
+        Assert.DoesNotContain("StartsAt(1000)", result);
+        Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
+    }
 }

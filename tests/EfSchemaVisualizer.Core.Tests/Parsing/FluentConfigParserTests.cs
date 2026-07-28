@@ -4244,6 +4244,35 @@ public class FluentConfigParserTests
         Assert.Null(sequence.IsCyclic);
     }
 
+    private const string SequenceSourceUnrecognizedChainedCall = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence("OrderNumbers")
+                    .StartsAt(1000)
+                    .HasName("CustomName");
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSequences_UnrecognizedChainedCall_EmitsUnrecognizedConfigCallDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseSequences(SequenceSourceUnrecognizedChainedCall);
+
+        // The sequence itself is still read from its recognized parts...
+        var sequence = Assert.Single(result.Value);
+        Assert.Equal("OrderNumbers", sequence.Name);
+        Assert.Equal(1000, sequence.StartsAt);
+
+        // ...but the unmodeled HasName(...) chained onto it is flagged, not silently dropped,
+        // since SetSequence would otherwise remove it the moment any field is edited (I1).
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, diagnostic.Code);
+        Assert.Contains("HasName", diagnostic.Message);
+    }
+
     private const string UseSequenceSource = """
         public class AppDbContext : DbContext
         {

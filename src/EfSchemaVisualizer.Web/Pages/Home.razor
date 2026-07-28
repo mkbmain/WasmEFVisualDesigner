@@ -455,6 +455,35 @@
         await OnDiagramEditedAsync();
     }
 
+    // Runs a sequence-editor call and reports success/failure through the usual _error/
+    // OnDiagramEditedAsync convention, but also catches any exception the editor layer throws
+    // (rather than letting it crash the whole Blazor render) - the sequence rewriter is Roslyn-
+    // syntax-tree code operating on user-editable text, so it should degrade to an error message
+    // rather than an unhandled exception if it ever hits a shape it doesn't expect.
+    private async Task<bool> TryApplySequenceEditAsync(Func<DiagramEditResult> edit)
+    {
+        DiagramEditResult result;
+        try
+        {
+            result = edit();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            await InvokeAsync(StateHasChanged);
+            return false;
+        }
+
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return false;
+        }
+
+        return true;
+    }
+
     private async Task AddSequenceAsync()
     {
         if (_editor is null)
@@ -463,12 +492,10 @@
         }
 
         var name = $"Sequence{_editor.Current.Sequences.Count + 1}";
-        var result = _editor.AddSequence(name, schema: null, clrType: "int",
-            startsAt: null, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.AddSequence(name, schema: null, clrType: "int",
+            startsAt: null, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -482,11 +509,9 @@
             return;
         }
 
-        var result = _editor.RemoveSequence(sequence.Name);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.RemoveSequence(sequence.Name));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -500,12 +525,10 @@
             return;
         }
 
-        var result = _editor.SetSequence(sequence.Name, newSchema, sequence.ClrType,
-            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.SetSequence(sequence.Name, newSchema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -519,12 +542,10 @@
             return;
         }
 
-        var result = _editor.SetSequence(sequence.Name, sequence.Schema, newClrType,
-            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.SetSequence(sequence.Name, sequence.Schema, newClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -539,12 +560,10 @@
         }
 
         long? startsAt = long.TryParse(newStartsAt, out var parsed) ? parsed : null;
-        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
-            startsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            startsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -559,12 +578,10 @@
         }
 
         int? incrementsBy = int.TryParse(newIncrementsBy, out var parsed) ? parsed : null;
-        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
-            sequence.StartsAt, incrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, incrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -579,12 +596,10 @@
         }
 
         long? minValue = long.TryParse(newMinValue, out var parsed) ? parsed : null;
-        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
-            sequence.StartsAt, sequence.IncrementsBy, minValue, sequence.MaxValue, sequence.IsCyclic);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, minValue, sequence.MaxValue, sequence.IsCyclic));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -599,12 +614,10 @@
         }
 
         long? maxValue = long.TryParse(newMaxValue, out var parsed) ? parsed : null;
-        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
-            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, maxValue, sequence.IsCyclic);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, maxValue, sequence.IsCyclic));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -618,12 +631,10 @@
             return;
         }
 
-        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
-            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, isCyclic);
-        if (!result.Success)
+        var ok = await TryApplySequenceEditAsync(() => _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, isCyclic));
+        if (!ok)
         {
-            _error = result.Error;
-            await InvokeAsync(StateHasChanged);
             return;
         }
 
