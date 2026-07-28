@@ -1376,4 +1376,77 @@ public sealed class DiagramEditor
         var expression = SyntaxFactory.ParseExpression(text);
         return expression.ToFullString() == text && !expression.ContainsDiagnostics;
     }
+
+    public DiagramEditResult AddSequence(
+        string name, string? schema, string? clrType,
+        long? startsAt, int? incrementsBy, long? minValue, long? maxValue, bool? isCyclic)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return DiagramEditResult.Fail("Sequence name cannot be empty.");
+        }
+
+        if (Current.Sequences.Any(s => s.Name == name))
+        {
+            return DiagramEditResult.Fail($"A sequence named '{name}' already exists.");
+        }
+
+        var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetSequence(
+        string name, string? schema, string? clrType,
+        long? startsAt, int? incrementsBy, long? minValue, long? maxValue, bool? isCyclic)
+    {
+        if (!Current.Sequences.Any(s => s.Name == name))
+        {
+            return DiagramEditResult.Fail($"No sequence named '{name}' exists.");
+        }
+
+        var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveSequence(string name)
+    {
+        if (!Current.Sequences.Any(s => s.Name == name))
+        {
+            return DiagramEditResult.Fail($"No sequence named '{name}' exists.");
+        }
+
+        var newConfigSource = _configRewriter.RemoveSequence(ConfigSource, name);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetUseSequence(string entityName, string propertyName, string? sequenceName, string? schema)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var normalizedSequenceName = string.IsNullOrWhiteSpace(sequenceName) ? null : sequenceName.Trim();
+        if (normalizedSequenceName == property.SequenceName && schema == property.SequenceSchema)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+        var newConfigSource = normalizedSequenceName is null
+            ? _configRewriter.RemoveUseSequence(ConfigSource, owningEntityName, propertyName)
+            : _configRewriter.SetUseSequence(ConfigSource, owningEntityName, propertyName, normalizedSequenceName, schema);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
 }

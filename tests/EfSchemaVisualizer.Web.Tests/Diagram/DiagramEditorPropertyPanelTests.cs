@@ -14,10 +14,16 @@ public class DiagramEditorPropertyPanelTests
         """;
 
     private const string ConfigSource = """
-        modelBuilder.Entity<Person>(entity =>
+        public class AppDbContext : DbContext
         {
-            entity.HasKey(e => e.Id);
-        });
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
         """;
 
     private const string KeylessClassSource = """
@@ -660,5 +666,69 @@ public class DiagramEditorPropertyPanelTests
         Assert.Equal(2, constraints.Count);
         Assert.Single(constraints, c => c.Name == "CK_Person_Name");
         Assert.Single(constraints, c => c.Name == "CK_Person_Email");
+    }
+
+    [Fact]
+    public void AddSequence_NewName_AddsToModel()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddSequence("PersonIds", schema: null, clrType: "int", startsAt: 1, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        Assert.True(result.Success);
+        var sequence = editor.Current.Sequences.Single();
+        Assert.Equal("PersonIds", sequence.Name);
+        Assert.Equal(1, sequence.StartsAt);
+    }
+
+    [Fact]
+    public void AddSequence_DuplicateName_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddSequence("PersonIds", null, "int", 1, null, null, null, null);
+
+        var result = editor.AddSequence("PersonIds", null, "int", 2, null, null, null, null);
+
+        Assert.False(result.Success);
+        Assert.Single(editor.Current.Sequences);
+    }
+
+    [Fact]
+    public void RemoveSequence_ExistingName_RemovesIt()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddSequence("PersonIds", null, "int", 1, null, null, null, null);
+
+        var result = editor.RemoveSequence("PersonIds");
+
+        Assert.True(result.Success);
+        Assert.Empty(editor.Current.Sequences);
+    }
+
+    [Fact]
+    public void SetUseSequence_NoExistingConfig_LinksPropertyToSequence()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddSequence("PersonIds", "shared", "int", null, null, null, null, null);
+
+        var result = editor.SetUseSequence("Person", "Id", "PersonIds", "shared");
+
+        Assert.True(result.Success);
+        var property = editor.Current.Entities.Single().Properties.Single(p => p.Name == "Id");
+        Assert.Equal("PersonIds", property.SequenceName);
+        Assert.Equal("shared", property.SequenceSchema);
+    }
+
+    [Fact]
+    public void SetUseSequence_ClearingExistingConfig_RemovesUseSequence()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddSequence("PersonIds", "shared", "int", null, null, null, null, null);
+        editor.SetUseSequence("Person", "Id", "PersonIds", "shared");
+
+        var result = editor.SetUseSequence("Person", "Id", null, null);
+
+        Assert.True(result.Success);
+        Assert.Null(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Id").SequenceName);
     }
 }
