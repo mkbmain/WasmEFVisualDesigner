@@ -172,4 +172,44 @@ public class DiagramModelBuilderOwnedTypeTests
 
         Assert.Contains(result.Diagnostics, d => d.Code == DiagnosticCodes.OwnedNestedConfigIgnored);
     }
+
+    [Fact]
+    public void Build_OwnsOneBuilderLambdaHasMaxLengthAndHasColumnName_AppliesToFoldedProperty()
+    {
+        const string classSource = """
+            public class Order
+            {
+                public int Id { get; set; }
+                public Address ShippingAddress { get; set; }
+            }
+
+            public class Address
+            {
+                public string Street { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasMaxLength(100);
+                            b.HasColumnName("shipping_street");
+                        });
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var order = result.Entities.Single(e => e.Name == "Order");
+        var street = order.Properties.Single(p => p.Name == "Street");
+        Assert.Equal(100, street.MaxLength);
+    }
 }

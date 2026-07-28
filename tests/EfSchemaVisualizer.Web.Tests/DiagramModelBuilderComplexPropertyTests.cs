@@ -46,4 +46,43 @@ public class DiagramModelBuilderComplexPropertyTests
         Assert.DoesNotContain(order.Properties, p => p.Name == "ShippingAddress");
         Assert.DoesNotContain(result.Relationships, r => r.DependentEntity == "Address" || r.PrincipalEntity == "Address");
     }
+
+    [Fact]
+    public void Build_ComplexPropertyBuilderLambdaHasColumnName_AppliesToFoldedProperty()
+    {
+        const string classSource = """
+            public class Order
+            {
+                public int Id { get; set; }
+                public Address ShippingAddress { get; set; }
+            }
+
+            public class Address
+            {
+                public string Street { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.ComplexProperty(e => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasColumnName("shipping_street");
+                        });
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var order = result.Entities.Single(e => e.Name == "Order");
+        var street = order.Properties.Single(p => p.Name == "Street");
+        Assert.Equal("shipping_street", street.ColumnName);
+    }
 }
