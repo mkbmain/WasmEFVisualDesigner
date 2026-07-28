@@ -22,10 +22,12 @@ public sealed record EntityModel(
     IReadOnlyList<string>? SplitTables = null,
     string? BaseEntityName = null,
     bool IsOwned = false,
-    string? KeyName = null)
+    string? KeyName = null,
+    IReadOnlyList<CheckConstraintModel>? CheckConstraints = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();
     public IReadOnlyList<IReadOnlyList<string>> AlternateKeys { get; init; } = AlternateKeys ?? new List<IReadOnlyList<string>>();
     public IReadOnlyList<string> SplitTables { get; init; } = SplitTables ?? new List<string>();
+    public IReadOnlyList<CheckConstraintModel> CheckConstraints { get; init; } = CheckConstraints ?? new List<CheckConstraintModel>();
 }

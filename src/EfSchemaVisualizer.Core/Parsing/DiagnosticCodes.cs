@@ -35,6 +35,7 @@ public static class DiagnosticCodes
     public const string UnreadableHasForeignKeyArgument = nameof(UnreadableHasForeignKeyArgument);
     public const string UnreadableOnDeleteArgument = nameof(UnreadableOnDeleteArgument);
     public const string UnreadableHasConstraintNameArgument = nameof(UnreadableHasConstraintNameArgument);
+    public const string UnreadableHasCheckConstraintArgument = nameof(UnreadableHasCheckConstraintArgument);
     public const string UnrecognizedConfigCall = nameof(UnrecognizedConfigCall);
     public const string ArchiveNoContentFound = nameof(ArchiveNoContentFound);
     public const string UnreadableHasCommentArgument = nameof(UnreadableHasCommentArgument);

@@ -368,4 +368,14 @@ public static class ModelMerger
                 ConstraintName: c.ConstraintName))
             .ToList();
     }
+
+    public static EntityModel ApplyCheckConstraints(EntityModel entity, IReadOnlyList<CheckConstraintConfig> configs)
+    {
+        var constraints = configs
+            .Where(c => c.EntityName == entity.Name)
+            .Select(c => new CheckConstraintModel(c.Name, c.Sql))
+            .ToList();
+
+        return constraints.Count == 0 ? entity : entity with { CheckConstraints = constraints };
+    }
 }

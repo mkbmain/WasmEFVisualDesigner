@@ -22,7 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName", "HasDatabaseName",
+        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -1894,5 +1894,39 @@ public sealed class FluentConfigParser
         });
 
         return new IndexExtras(isUnique, name, filter, isDescending, includeProperties, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<CheckConstraintConfig>> ParseCheckConstraints(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<CheckConstraintConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasCheckConstraint"))
+            {
+                var arguments = call.ArgumentList.Arguments;
+
+                if (arguments.Count < 2
+                    || arguments[0].Expression is not LiteralExpressionSyntax nameLiteral || !nameLiteral.IsKind(SyntaxKind.StringLiteralExpression)
+                    || arguments[1].Expression is not LiteralExpressionSyntax sqlLiteral || !sqlLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasCheckConstraintArgument,
+                        "HasCheckConstraint arguments are not both string literals and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                results.Add(new CheckConstraintConfig(entityName, nameLiteral.Token.ValueText, sqlLiteral.Token.ValueText));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<CheckConstraintConfig>>(results, diagnostics);
     }
 }

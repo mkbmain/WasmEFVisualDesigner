@@ -3978,4 +3978,55 @@ public class FluentConfigParserTests
 
         Assert.Empty(diagnostics);
     }
+
+    // ─── ParseCheckConstraints ──────────────────────────────────────────────────────
+
+    private const string CheckConstraintSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasCheckConstraint("CK_Order_Quantity", "[Quantity] >= 0");
+                    entity.HasCheckConstraint("CK_Order_Total", "[Total] >= 0");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseCheckConstraints_MultiplePerEntity_ReadsAll()
+    {
+        var result = new FluentConfigParser().ParseCheckConstraints(CheckConstraintSource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c.EntityName == "Order" && c.Name == "CK_Order_Quantity" && c.Sql == "[Quantity] >= 0");
+        Assert.Contains(result.Value, c => c.EntityName == "Order" && c.Name == "CK_Order_Total" && c.Sql == "[Total] >= 0");
+    }
+
+    private const string CheckConstraintSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasCheckConstraint(SomeNameConstant, "[Quantity] >= 0");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseCheckConstraints_NonLiteralArgument_EmitsUnreadableDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseCheckConstraints(CheckConstraintSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasCheckConstraintArgument, diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+    }
 }

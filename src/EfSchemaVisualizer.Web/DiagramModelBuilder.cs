@@ -43,6 +43,7 @@ public static class DiagramModelBuilder
         var defaultValues = configParser.ParseDefaultValues(configSource);
         var defaultValueSqls = configParser.ParseDefaultValueSqls(configSource);
         var computedColumnSqls = configParser.ParseComputedColumnSqls(configSource);
+        var checkConstraints = configParser.ParseCheckConstraints(configSource);
         var indexes = configParser.ParseIndexes(configSource);
         var indexAttributes = entityParser.ParseIndexAttributes(classSource);
         var ignoredProperties = configParser.ParseIgnoredProperties(configSource);
@@ -78,6 +79,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(defaultValues.Diagnostics);
         diagnostics.AddRange(defaultValueSqls.Diagnostics);
         diagnostics.AddRange(computedColumnSqls.Diagnostics);
+        diagnostics.AddRange(checkConstraints.Diagnostics);
         diagnostics.AddRange(indexes.Diagnostics);
         diagnostics.AddRange(indexAttributes.Diagnostics);
         diagnostics.AddRange(ignoredProperties.Diagnostics);
@@ -125,6 +127,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyDefaultValues(entity, defaultValues.Value))
             .Select(entity => ModelMerger.ApplyDefaultValueSqls(entity, defaultValueSqls.Value))
             .Select(entity => ModelMerger.ApplyComputedColumnSqls(entity, computedColumnSqls.Value))
+            .Select(entity => ModelMerger.ApplyCheckConstraints(entity, checkConstraints.Value))
             .Select(entity => ModelMerger.ApplyIndexes(entity, mergedIndexConfigs))
             .Select(entity => ModelMerger.ApplyValueGeneration(entity, valueGeneration.Value))
             .Select(entity => ModelMerger.ApplyConcurrencyTokens(entity, concurrencyTokens.Value))

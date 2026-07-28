@@ -895,4 +895,28 @@ public class ModelMergerTests
 
         Assert.Empty(merged.SplitTables);
     }
+
+    // ─── ApplyCheckConstraints ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyCheckConstraints_MultipleForSameEntity_SetsWholeList()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Id", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<CheckConstraintConfig>
+        {
+            new("Order", "CK_Order_Quantity", "[Quantity] >= 0"),
+            new("Order", "CK_Order_Total", "[Total] >= 0"),
+            new("OtherEntity", "CK_Other", "1 = 1"),
+        };
+
+        var result = ModelMerger.ApplyCheckConstraints(entity, configs);
+
+        Assert.Equal(2, result.CheckConstraints.Count);
+        Assert.Contains(result.CheckConstraints, c => c.Name == "CK_Order_Quantity" && c.Sql == "[Quantity] >= 0");
+        Assert.Contains(result.CheckConstraints, c => c.Name == "CK_Order_Total" && c.Sql == "[Total] >= 0");
+    }
 }
