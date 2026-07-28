@@ -1981,12 +1981,22 @@ public sealed class OnModelCreatingRewriter
         return null;
     }
 
-    /// Representative public entry point exercising the new scope resolver — this is the minimal
-    /// slice needed to prove FindOrCreateOwnedConfigScope works; Task 3.4 wires DiagramEditor's real
-    /// attribute-edit call sites (SetColumnName, RewriteMaxLength, etc.) through the same
-    /// find-scope-or-owned-scope branch instead of duplicating this per method.
-    public string SetColumnNameOnOwnedProperty(
-        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string columnName)
+    /// Shared shape behind every `SetXxxOnOwnedProperty` entry point: resolve (or synthesize) the
+    /// owner's OwnsOne/OwnsMany/ComplexProperty builder-lambda scope via FindOrCreateOwnedConfigScope,
+    /// then either mutate an existing `callName(...)` call already chained onto the target property,
+    /// append `callName(...)` onto an existing bare `.Property(...)` call for it, or insert a brand
+    /// new `b.Property(x => x.Prop).callName(...)` statement into the builder-lambda block. Mirrors
+    /// the non-owned siblings' "mutate existing call, else append to Property call, else insert new
+    /// statement" shape (see e.g. SetColumnName/RewriteMaxLength above), but targets the owned
+    /// builder-lambda block resolved by FindOrCreateOwnedConfigScope instead of a top-level
+    /// Entity&lt;T&gt;() scope — folded owned/complex properties have no such top-level scope to insert
+    /// into (there's no `Entity&lt;Address&gt;()` once `Address` is owned/complex-folded). `buildCall`
+    /// builds the outer fluent invocation given the property-access expression it's chained onto,
+    /// reusing the same Build*Call helpers (BuildStringArgCall, BuildMaxLengthCall, etc.) the
+    /// non-owned siblings already use.
+    private static string SetOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName,
+        string callName, Func<ExpressionSyntax, InvocationExpressionSyntax> buildCall)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
@@ -1997,16 +2007,14 @@ public sealed class OnModelCreatingRewriter
 
         var (scope, newRoot) = resolved;
 
-        var existingColumnNameCall = FluentSyntaxHelpers.FindCallsNamed(scope, "HasColumnName")
+        var existingCall = FluentSyntaxHelpers.FindCallsNamed(scope, callName)
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
 
-        if (existingColumnNameCall is not null)
+        if (existingCall is not null)
         {
-            var newArgument = SyntaxFactory.Argument(
-                SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(columnName)));
-            var newCall = existingColumnNameCall.WithArgumentList(
-                existingColumnNameCall.ArgumentList.WithArguments(SyntaxFactory.SingletonSeparatedList(newArgument)));
-            return newRoot.ReplaceNode(existingColumnNameCall, newCall).NormalizeWhitespace().ToFullString();
+            var existingPropertyCallExpression = ((MemberAccessExpressionSyntax)existingCall.Expression).Expression;
+            var mutatedCall = buildCall(existingPropertyCallExpression);
+            return newRoot.ReplaceNode(existingCall, mutatedCall).NormalizeWhitespace().ToFullString();
         }
 
         var existingPropertyCall = FluentSyntaxHelpers.FindCallsNamed(scope, "Property")
@@ -2031,24 +2039,151 @@ public sealed class OnModelCreatingRewriter
                                     SyntaxFactory.IdentifierName(propertyLambdaParam),
                                     SyntaxFactory.IdentifierName(propertyName)))))));
 
-        var columnNameCall = SyntaxFactory.InvocationExpression(
-            SyntaxFactory.MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression, propertyCallExpression, SyntaxFactory.IdentifierName("HasColumnName")),
-            SyntaxFactory.ArgumentList(
-                SyntaxFactory.SingletonSeparatedList(
-                    SyntaxFactory.Argument(
-                        SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(columnName))))));
-
-        var newStatement = SyntaxFactory.ExpressionStatement(columnNameCall);
+        var newFluentCall = buildCall(propertyCallExpression);
 
         if (existingPropertyCall is not null)
         {
-            return newRoot.ReplaceNode(existingPropertyCall, columnNameCall).NormalizeWhitespace().ToFullString();
+            return newRoot.ReplaceNode(existingPropertyCall, newFluentCall).NormalizeWhitespace().ToFullString();
         }
 
+        var newStatement = SyntaxFactory.ExpressionStatement(newFluentCall);
         var newBlock = block.AddStatements(newStatement);
         return newRoot.ReplaceNode(block, newBlock).NormalizeWhitespace().ToFullString();
     }
+
+    /// Shared shape behind every `RemoveXxxOnOwnedProperty` entry point: locates `callName(...)`
+    /// chained onto `propertyName` within the owner's owned/complex builder-lambda scope and
+    /// unwraps it back to the bare `.Property(...)` call, mirroring RemoveStringArgCall/
+    /// RemoveBareMarkerCall's non-owned shape. No-ops (returns `sourceCode` unchanged) both when the
+    /// owner has no OwnsOne/OwnsMany/ComplexProperty call for `navPropertyName` at all, and when that
+    /// scope exists but has no `callName(...)` call for `propertyName` to remove — deliberately does
+    /// not use FindOrCreateOwnedConfigScope's synthesis path to introduce an empty builder lambda
+    /// just to discover there's nothing to remove from it.
+    private static string RemoveOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string callName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var resolved = FindOrCreateOwnedConfigScope(root, ownerEntityName, navPropertyName);
+        if (resolved is null)
+        {
+            return sourceCode;
+        }
+
+        var (scope, newRoot) = resolved.Value;
+
+        var existingCall = FluentSyntaxHelpers.FindCallsNamed(scope, callName)
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is null)
+        {
+            return sourceCode;
+        }
+
+        var propertyCallExpression = ((MemberAccessExpressionSyntax)existingCall.Expression).Expression;
+
+        return newRoot.ReplaceNode(existingCall, propertyCallExpression).NormalizeWhitespace().ToFullString();
+    }
+
+    public string SetColumnNameOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string columnName) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasColumnName",
+            expr => BuildStringArgCall(expr, "HasColumnName", columnName));
+
+    public string RemoveColumnNameOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasColumnName");
+
+    public string SetColumnTypeOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string columnType) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasColumnType",
+            expr => BuildStringArgCall(expr, "HasColumnType", columnType));
+
+    public string RemoveColumnTypeOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasColumnType");
+
+    public string SetMaxLengthOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, int maxLength) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasMaxLength",
+            expr => BuildMaxLengthCall(expr, maxLength));
+
+    public string RemoveMaxLengthOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasMaxLength");
+
+    public string SetPrecisionOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, int precision, int? scale) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasPrecision",
+            expr => BuildPrecisionCall(expr, precision, scale));
+
+    public string RemovePrecisionOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasPrecision");
+
+    public string SetIsRequiredOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, bool isRequired) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "IsRequired",
+            expr => BuildIsRequiredCall(expr, isRequired));
+
+    public string RemoveIsRequiredOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "IsRequired");
+
+    public string SetDefaultValueOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string literalText) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasDefaultValue",
+            expr => BuildDefaultValueCall(expr, literalText));
+
+    public string RemoveDefaultValueOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasDefaultValue");
+
+    public string SetDefaultValueSqlOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string sql) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasDefaultValueSql",
+            expr => BuildStringArgCall(expr, "HasDefaultValueSql", sql));
+
+    public string RemoveDefaultValueSqlOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasDefaultValueSql");
+
+    public string SetComputedColumnSqlOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string sql, bool? isStored) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasComputedColumnSql",
+            expr => BuildStringArgCall(expr, "HasComputedColumnSql", sql, isStored));
+
+    public string RemoveComputedColumnSqlOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasComputedColumnSql");
+
+    public string SetUseSequenceOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string sequenceName, string? schema) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "UseSequence",
+            expr => BuildUseSequenceCall(expr, sequenceName, schema));
+
+    public string RemoveUseSequenceOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "UseSequence");
+
+    public string SetRowVersionOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "IsRowVersion",
+            expr => BuildBareMarkerCall(expr, "IsRowVersion"));
+
+    public string RemoveRowVersionOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "IsRowVersion");
+
+    public string SetConcurrencyTokenOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "IsConcurrencyToken",
+            expr => BuildBareMarkerCall(expr, "IsConcurrencyToken"));
+
+    public string RemoveConcurrencyTokenOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "IsConcurrencyToken");
 
     private static ExpressionStatementSyntax BuildEntityInvocationStatement(string modelBuilderParamName, string entityName, BlockSyntax block)
     {

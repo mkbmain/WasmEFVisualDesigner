@@ -764,10 +764,13 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
-        var newConfigSource = normalizedColumnName is null
-            ? _configRewriter.RemoveColumnName(ConfigSource, owningEntityName, propertyName)
-            : _configRewriter.SetColumnName(ConfigSource, owningEntityName, propertyName, normalizedColumnName);
+        var newConfigSource = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is { } columnNameNav
+            ? normalizedColumnName is null
+                ? _configRewriter.RemoveColumnNameOnOwnedProperty(ConfigSource, entityName, columnNameNav, propertyName)
+                : _configRewriter.SetColumnNameOnOwnedProperty(ConfigSource, entityName, columnNameNav, propertyName, normalizedColumnName)
+            : normalizedColumnName is null
+                ? _configRewriter.RemoveColumnName(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName)
+                : _configRewriter.SetColumnName(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName, normalizedColumnName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -792,10 +795,13 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
-        var newConfigSource = normalizedColumnType is null
-            ? _configRewriter.RemoveColumnType(ConfigSource, owningEntityName, propertyName)
-            : _configRewriter.SetColumnType(ConfigSource, owningEntityName, propertyName, normalizedColumnType);
+        var newConfigSource = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is { } columnTypeNav
+            ? normalizedColumnType is null
+                ? _configRewriter.RemoveColumnTypeOnOwnedProperty(ConfigSource, entityName, columnTypeNav, propertyName)
+                : _configRewriter.SetColumnTypeOnOwnedProperty(ConfigSource, entityName, columnTypeNav, propertyName, normalizedColumnType)
+            : normalizedColumnType is null
+                ? _configRewriter.RemoveColumnType(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName)
+                : _configRewriter.SetColumnType(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName, normalizedColumnType);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -819,11 +825,14 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var isFoldedOwned = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is not null;
         var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
 
         if (maxLength is null)
         {
-            var clearedConfigSource = _configRewriter.RemoveMaxLength(ConfigSource, owningEntityName, propertyName);
+            var clearedConfigSource = isFoldedOwned
+                ? _configRewriter.RemoveMaxLengthOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName)
+                : _configRewriter.RemoveMaxLength(ConfigSource, owningEntityName, propertyName);
             Apply(ClassSource, clearedConfigSource);
             return DiagramEditResult.Ok();
         }
@@ -833,7 +842,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail("Max length must be a positive number.");
         }
 
-        var newConfigSource = _configRewriter.RewriteMaxLength(ConfigSource, owningEntityName, propertyName, maxLength.Value);
+        var newConfigSource = isFoldedOwned
+            ? _configRewriter.SetMaxLengthOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName, maxLength.Value)
+            : _configRewriter.RewriteMaxLength(ConfigSource, owningEntityName, propertyName, maxLength.Value);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -857,16 +868,21 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var isFoldedOwnedRequired = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is not null;
         var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
 
         if (isRequired is null)
         {
-            var clearedConfigSource = _configRewriter.RemoveIsRequired(ConfigSource, owningEntityName, propertyName);
+            var clearedConfigSource = isFoldedOwnedRequired
+                ? _configRewriter.RemoveIsRequiredOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName)
+                : _configRewriter.RemoveIsRequired(ConfigSource, owningEntityName, propertyName);
             Apply(ClassSource, clearedConfigSource);
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.RewriteIsRequired(ConfigSource, owningEntityName, propertyName, isRequired.Value);
+        var newConfigSource = isFoldedOwnedRequired
+            ? _configRewriter.SetIsRequiredOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName, isRequired.Value)
+            : _configRewriter.RewriteIsRequired(ConfigSource, owningEntityName, propertyName, isRequired.Value);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -890,11 +906,14 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var isFoldedOwnedRowVersion = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is not null;
         var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
 
         if (!isRowVersion)
         {
-            var clearedConfigSource = _configRewriter.RemoveRowVersion(ConfigSource, owningEntityName, propertyName);
+            var clearedConfigSource = isFoldedOwnedRowVersion
+                ? _configRewriter.RemoveRowVersionOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName)
+                : _configRewriter.RemoveRowVersion(ConfigSource, owningEntityName, propertyName);
             if (clearedConfigSource == ConfigSource)
             {
                 return DiagramEditResult.Fail(
@@ -905,7 +924,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.SetRowVersion(ConfigSource, owningEntityName, propertyName);
+        var newConfigSource = isFoldedOwnedRowVersion
+            ? _configRewriter.SetRowVersionOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName)
+            : _configRewriter.SetRowVersion(ConfigSource, owningEntityName, propertyName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -929,11 +950,14 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
+        var isFoldedOwnedConcurrencyToken = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is not null;
         var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
 
         if (!isConcurrencyToken)
         {
-            var clearedConfigSource = _configRewriter.RemoveConcurrencyToken(ConfigSource, owningEntityName, propertyName);
+            var clearedConfigSource = isFoldedOwnedConcurrencyToken
+                ? _configRewriter.RemoveConcurrencyTokenOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName)
+                : _configRewriter.RemoveConcurrencyToken(ConfigSource, owningEntityName, propertyName);
             if (clearedConfigSource == ConfigSource)
             {
                 return DiagramEditResult.Fail(
@@ -944,7 +968,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.SetConcurrencyToken(ConfigSource, owningEntityName, propertyName);
+        var newConfigSource = isFoldedOwnedConcurrencyToken
+            ? _configRewriter.SetConcurrencyTokenOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName)
+            : _configRewriter.SetConcurrencyToken(ConfigSource, owningEntityName, propertyName);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -963,6 +989,7 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
         }
 
+        var isFoldedOwnedPrecision = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is not null;
         var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
 
         if (precision is null)
@@ -972,7 +999,9 @@ public sealed class DiagramEditor
                 return DiagramEditResult.Ok();
             }
 
-            var clearedConfigSource = _configRewriter.RemovePrecision(ConfigSource, owningEntityName, propertyName);
+            var clearedConfigSource = isFoldedOwnedPrecision
+                ? _configRewriter.RemovePrecisionOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName)
+                : _configRewriter.RemovePrecision(ConfigSource, owningEntityName, propertyName);
             Apply(ClassSource, clearedConfigSource);
             return DiagramEditResult.Ok();
         }
@@ -992,7 +1021,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var newConfigSource = _configRewriter.RewritePrecision(ConfigSource, owningEntityName, propertyName, precision.Value, scale);
+        var newConfigSource = isFoldedOwnedPrecision
+            ? _configRewriter.SetPrecisionOnOwnedProperty(ConfigSource, entityName, property.OwnerNavigationProperty!, propertyName, precision.Value, scale)
+            : _configRewriter.RewritePrecision(ConfigSource, owningEntityName, propertyName, precision.Value, scale);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1029,10 +1060,13 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
-        var newConfigSource = normalizedLiteral is null
-            ? _configRewriter.RemoveDefaultValue(ConfigSource, owningEntityName, propertyName)
-            : _configRewriter.SetDefaultValue(ConfigSource, owningEntityName, propertyName, normalizedLiteral);
+        var newConfigSource = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is { } defaultValueNav
+            ? normalizedLiteral is null
+                ? _configRewriter.RemoveDefaultValueOnOwnedProperty(ConfigSource, entityName, defaultValueNav, propertyName)
+                : _configRewriter.SetDefaultValueOnOwnedProperty(ConfigSource, entityName, defaultValueNav, propertyName, normalizedLiteral)
+            : normalizedLiteral is null
+                ? _configRewriter.RemoveDefaultValue(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName)
+                : _configRewriter.SetDefaultValue(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName, normalizedLiteral);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1057,10 +1091,13 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
-        var newConfigSource = normalizedSql is null
-            ? _configRewriter.RemoveDefaultValueSql(ConfigSource, owningEntityName, propertyName)
-            : _configRewriter.SetDefaultValueSql(ConfigSource, owningEntityName, propertyName, normalizedSql);
+        var newConfigSource = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is { } defaultValueSqlNav
+            ? normalizedSql is null
+                ? _configRewriter.RemoveDefaultValueSqlOnOwnedProperty(ConfigSource, entityName, defaultValueSqlNav, propertyName)
+                : _configRewriter.SetDefaultValueSqlOnOwnedProperty(ConfigSource, entityName, defaultValueSqlNav, propertyName, normalizedSql)
+            : normalizedSql is null
+                ? _configRewriter.RemoveDefaultValueSql(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName)
+                : _configRewriter.SetDefaultValueSql(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName, normalizedSql);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1085,10 +1122,13 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
-        var newConfigSource = normalizedSql is null
-            ? _configRewriter.RemoveComputedColumnSql(ConfigSource, owningEntityName, propertyName)
-            : _configRewriter.SetComputedColumnSql(ConfigSource, owningEntityName, propertyName, normalizedSql, isStored);
+        var newConfigSource = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is { } computedColumnSqlNav
+            ? normalizedSql is null
+                ? _configRewriter.RemoveComputedColumnSqlOnOwnedProperty(ConfigSource, entityName, computedColumnSqlNav, propertyName)
+                : _configRewriter.SetComputedColumnSqlOnOwnedProperty(ConfigSource, entityName, computedColumnSqlNav, propertyName, normalizedSql, isStored)
+            : normalizedSql is null
+                ? _configRewriter.RemoveComputedColumnSql(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName)
+                : _configRewriter.SetComputedColumnSql(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName, normalizedSql, isStored);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1474,10 +1514,13 @@ public sealed class DiagramEditor
             return DiagramEditResult.Ok();
         }
 
-        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
-        var newConfigSource = normalizedSequenceName is null
-            ? _configRewriter.RemoveUseSequence(ConfigSource, owningEntityName, propertyName)
-            : _configRewriter.SetUseSequence(ConfigSource, owningEntityName, propertyName, normalizedSequenceName, normalizedSchema);
+        var newConfigSource = property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is { } useSequenceNav
+            ? normalizedSequenceName is null
+                ? _configRewriter.RemoveUseSequenceOnOwnedProperty(ConfigSource, entityName, useSequenceNav, propertyName)
+                : _configRewriter.SetUseSequenceOnOwnedProperty(ConfigSource, entityName, useSequenceNav, propertyName, normalizedSequenceName, normalizedSchema)
+            : normalizedSequenceName is null
+                ? _configRewriter.RemoveUseSequence(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName)
+                : _configRewriter.SetUseSequence(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName, normalizedSequenceName, normalizedSchema);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
