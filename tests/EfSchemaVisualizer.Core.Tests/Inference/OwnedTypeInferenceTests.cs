@@ -42,7 +42,7 @@ public class OwnedTypeInferenceTests
         Assert.DoesNotContain(foldedOrder.Properties, p => p.Name == "ShippingAddress");
 
         var street = foldedOrder.Properties.Single(p => p.Name == "Street");
-        Assert.True(street.IsOwned);
+        Assert.Equal(FoldKind.Owned, street.FoldKind);
         Assert.Equal("ShippingAddress", street.OwnerNavigationProperty);
         Assert.Empty(result.Relationships);
     }

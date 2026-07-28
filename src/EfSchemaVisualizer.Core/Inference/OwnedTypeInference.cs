@@ -72,7 +72,7 @@ public static class OwnedTypeInference
                     // Read-only UI behavior, considered acceptable.
                     .Concat(targetProperties.Select(p => p with
                     {
-                        IsOwned = true,
+                        FoldKind = FoldKind.Owned,
                         OwnerNavigationProperty = call.NavigationPropertyName,
                     }))
                     .ToList();

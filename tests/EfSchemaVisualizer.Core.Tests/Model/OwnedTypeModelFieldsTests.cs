@@ -6,11 +6,11 @@ namespace EfSchemaVisualizer.Core.Tests.Model;
 public class OwnedTypeModelFieldsTests
 {
     [Fact]
-    public void PropertyModel_DefaultsLeaveOwnedFieldsUnset()
+    public void PropertyModel_DefaultsLeaveFoldKindNone()
     {
         var property = new PropertyModel("Street", "string", IsNullable: false, MaxLength: null);
 
-        Assert.False(property.IsOwned);
+        Assert.Equal(FoldKind.None, property.FoldKind);
         Assert.Null(property.OwnerNavigationProperty);
     }
 

@@ -140,17 +140,17 @@
         @foreach (var property in Node.Entity.Properties)
         {
             var isKey = Node.Entity.KeyPropertyNames.Contains(property.Name);
-            if (property.IsOwned && property.OwnerNavigationProperty != _lastOwnerNav)
+            if (property.FoldKind == FoldKind.Owned && property.OwnerNavigationProperty != _lastOwnerNav)
             {
                 _lastOwnerNav = property.OwnerNavigationProperty;
                 <li style="padding: 4px 8px 0; font-size: 0.7em; color: #888; border-top: 1px dashed #ccc;">@_lastOwnerNav (owned)</li>
             }
-            else if (!property.IsOwned)
+            else if (property.FoldKind != FoldKind.Owned)
             {
                 _lastOwnerNav = null;
             }
-            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "") @(property.IsOwned ? "opacity: 0.75;" : "")">
-                @if (property.IsOwned)
+            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "") @(property.FoldKind == FoldKind.Owned ? "opacity: 0.75;" : "")">
+                @if (property.FoldKind == FoldKind.Owned)
                 {
                     <span title="Folded in from the owned type via @property.OwnerNavigationProperty. Read-only.">@property.Name : @property.ClrType@(property.IsNullable ? "?" : "")</span>
                 }

@@ -1,5 +1,12 @@
 namespace EfSchemaVisualizer.Core.Model;
 
+public enum FoldKind
+{
+    None,
+    Owned,
+    Complex,
+}
+
 public sealed record PropertyModel(
     string Name,
     string ClrType,
@@ -22,7 +29,7 @@ public sealed record PropertyModel(
     string? Collation = null,
     string? InverseProperty = null,
     string? DeclaringEntityName = null,
-    bool IsOwned = false,
+    FoldKind FoldKind = FoldKind.None,
     string? OwnerNavigationProperty = null,
     string? ComputedColumnSql = null,
     bool? ComputedColumnSqlIsStored = null,

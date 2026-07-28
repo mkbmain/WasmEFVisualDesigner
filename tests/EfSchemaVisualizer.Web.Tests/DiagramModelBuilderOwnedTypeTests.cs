@@ -42,8 +42,8 @@ public class DiagramModelBuilderOwnedTypeTests
 
         Assert.DoesNotContain(result.Entities, e => e.Name == "Address");
         var order = result.Entities.Single(e => e.Name == "Order");
-        Assert.Contains(order.Properties, p => p.Name == "Street" && p.IsOwned);
-        Assert.Contains(order.Properties, p => p.Name == "City" && p.IsOwned);
+        Assert.Contains(order.Properties, p => p.Name == "Street" && p.FoldKind == FoldKind.Owned);
+        Assert.Contains(order.Properties, p => p.Name == "City" && p.FoldKind == FoldKind.Owned);
         Assert.DoesNotContain(order.Properties, p => p.Name == "ShippingAddress");
     }
 
@@ -125,8 +125,8 @@ public class DiagramModelBuilderOwnedTypeTests
 
         Assert.DoesNotContain(result.Entities, e => e.Name == "Address");
         var order = result.Entities.Single(e => e.Name == "Order");
-        Assert.Contains(order.Properties, p => p.Name == "Street" && p.IsOwned);
-        Assert.Contains(order.Properties, p => p.Name == "City" && p.IsOwned);
+        Assert.Contains(order.Properties, p => p.Name == "Street" && p.FoldKind == FoldKind.Owned);
+        Assert.Contains(order.Properties, p => p.Name == "City" && p.FoldKind == FoldKind.Owned);
         Assert.DoesNotContain(order.Properties, p => p.Name == "ShippingAddress");
 
         var note = result.Entities.Single(e => e.Name == "OrderNote");
