@@ -2477,6 +2477,121 @@ public sealed class OnModelCreatingRewriter
         return newRoot2.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetSequence(
+        string sourceCode, string name, string? schema, string? clrType,
+        long? startsAt, int? incrementsBy, long? minValue, long? maxValue, bool? isCyclic)
+    {
+        var withoutExisting = RemoveSequence(sourceCode, name);
+
+        var tree = CSharpSyntaxTree.ParseText(withoutExisting);
+        var root = tree.GetCompilationUnitRoot();
+
+        var method = FindOnModelCreatingMethod(root);
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var statement = SyntaxFactory.ExpressionStatement(
+            BuildSequenceExpression(modelBuilderParamName, name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic));
+
+        var newMethodBody = methodBody.AddStatements(statement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string RemoveSequence(string sourceCode, string name)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var existingCall = FluentSyntaxHelpers.FindModelLevelCalls(root)
+            .FirstOrDefault(call => call.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "HasSequence" }
+                && IsSequenceNamed(call, name));
+
+        if (existingCall is null)
+        {
+            return sourceCode;
+        }
+
+        var outermostChainedCall = FindOutermostChainedCall(existingCall);
+        var statement = outermostChainedCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static bool IsSequenceNamed(InvocationExpressionSyntax call, string name)
+    {
+        var nameArg = call.ArgumentList.Arguments.FirstOrDefault();
+        return nameArg?.Expression is LiteralExpressionSyntax literal
+            && literal.IsKind(SyntaxKind.StringLiteralExpression)
+            && literal.Token.ValueText == name;
+    }
+
+    private static ExpressionSyntax BuildSequenceExpression(
+        string modelBuilderParamName, string name, string? schema, string? clrType,
+        long? startsAt, int? incrementsBy, long? minValue, long? maxValue, bool? isCyclic)
+    {
+        var arguments = new List<ArgumentSyntax>
+        {
+            SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(name))),
+        };
+
+        if (schema is not null)
+        {
+            arguments.Add(SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(schema))));
+        }
+
+        SimpleNameSyntax methodName = clrType is not null
+            ? SyntaxFactory.GenericName(SyntaxFactory.Identifier("HasSequence"))
+                .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.ParseTypeName(clrType))))
+            : SyntaxFactory.IdentifierName("HasSequence");
+
+        ExpressionSyntax expression = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(modelBuilderParamName), methodName),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
+
+        if (startsAt is not null)
+        {
+            expression = ChainCall(expression, "StartsAt", SyntaxFactory.Argument(BuildLongLiteral(startsAt.Value)));
+        }
+
+        if (incrementsBy is not null)
+        {
+            expression = ChainCall(expression, "IncrementsBy", SyntaxFactory.Argument(
+                SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(incrementsBy.Value))));
+        }
+
+        if (minValue is not null)
+        {
+            expression = ChainCall(expression, "HasMin", SyntaxFactory.Argument(BuildLongLiteral(minValue.Value)));
+        }
+
+        if (maxValue is not null)
+        {
+            expression = ChainCall(expression, "HasMax", SyntaxFactory.Argument(BuildLongLiteral(maxValue.Value)));
+        }
+
+        if (isCyclic == true)
+        {
+            expression = ChainBareCall(expression, "IsCyclic");
+        }
+
+        return expression;
+    }
+
+    /// Builds a numeric literal for a `long` argument without the `L` suffix that
+    /// `SyntaxFactory.Literal(long)` appends by default (e.g. `1000` rather than `1000L`),
+    /// matching the plain-integer style the rest of this rewriter emits. A suffix-free decimal
+    /// literal is still valid C# for values beyond `int.Max`/`uint.Max` — the compiler assigns it
+    /// the first of int/uint/long/ulong that fits — so this is safe for the full `long` range.
+    private static LiteralExpressionSyntax BuildLongLiteral(long value)
+    {
+        return SyntaxFactory.LiteralExpression(
+            SyntaxKind.NumericLiteralExpression,
+            SyntaxFactory.Literal(value.ToString(System.Globalization.CultureInfo.InvariantCulture), value));
+    }
+
     public string SetCheckConstraint(string sourceCode, string entityName, string oldName, string newName, string newSql)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

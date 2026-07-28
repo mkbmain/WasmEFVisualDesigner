@@ -3217,4 +3217,72 @@ public class OnModelCreatingRewriterTests
         // Existing entity untouched.
         Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
     }
+
+    private const string SourceWithNoSequences = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetSequence_NoExisting_InsertsFullChain()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetSequence(SourceWithNoSequences, name: "OrderNumbers", schema: "shared", clrType: "int",
+                startsAt: 1000, incrementsBy: 5, minValue: 1, maxValue: 1000000, isCyclic: true);
+
+        Assert.Contains("modelBuilder.HasSequence<int>(\"OrderNumbers\", \"shared\")", result);
+        Assert.Contains(".StartsAt(1000)", result);
+        Assert.Contains(".IncrementsBy(5)", result);
+        Assert.Contains(".HasMin(1)", result);
+        Assert.Contains(".HasMax(1000000)", result);
+        Assert.Contains(".IsCyclic()", result);
+    }
+
+    [Fact]
+    public void SetSequence_OmitsAbsentChainedOptions()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetSequence(SourceWithNoSequences, name: "Simple", schema: null, clrType: null,
+                startsAt: null, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        Assert.Contains("modelBuilder.HasSequence(\"Simple\")", result);
+        Assert.DoesNotContain("StartsAt", result);
+        Assert.DoesNotContain("IsCyclic", result);
+    }
+
+    [Fact]
+    public void SetSequence_ExistingSequence_ReplacesWholeChain()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetSequence(SourceWithNoSequences, name: "OrderNumbers", schema: "shared", clrType: "int",
+                startsAt: 1000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        var result = new OnModelCreatingRewriter()
+            .SetSequence(source, name: "OrderNumbers", schema: "shared", clrType: "int",
+                startsAt: 2000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        Assert.Contains(".StartsAt(2000)", result);
+        Assert.DoesNotContain("StartsAt(1000)", result);
+    }
+
+    [Fact]
+    public void RemoveSequence_ExistingSequence_RemovesStatement()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetSequence(SourceWithNoSequences, name: "OrderNumbers", schema: "shared", clrType: "int",
+                startsAt: 1000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveSequence(source, name: "OrderNumbers");
+
+        Assert.DoesNotContain("HasSequence", result);
+    }
 }
