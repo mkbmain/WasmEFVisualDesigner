@@ -645,4 +645,20 @@ public class DiagramEditorPropertyPanelTests
         Assert.Equal("CK_Person_NonEmptyName", constraint.Name);
         Assert.Equal("LEN([Name]) >= 1", constraint.Sql);
     }
+
+    [Fact]
+    public void SetCheckConstraint_DuplicateNewName_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddCheckConstraint("Person", "CK_Person_Name", "LEN([Name]) > 0");
+        editor.AddCheckConstraint("Person", "CK_Person_Email", "LEN([Email]) > 0");
+
+        var result = editor.SetCheckConstraint("Person", "CK_Person_Name", "CK_Person_Email", "LEN([Name]) > 0");
+
+        Assert.False(result.Success);
+        var constraints = editor.Current.Entities.Single().CheckConstraints;
+        Assert.Equal(2, constraints.Count);
+        Assert.Single(constraints.Where(c => c.Name == "CK_Person_Name"));
+        Assert.Single(constraints.Where(c => c.Name == "CK_Person_Email"));
+    }
 }

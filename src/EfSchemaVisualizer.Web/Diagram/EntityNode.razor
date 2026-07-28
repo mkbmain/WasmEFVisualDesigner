@@ -116,8 +116,9 @@
                 <input style="width: 120px;" value="@constraint.Sql"
                        @onchange="e => CommitCheckConstraintSql(constraint, e.Value?.ToString())"
                        @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true" />
-                <button @onclick="() => RemoveCheckConstraint(constraint)"
-                        @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true">x</button>
+                <button type="button" title="Remove check constraint" aria-label="Remove check constraint" style="border: none; background: transparent; cursor: pointer;"
+                        @onclick="() => RemoveCheckConstraint(constraint)"
+                        @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true">×</button>
             </div>
         }
         <button @onclick="AddCheckConstraint"
