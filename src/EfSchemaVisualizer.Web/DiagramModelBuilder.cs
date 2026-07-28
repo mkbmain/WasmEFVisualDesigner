@@ -18,9 +18,9 @@ public static class DiagramModelBuilder
     public static DiagramModelResult Build(string classSource, string configSource)
     {
         var entityParser = new EntityClassParser();
-        var configParser = new FluentConfigParser();
 
         var entityResult = entityParser.Parse(classSource);
+        var configParser = new FluentConfigParser(entityResult.Value);
         var diagnostics = new List<Diagnostic>(entityResult.Diagnostics);
 
         var maxLengths = configParser.ParseMaxLengths(configSource);

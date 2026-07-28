@@ -11,6 +11,17 @@ namespace EfSchemaVisualizer.Core.Parsing;
 
 public sealed class FluentConfigParser
 {
+    /// The class-parsed entity list (pre-fold), used to resolve OwnsOne/OwnsMany/ComplexProperty
+    /// navigation properties to their target CLR type so their builder lambdas can be discovered
+    /// as additional configuration scopes. Empty when unavailable (e.g. tests exercising a single
+    /// `Parse*` method against bare fluent-config source with no class model at hand).
+    private readonly IReadOnlyList<EntityModel> _entities;
+
+    public FluentConfigParser(IReadOnlyList<EntityModel>? entities = null)
+    {
+        _entities = entities ?? Array.Empty<EntityModel>();
+    }
+
     /// Fluent call names read by one of the `Parse*` methods above. Anything chained onto an entity's
     /// config scope whose name isn't in this set is flagged by <see cref="ParseUnrecognizedCalls"/>.
     private static readonly HashSet<string> RecognizedCallNames = new()
@@ -45,7 +56,7 @@ public sealed class FluentConfigParser
 
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindConfigChainCalls(scope))
             {
@@ -287,7 +298,7 @@ public sealed class FluentConfigParser
         var results = new List<MaxLengthConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var maxLengthCall in FluentSyntaxHelpers.FindCallsNamed(scope, "HasMaxLength"))
             {
@@ -337,7 +348,7 @@ public sealed class FluentConfigParser
         var results = new List<PrecisionConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var precisionCall in FluentSyntaxHelpers.FindCallsNamed(scope, "HasPrecision"))
             {
@@ -404,7 +415,7 @@ public sealed class FluentConfigParser
         var results = new List<IsRequiredConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var isRequiredCall in FluentSyntaxHelpers.FindCallsNamed(scope, "IsRequired"))
             {
@@ -456,7 +467,7 @@ public sealed class FluentConfigParser
         var results = new List<KeyConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var hasKeyCall in FluentSyntaxHelpers.FindCallsNamed(scope, "HasKey"))
             {
@@ -511,7 +522,7 @@ public sealed class FluentConfigParser
         var results = new List<AlternateKeyConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var hasAlternateKeyCall in FluentSyntaxHelpers.FindCallsNamed(scope, "HasAlternateKey"))
             {
@@ -551,7 +562,7 @@ public sealed class FluentConfigParser
         var temporal = new List<TemporalConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var toTableCall in FluentSyntaxHelpers.FindCallsNamed(scope, "ToTable"))
             {
@@ -640,7 +651,7 @@ public sealed class FluentConfigParser
         var results = new List<ViewConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var toViewCall in FluentSyntaxHelpers.FindCallsNamed(scope, "ToView"))
             {
@@ -694,7 +705,7 @@ public sealed class FluentConfigParser
         var results = new List<SqlQueryConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var toSqlQueryCall in FluentSyntaxHelpers.FindCallsNamed(scope, "ToSqlQuery"))
             {
@@ -729,7 +740,7 @@ public sealed class FluentConfigParser
 
         var results = new List<string>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             if (FluentSyntaxHelpers.FindCallsNamed(scope, "HasNoKey").Any())
             {
@@ -752,7 +763,7 @@ public sealed class FluentConfigParser
 
         var results = new List<QueryFilterConfig>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             if (FluentSyntaxHelpers.FindCallsNamed(scope, "HasQueryFilter").Any())
             {
@@ -778,7 +789,7 @@ public sealed class FluentConfigParser
         var propertyResults = new List<PropertyCommentConfig>();
         var propertyDiagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasComment"))
             {
@@ -837,7 +848,7 @@ public sealed class FluentConfigParser
         var results = new List<UnicodeConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "IsUnicode"))
             {
@@ -890,7 +901,7 @@ public sealed class FluentConfigParser
         var results = new List<FixedLengthConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "IsFixedLength"))
             {
@@ -943,7 +954,7 @@ public sealed class FluentConfigParser
         var results = new List<CollationConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "UseCollation"))
             {
@@ -989,7 +1000,7 @@ public sealed class FluentConfigParser
         var results = new List<JsonConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "ToJson"))
             {
@@ -1030,7 +1041,7 @@ public sealed class FluentConfigParser
         var results = new List<SplitToTableConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "SplitToTable"))
             {
@@ -1218,7 +1229,7 @@ public sealed class FluentConfigParser
         var results = new List<ColumnNameConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasColumnName"))
             {
@@ -1264,7 +1275,7 @@ public sealed class FluentConfigParser
         var results = new List<ColumnTypeConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasColumnType"))
             {
@@ -1310,7 +1321,7 @@ public sealed class FluentConfigParser
         var results = new List<DefaultValueConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasDefaultValue"))
             {
@@ -1356,7 +1367,7 @@ public sealed class FluentConfigParser
         var results = new List<DefaultValueSqlConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasDefaultValueSql"))
             {
@@ -1402,7 +1413,7 @@ public sealed class FluentConfigParser
         var results = new List<ComputedColumnSqlConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasComputedColumnSql"))
             {
@@ -1456,7 +1467,7 @@ public sealed class FluentConfigParser
         var results = new List<IndexConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var hasIndexCall in FluentSyntaxHelpers.FindCallsNamed(scope, "HasIndex"))
             {
@@ -1498,7 +1509,7 @@ public sealed class FluentConfigParser
         var results = new List<IgnoreConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "Ignore"))
             {
@@ -1539,7 +1550,7 @@ public sealed class FluentConfigParser
         var results = new List<ValueGenerationConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var (callName, mode) in ValueGenerationCallModes)
             {
@@ -1574,7 +1585,7 @@ public sealed class FluentConfigParser
         var diagnostics = new List<Diagnostic>();
         var flagsByProperty = new Dictionary<(string EntityName, string PropertyName), (bool IsRowVersion, bool IsConcurrencyToken)>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var (callName, marksRowVersion) in new[] { ("IsRowVersion", true), ("IsConcurrencyToken", false) })
             {
@@ -1616,7 +1627,7 @@ public sealed class FluentConfigParser
 
         var results = new List<ShadowPropertyConfig>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var propertyCall in FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             {
@@ -1682,7 +1693,7 @@ public sealed class FluentConfigParser
         var results = new List<RelationshipConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             var calls = FluentSyntaxHelpers.FindCallsNamed(scope, "HasOne")
                 .Concat(FluentSyntaxHelpers.FindCallsNamed(scope, "HasMany"))
@@ -2119,7 +2130,7 @@ public sealed class FluentConfigParser
         var results = new List<CheckConstraintConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasCheckConstraint"))
             {
@@ -2153,7 +2164,7 @@ public sealed class FluentConfigParser
         var results = new List<UseSequenceConfig>();
         var diagnostics = new List<Diagnostic>();
 
-        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
         {
             foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "UseSequence"))
             {

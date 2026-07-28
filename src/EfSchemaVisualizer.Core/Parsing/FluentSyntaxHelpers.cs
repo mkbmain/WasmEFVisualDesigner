@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using EfSchemaVisualizer.Core.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -29,25 +30,66 @@ internal static class FluentSyntaxHelpers
         Walk(scope);
         return results;
 
-        void Walk(SyntaxNode node)
+        void Walk(SyntaxNode node, SyntaxNode? excludeSubtree = null)
         {
             foreach (var child in node.ChildNodes())
             {
+                if (child == excludeSubtree)
+                {
+                    // Opaque boundary for a builder-lambda subtree specifically: `excludeSubtree` may be
+                    // nested several levels below `node` (inside the invocation's ArgumentList), not a
+                    // direct child, so this check must apply at every depth of the recursive walk below,
+                    // not just immediate children.
+                    continue;
+                }
+
                 if (child is InvocationExpressionSyntax nestedEntityInvocation
                     && GetConfiguredEntityName(nestedEntityInvocation) is not null)
                 {
-                    // Opaque boundary: don't descend into a nested Entity<> configuration's subtree.
+                    // Opaque boundary: don't descend into a nested Entity<> configuration's subtree,
+                    // and the invocation node itself is never needed by any caller of FindAllCalls.
                     continue;
                 }
 
                 if (child is InvocationExpressionSyntax invocation)
                 {
                     results.Add(invocation);
+
+                    if (TryGetFoldingBuilderLambda(invocation) is { } builderLambda)
+                    {
+                        // Opaque boundary for the builder-lambda subtree only: the OwnsOne/OwnsMany/
+                        // ComplexProperty invocation itself IS added to results above (so
+                        // FindCallsNamed(scope, "OwnsOne") still matches it directly), but its builder
+                        // lambda's body is skipped here — once FindConfigurationScopes(root, entities)
+                        // yields that builder lambda as its own scope (see below), walking into it here
+                        // too would double-count every call inside it against the outer entity's scope.
+                        Walk(child, builderLambda);
+                        continue;
+                    }
                 }
 
-                Walk(child);
+                Walk(child, excludeSubtree);
             }
         }
+    }
+
+    /// If `invocation` is an `OwnsOne`/`OwnsMany`/`ComplexProperty` call with a second (builder)
+    /// lambda argument, returns that lambda node; otherwise null. The first lambda argument is
+    /// always the navigation-property selector, never the builder (same convention as
+    /// `ParseOwnedTypeCalls`'s `HasNestedConfigCalls`).
+    private static AnonymousFunctionExpressionSyntax? TryGetFoldingBuilderLambda(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var name }
+            || (name != "OwnsOne" && name != "OwnsMany" && name != "ComplexProperty"))
+        {
+            return null;
+        }
+
+        return invocation.ArgumentList.Arguments
+            .Select(a => a.Expression)
+            .OfType<AnonymousFunctionExpressionSyntax>()
+            .Skip(1)
+            .FirstOrDefault();
     }
 
     /// Finds every invocation forming a fluent config chain within `scope` — e.g. every link in
@@ -444,6 +486,75 @@ internal static class FluentSyntaxHelpers
     /// declaration for a config class. A single entity name can appear more than once
     /// (e.g. configured across multiple `Entity&lt;T&gt;()` blocks in one file).
     internal static IEnumerable<(string EntityName, SyntaxNode Scope)> FindConfigurationScopes(
+        CompilationUnitSyntax root, IReadOnlyList<EntityModel>? entities = null)
+    {
+        foreach (var scope in FindConfigurationScopesCore(root))
+        {
+            yield return scope;
+        }
+
+        if (entities is not null)
+        {
+            foreach (var nested in FindOwnedAndComplexNestedScopes(root, entities))
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    /// For every OwnsOne/OwnsMany/ComplexProperty call found in an already-discovered entity scope,
+    /// resolves the target type via `entities` (the pre-fold class-parsed model — the only place that
+    /// knows what CLR type a navigation property like `ShippingAddress` points to; config-source syntax
+    /// alone never spells out a type) and, if the call has a block-bodied builder lambda, yields that
+    /// lambda's block as a scope keyed by the target type's name — so every existing per-attribute
+    /// Parse* method picks up config chained inside it via FindCallsNamed(scope, ...) with zero
+    /// extractor changes.
+    private static IEnumerable<(string EntityName, SyntaxNode Scope)> FindOwnedAndComplexNestedScopes(
+        CompilationUnitSyntax root, IReadOnlyList<EntityModel> entities)
+    {
+        var byName = entities.ToDictionary(e => e.Name);
+
+        foreach (var (ownerEntityName, scope) in FindConfigurationScopesCore(root))
+        {
+            if (!byName.TryGetValue(ownerEntityName, out var owner))
+            {
+                continue;
+            }
+
+            foreach (var callName in new[] { "OwnsOne", "OwnsMany", "ComplexProperty" })
+            {
+                foreach (var call in FindCallsNamed(scope, callName))
+                {
+                    var navPropertyName = TryReadSinglePropertyNameArgument(call);
+                    var navProperty = navPropertyName is null
+                        ? null
+                        : owner.Properties.FirstOrDefault(p => p.Name == navPropertyName);
+
+                    if (navProperty is null)
+                    {
+                        continue;
+                    }
+
+                    var targetTypeName = callName == "OwnsMany"
+                        ? TryGetElementTypeName(navProperty.ClrType)
+                        : navProperty.ClrType;
+
+                    if (targetTypeName is null || !byName.ContainsKey(targetTypeName))
+                    {
+                        continue;
+                    }
+
+                    var builderLambda = TryGetFoldingBuilderLambda(call);
+                    if (builderLambda?.Block is { } block)
+                    {
+                        yield return (targetTypeName, block);
+                    }
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<(string EntityName, SyntaxNode Scope)> FindConfigurationScopesCore(
         CompilationUnitSyntax root)
     {
         var invocationsByEntity = new Dictionary<string, List<InvocationExpressionSyntax>>();
