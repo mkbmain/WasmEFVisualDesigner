@@ -2052,13 +2052,15 @@ public sealed class OnModelCreatingRewriter
     }
 
     /// Shared shape behind every `RemoveXxxOnOwnedProperty` entry point: locates `callName(...)`
-    /// chained onto `propertyName` within the owner's owned/complex builder-lambda scope and
-    /// unwraps it back to the bare `.Property(...)` call, mirroring RemoveStringArgCall/
-    /// RemoveBareMarkerCall's non-owned shape. No-ops (returns `sourceCode` unchanged) both when the
-    /// owner has no OwnsOne/OwnsMany/ComplexProperty call for `navPropertyName` at all, and when that
-    /// scope exists but has no `callName(...)` call for `propertyName` to remove — deliberately does
-    /// not use FindOrCreateOwnedConfigScope's synthesis path to introduce an empty builder lambda
-    /// just to discover there's nothing to remove from it.
+    /// chained onto `propertyName` within the owner's owned/complex builder-lambda scope (resolved via
+    /// the same `FindOrCreateOwnedConfigScope` the `Set*` path uses) and unwraps it back to the bare
+    /// `.Property(...)` call, mirroring RemoveStringArgCall/RemoveBareMarkerCall's non-owned shape.
+    /// No-ops (returns `sourceCode` unchanged, discarding whatever `FindOrCreateOwnedConfigScope`
+    /// resolved or synthesized) both when the owner has no OwnsOne/OwnsMany/ComplexProperty call for
+    /// `navPropertyName` at all, and when that scope exists but has no `callName(...)` call for
+    /// `propertyName` to remove — this deliberately throws away a builder lambda
+    /// `FindOrCreateOwnedConfigScope` may have just synthesized on a bare `OwnsOne(nav)` call, rather
+    /// than returning a source that gained an empty `, b => { }` for no actual removal.
     private static string RemoveOnOwnedProperty(
         string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string callName)
     {

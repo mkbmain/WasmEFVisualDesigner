@@ -192,4 +192,108 @@ public class DiagramEditorOwnedTypeTests
         var street = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Street");
         Assert.Null(street.ColumnName);
     }
+
+    [Fact]
+    public void SetRequiredOverride_FoldedOwnedProperty_WritesIntoOwnsOneBuilderLambda()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetRequiredOverride("Order", "Street", true);
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain("Entity<Address>", editor.ConfigSource);
+        Assert.Contains("OwnsOne(e => e.ShippingAddress, b =>", editor.ConfigSource);
+        Assert.Contains("IsRequired()", editor.ConfigSource);
+
+        var street = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Street");
+        Assert.True(street.IsRequiredOverride);
+
+        var clearResult = editor.SetRequiredOverride("Order", "Street", null);
+
+        Assert.True(clearResult.Success);
+        Assert.DoesNotContain("IsRequired()", editor.ConfigSource);
+
+        var street2 = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Street");
+        Assert.Null(street2.IsRequiredOverride);
+    }
+
+    // Order owns Address (nav "ShippingAddress") via a bare OwnsOne call on Order's own scope, and
+    // Address separately owns Country (nav "Country") via its own top-level Entity<Address>() scope.
+    // OwnedTypeInference.Fold resolves this transitively so Country.Code ends up folded all the way
+    // onto Order — but (by design, for UI-grouping purposes only — see OwnedTypeInference.Fold's
+    // re-stamping comment) Code.OwnerNavigationProperty gets overwritten to the OUTERMOST nav
+    // ("ShippingAddress") while Code.DeclaringEntityName correctly stays "Country". Routing a fluent
+    // edit for "Code" through "ShippingAddress" would resolve Address's OwnsOne builder lambda, not
+    // Country's — Address has no Code property, so the edit would be bogus and silently lost. Street
+    // (declared directly on Address, the immediate target of ShippingAddress) is the control case:
+    // single-level from Order's perspective, so it must remain fully editable in this same fixture.
+    private const string MultiLevelClassSource = """
+        public class Order
+        {
+            public int Id { get; set; }
+            public Address ShippingAddress { get; set; }
+        }
+
+        public class Address
+        {
+            public string Street { get; set; }
+            public Country Country { get; set; }
+        }
+
+        public class Country
+        {
+            public string Code { get; set; }
+        }
+        """;
+
+    private const string MultiLevelConfigSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.OwnsOne(e => e.ShippingAddress);
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.OwnsOne(a => a.Country);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetColumnName_MultiLevelFoldedProperty_FailsCleanlyWithoutCorruptingConfig()
+    {
+        var editor = new DiagramEditor(MultiLevelClassSource, MultiLevelConfigSource);
+
+        var code = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Code");
+        Assert.Equal("Country", code.DeclaringEntityName);
+        Assert.Equal("ShippingAddress", code.OwnerNavigationProperty);
+
+        var result = editor.SetColumnName("Order", "Code", "country_code");
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Error);
+        Assert.Equal(MultiLevelConfigSource, editor.ConfigSource);
+
+        var codeAfter = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Code");
+        Assert.Null(codeAfter.ColumnName);
+    }
+
+    [Fact]
+    public void SetColumnName_SingleLevelFoldedPropertyInMultiLevelFixture_StillSucceedsAndRoundTrips()
+    {
+        var editor = new DiagramEditor(MultiLevelClassSource, MultiLevelConfigSource);
+
+        var result = editor.SetColumnName("Order", "Street", "shipping_street");
+
+        Assert.True(result.Success);
+        Assert.Contains("HasColumnName(\"shipping_street\")", editor.ConfigSource);
+
+        var street = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Street");
+        Assert.Equal("shipping_street", street.ColumnName);
+    }
 }
