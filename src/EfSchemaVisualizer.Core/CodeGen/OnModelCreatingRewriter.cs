@@ -864,42 +864,57 @@ public sealed class OnModelCreatingRewriter
         return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasColumnType");
     }
 
-    private static string MutateExistingStringArgCall(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string value)
+    private static string MutateExistingStringArgCall(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string value, bool? secondArg = null)
     {
-        var newArgument = SyntaxFactory.Argument(
-            SyntaxFactory.LiteralExpression(
-                SyntaxKind.StringLiteralExpression,
-                SyntaxFactory.Literal(value)));
-
-        var newCall = targetCall.WithArgumentList(
-            targetCall.ArgumentList.WithArguments(
-                SyntaxFactory.SingletonSeparatedList(newArgument)));
+        var newCall = targetCall.WithArgumentList(targetCall.ArgumentList.WithArguments(BuildStringArgArguments(value, secondArg)));
 
         var newRoot = root.ReplaceNode(targetCall, newCall);
         return newRoot.ToFullString();
     }
 
-    private static string AppendStringArgCallToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, string methodName, string value)
+    // Builds the argument list shared by MutateExistingStringArgCall and BuildStringArgCall.
+    // Uses an explicit comma separator with trailing-space trivia (rather than a bare node list,
+    // which SyntaxFactory.SeparatedList would join with a space-less comma) so that
+    // MutateExistingStringArgCall — which intentionally skips a whole-tree NormalizeWhitespace to
+    // preserve the file's existing formatting — still renders "value, secondArg" correctly.
+    private static SeparatedSyntaxList<ArgumentSyntax> BuildStringArgArguments(string value, bool? secondArg)
     {
-        var newCall = BuildStringArgCall(propertyCall, methodName, value);
+        var valueArgument = SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(value)));
+
+        if (secondArg is null)
+        {
+            return SyntaxFactory.SingletonSeparatedList(valueArgument);
+        }
+
+        var secondArgument = SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
+            secondArg.Value ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression));
+
+        return SyntaxFactory.SeparatedList(
+            new[] { valueArgument, secondArgument },
+            new[] { SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space) });
+    }
+
+    private static string AppendStringArgCallToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, string methodName, string value, bool? secondArg = null)
+    {
+        var newCall = BuildStringArgCall(propertyCall, methodName, value, secondArg);
 
         var newRoot = root.ReplaceNode(propertyCall, newCall);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertStringArgPropertyStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, string methodName, string value)
+    private static string InsertStringArgPropertyStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, string methodName, string value, bool? secondArg = null)
     {
         var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
         var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
 
-        var newStatement = BuildStringArgPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, methodName, value);
+        var newStatement = BuildStringArgPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, methodName, value, secondArg);
         var newBlock = block.AddStatements(newStatement);
 
         var newRoot = root.ReplaceNode(block, newBlock);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertStringArgEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, string methodName, string value)
+    private static string InsertStringArgEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, string methodName, string value, bool? secondArg = null)
     {
         var method = FindOnModelCreatingMethod(root);
 
@@ -908,7 +923,7 @@ public sealed class OnModelCreatingRewriter
 
         var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
 
-        var propertyStatement = BuildStringArgPropertyStatement("entity", "e", propertyName, methodName, value);
+        var propertyStatement = BuildStringArgPropertyStatement("entity", "e", propertyName, methodName, value, secondArg);
         var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(propertyStatement));
 
         var newMethodBody = methodBody.AddStatements(entityBlockStatement);
@@ -916,7 +931,7 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static ExpressionStatementSyntax BuildStringArgPropertyStatement(string blockReceiverName, string propertyLambdaParam, string propertyName, string methodName, string value)
+    private static ExpressionStatementSyntax BuildStringArgPropertyStatement(string blockReceiverName, string propertyLambdaParam, string propertyName, string methodName, string value, bool? secondArg = null)
     {
         var propertyCall = SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(
@@ -933,22 +948,17 @@ public sealed class OnModelCreatingRewriter
                                 SyntaxFactory.IdentifierName(propertyLambdaParam),
                                 SyntaxFactory.IdentifierName(propertyName)))))));
 
-        return SyntaxFactory.ExpressionStatement(BuildStringArgCall(propertyCall, methodName, value));
+        return SyntaxFactory.ExpressionStatement(BuildStringArgCall(propertyCall, methodName, value, secondArg));
     }
 
-    private static InvocationExpressionSyntax BuildStringArgCall(ExpressionSyntax propertyCallExpression, string methodName, string value)
+    private static InvocationExpressionSyntax BuildStringArgCall(ExpressionSyntax propertyCallExpression, string methodName, string value, bool? secondArg = null)
     {
         return SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
                 propertyCallExpression,
                 SyntaxFactory.IdentifierName(methodName)),
-            SyntaxFactory.ArgumentList(
-                SyntaxFactory.SingletonSeparatedList(
-                    SyntaxFactory.Argument(
-                        SyntaxFactory.LiteralExpression(
-                            SyntaxKind.StringLiteralExpression,
-                            SyntaxFactory.Literal(value))))));
+            SyntaxFactory.ArgumentList(BuildStringArgArguments(value, secondArg)));
     }
 
     private static string RemoveStringArgCall(string sourceCode, string entityName, string propertyName, string methodName)
@@ -1152,6 +1162,46 @@ public sealed class OnModelCreatingRewriter
     public string RemoveDefaultValueSql(string sourceCode, string entityName, string propertyName)
     {
         return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasDefaultValueSql");
+    }
+
+    public string SetComputedColumnSql(string sourceCode, string entityName, string propertyName, string sql, bool? isStored)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasComputedColumnSql"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is not null)
+        {
+            return MutateExistingStringArgCall(root, existingCall, sql, isStored);
+        }
+
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            return AppendStringArgCallToPropertyCall(root, existingPropertyCall, "HasComputedColumnSql", sql, isStored);
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertStringArgPropertyStatement(root, existingScope, propertyName, "HasComputedColumnSql", sql, isStored);
+        }
+
+        return InsertStringArgEntityBlock(root, entityName, propertyName, "HasComputedColumnSql", sql, isStored);
+    }
+
+    public string RemoveComputedColumnSql(string sourceCode, string entityName, string propertyName)
+    {
+        return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasComputedColumnSql");
     }
 
     public string RemoveTable(string sourceCode, string entityName)

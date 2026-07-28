@@ -2363,6 +2363,52 @@ public class OnModelCreatingRewriterTests
         Assert.Equal(SourceWithPropertyButNoDefaultValue, result);
     }
 
+    [Fact]
+    public void SetComputedColumnSql_BarePropertyCall_AppendsHasComputedColumnSqlWithStored()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetComputedColumnSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", sql: "[A] + [B]", isStored: true);
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasComputedColumnSql(\"[A] + [B]\", true)", result);
+    }
+
+    [Fact]
+    public void SetComputedColumnSql_NoIsStored_AppendsHasComputedColumnSqlWithOneArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetComputedColumnSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", sql: "[A] + [B]", isStored: null);
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasComputedColumnSql(\"[A] + [B]\")", result);
+        Assert.DoesNotContain(", true", result);
+        Assert.DoesNotContain(", false", result);
+    }
+
+    [Fact]
+    public void SetComputedColumnSql_ExistingCall_MutatesArgument()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetComputedColumnSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", sql: "[A] + [B]", isStored: true);
+
+        var result = new OnModelCreatingRewriter()
+            .SetComputedColumnSql(source, entityName: "Order", propertyName: "Quantity", sql: "[C] + [D]", isStored: false);
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasComputedColumnSql(\"[C] + [D]\", false)", result);
+        Assert.DoesNotContain("[A] + [B]", result);
+    }
+
+    [Fact]
+    public void RemoveComputedColumnSql_ExistingCall_RemovesCall_LeavesBarePropertyCall()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetComputedColumnSql(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", sql: "[A] + [B]", isStored: true);
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveComputedColumnSql(source, entityName: "Order", propertyName: "Quantity");
+
+        Assert.DoesNotContain("HasComputedColumnSql", result);
+        Assert.Contains("entity.Property(e => e.Quantity)", result);
+    }
+
     private const string SourceWithNoRelationshipConfig = """
         public class AppDbContext : DbContext
         {
