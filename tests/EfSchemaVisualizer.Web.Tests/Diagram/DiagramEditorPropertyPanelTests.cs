@@ -731,4 +731,18 @@ public class DiagramEditorPropertyPanelTests
         Assert.True(result.Success);
         Assert.Null(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Id").SequenceName);
     }
+
+    [Fact]
+    public void SetUseSequence_SameSequenceWithEmptyStringSchema_WhenSchemaIsNull_IsNoOp()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddSequence("PersonIds", null, "int", null, null, null, null, null);
+        editor.SetUseSequence("Person", "Id", "PersonIds", null);
+        var configSourceBefore = editor.ConfigSource;
+
+        var result = editor.SetUseSequence("Person", "Id", "PersonIds", "");
+
+        Assert.True(result.Success);
+        Assert.Equal(configSourceBefore, editor.ConfigSource);
+    }
 }

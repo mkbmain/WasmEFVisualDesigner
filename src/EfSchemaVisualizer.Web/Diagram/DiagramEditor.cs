@@ -1391,7 +1391,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"A sequence named '{name}' already exists.");
         }
 
-        var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
+        var normalizedSchema = string.IsNullOrWhiteSpace(schema) ? null : schema.Trim();
+        var normalizedClrType = string.IsNullOrWhiteSpace(clrType) ? null : clrType.Trim();
+        var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, normalizedSchema, normalizedClrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1405,7 +1407,9 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"No sequence named '{name}' exists.");
         }
 
-        var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
+        var normalizedSchema = string.IsNullOrWhiteSpace(schema) ? null : schema.Trim();
+        var normalizedClrType = string.IsNullOrWhiteSpace(clrType) ? null : clrType.Trim();
+        var newConfigSource = _configRewriter.SetSequence(ConfigSource, name, normalizedSchema, normalizedClrType, startsAt, incrementsBy, minValue, maxValue, isCyclic);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
@@ -1437,7 +1441,8 @@ public sealed class DiagramEditor
         }
 
         var normalizedSequenceName = string.IsNullOrWhiteSpace(sequenceName) ? null : sequenceName.Trim();
-        if (normalizedSequenceName == property.SequenceName && schema == property.SequenceSchema)
+        var normalizedSchema = string.IsNullOrWhiteSpace(schema) ? null : schema.Trim();
+        if (normalizedSequenceName == property.SequenceName && normalizedSchema == property.SequenceSchema)
         {
             return DiagramEditResult.Ok();
         }
@@ -1445,7 +1450,7 @@ public sealed class DiagramEditor
         var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
         var newConfigSource = normalizedSequenceName is null
             ? _configRewriter.RemoveUseSequence(ConfigSource, owningEntityName, propertyName)
-            : _configRewriter.SetUseSequence(ConfigSource, owningEntityName, propertyName, normalizedSequenceName, schema);
+            : _configRewriter.SetUseSequence(ConfigSource, owningEntityName, propertyName, normalizedSequenceName, normalizedSchema);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
