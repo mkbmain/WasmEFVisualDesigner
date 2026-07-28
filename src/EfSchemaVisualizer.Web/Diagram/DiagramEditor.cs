@@ -170,7 +170,31 @@ public sealed class DiagramEditor
 
         var owningEntityName = ResolveDeclaringEntity(entityName, oldPropertyName);
         var newClassSource = _classRewriter.RenameProperty(ClassSource, owningEntityName, oldPropertyName, newPropertyName);
-        var newConfigSource = _configRewriter.RenamePropertyReferences(ConfigSource, owningEntityName, oldPropertyName, newPropertyName);
+
+        // A folded owned/complex property's Property(...)-shaped config reference lives inside the
+        // OWNER's OwnsOne/OwnsMany/ComplexProperty builder-lambda scope, not in a top-level
+        // Entity<T>() scope for `owningEntityName` (there is none — the declaring type is folded
+        // away). Route those through the owned-scope rewrite instead, so e.g. an existing
+        // `b.Property(a => a.Street).HasMaxLength(100)` inside `OwnsOne(o => o.ShippingAddress, ...)`
+        // gets its selector updated to the new name rather than being left stale and non-compiling.
+        var foldedProperty = entity.Properties.FirstOrDefault(p => p.Name == oldPropertyName);
+        var foldedNav = foldedProperty is { FoldKind: not FoldKind.None } ? foldedProperty.OwnerNavigationProperty : null;
+
+        string newConfigSource;
+        if (foldedNav is not null)
+        {
+            if (ValidateOwnedEditDepth(entityName, foldedProperty!, foldedNav) is { } depthFailure)
+            {
+                return depthFailure;
+            }
+
+            newConfigSource = _configRewriter.RenamePropertyReferencesInOwnedScope(
+                ConfigSource, entityName, foldedNav, oldPropertyName, newPropertyName);
+        }
+        else
+        {
+            newConfigSource = _configRewriter.RenamePropertyReferences(ConfigSource, owningEntityName, oldPropertyName, newPropertyName);
+        }
 
         // If oldPropertyName is itself an owner-side nav property with an OwnsOne/OwnsMany/ComplexProperty
         // call (owningEntityName == entityName in that case, since a nav property's own DeclaringEntityName
@@ -1383,9 +1407,9 @@ public sealed class DiagramEditor
     /// Detects the mismatch by resolving navPropertyName's CLR type from the pre-fold class source
     /// (the type OwnerNavigationProperty actually targets) and comparing it against
     /// property.DeclaringEntityName (the type that actually declares the property). For a
-    /// single-level fold these always agree (OwnedTypeInference.Fold only sets DeclaringEntityName via
-    /// `?? targetName`, so it's exactly the immediate owned/complex type), so this only fires for
-    /// genuine multi-level chains. Returns null when the edit is safe to proceed, or a failure result
+    /// single-level fold these always agree (both OwnedTypeInference.Fold and ComplexTypeInference.Fold
+    /// only set DeclaringEntityName via `?? targetName`, so it's exactly the immediate owned/complex
+    /// type), so this only fires for genuine multi-level chains. Returns null when the edit is safe to proceed, or a failure result
     /// to surface instead. Editing through multi-level owned/complex chains remains an explicit
     /// non-goal for this plan (see the design spec's Non-goals section) — this only makes that
     /// unsupported case fail safely and visibly instead of corrupting or silently losing the edit.

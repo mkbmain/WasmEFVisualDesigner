@@ -2602,13 +2602,51 @@ public sealed class OnModelCreatingRewriter
 
         var scopes = FindConfigScopes(root, entityName);
 
+        return RenamePropertyReferencesInScopes(root, scopes, oldPropertyName, newPropertyName) ?? sourceCode;
+    }
+
+    /// Same job as `RenamePropertyReferences`, but for a property folded in from an owned/complex
+    /// type: `Property(a => a.OldName)`-shaped calls live inside the OWNER's OwnsOne/OwnsMany/
+    /// ComplexProperty builder-lambda scope (resolved via the same `FindOrCreateOwnedConfigScope`
+    /// `SetOnOwnedProperty`/`RemoveOnOwnedProperty` already use), not in a top-level Entity&lt;T&gt;()
+    /// scope — there is no such scope to search once the declaring type is folded away. Discards
+    /// (returns `sourceCode` unchanged) both when `navPropertyName` has no owning call at all, and
+    /// when that call's scope exists but has no `Property(...)` reference to `oldPropertyName` to
+    /// rename — mirroring RemoveOnOwnedProperty's discard-if-nothing-to-do behavior, so a bare
+    /// `OwnsOne(nav)` call that FindOrCreateOwnedConfigScope had to synthesize a builder lambda for
+    /// doesn't get written back as an empty `, b => { }` for no actual rename.
+    public string RenamePropertyReferencesInOwnedScope(
+        string sourceCode, string ownerEntityName, string navPropertyName, string oldPropertyName, string newPropertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var resolved = FindOrCreateOwnedConfigScope(root, ownerEntityName, navPropertyName);
+        if (resolved is null)
+        {
+            return sourceCode;
+        }
+
+        var (scope, newRoot) = resolved.Value;
+
+        return RenamePropertyReferencesInScopes(newRoot, new[] { scope }, oldPropertyName, newPropertyName) ?? sourceCode;
+    }
+
+    /// Core rewrite shared by `RenamePropertyReferences` and `RenamePropertyReferencesInOwnedScope`:
+    /// finds the `Property(...)` call within `scopes` selecting `oldPropertyName` and rewrites its
+    /// selector argument to `newPropertyName`, preserving whichever of the argument's supported
+    /// shapes (expression-bodied lambda, block-bodied lambda, or string literal) it already used.
+    /// Returns null when no matching `Property(...)` call is found in any of `scopes`.
+    private static string? RenamePropertyReferencesInScopes(
+        CompilationUnitSyntax root, IEnumerable<SyntaxNode> scopes, string oldPropertyName, string newPropertyName)
+    {
         var existingPropertyCall = scopes
             .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
             .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == oldPropertyName);
 
         if (existingPropertyCall is null)
         {
-            return sourceCode;
+            return null;
         }
 
         var argumentExpression = existingPropertyCall.ArgumentList.Arguments.Single().Expression;

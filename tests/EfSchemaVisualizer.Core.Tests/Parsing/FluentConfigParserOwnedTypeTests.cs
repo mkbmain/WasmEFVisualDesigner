@@ -129,6 +129,58 @@ public class FluentConfigParserOwnedTypeTests
     }
 
     [Fact]
+    public void ParseOwnedTypeCalls_ExpressionBodiedBuilderWithHasMaxLength_FiresOwnedNestedConfigIgnored()
+    {
+        // An expression-bodied builder lambda (`b => b.Property(...).HasMaxLength(100)`) never gets
+        // a nested scope from FluentSyntaxHelpers' scope discovery — only block-bodied builders
+        // (`b => { ... }`) do. Before this fix, that meant HasMaxLength here was silently dropped
+        // with no diagnostic at all (MaxLength reads back null with zero indication why).
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress, b => b.Property(a => a.Street).HasMaxLength(100));
+                    });
+                }
+            }
+            """;
+
+        var result = Parser.ParseOwnedTypeCalls(source);
+
+        Assert.Single(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.OwnedNestedConfigIgnored, diagnostic.Code);
+    }
+
+    [Fact]
+    public void ParseOwnedTypeCalls_ExpressionBodiedBuilderWithNoCalls_NoDiagnostic()
+    {
+        // An expression-bodied builder with no invocation at all has nothing to lose, so it should
+        // not be flagged as "something was ignored" — mirrors the block-bodied empty-builder case
+        // above (ParseOwnedTypeCalls_BuilderLambdaWithNoCalls_NoDiagnostic).
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress, b => b);
+                    });
+                }
+            }
+            """;
+
+        var result = Parser.ParseOwnedTypeCalls(source);
+
+        Assert.Single(result.Value);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
     public void ParseUnrecognizedCalls_OwnsOneCall_NoLongerFlagged()
     {
         const string source = """

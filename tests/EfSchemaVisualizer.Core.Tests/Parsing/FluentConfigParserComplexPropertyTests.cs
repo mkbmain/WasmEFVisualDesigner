@@ -158,4 +158,64 @@ public class FluentConfigParserComplexPropertyTests
 
         Assert.Empty(result.Diagnostics);
     }
+
+    [Fact]
+    public void ParseComplexPropertyCalls_ExpressionBodiedBuilderWithHasColumnName_FiresComplexNestedConfigIgnored()
+    {
+        // Same gap as the owned-type side: an expression-bodied builder lambda
+        // (`b => b.Property(...).HasColumnName(...)`) never gets a nested scope, so its config was
+        // previously silently dropped with no diagnostic.
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.ComplexProperty(e => e.ShippingAddress, b => b.Property(a => a.Street).HasColumnName("street_name"));
+                    });
+                }
+            }
+            """;
+
+        var entities = new[]
+        {
+            new EntityModel("Order", new[] { Property("ShippingAddress", "Address") }),
+            new EntityModel("Address", new[] { Property("Street", "string") }),
+        };
+
+        var result = Parser.ParseComplexPropertyCalls(source, entities);
+
+        Assert.Single(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.ComplexNestedConfigIgnored, diagnostic.Code);
+    }
+
+    [Fact]
+    public void ParseComplexPropertyCalls_ExpressionBodiedBuilderWithNoCalls_NoDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.ComplexProperty(e => e.ShippingAddress, b => b);
+                    });
+                }
+            }
+            """;
+
+        var entities = new[]
+        {
+            new EntityModel("Order", new[] { Property("ShippingAddress", "Address") }),
+            new EntityModel("Address", new[] { Property("Street", "string") }),
+        };
+
+        var result = Parser.ParseComplexPropertyCalls(source, entities);
+
+        Assert.Single(result.Value);
+        Assert.Empty(result.Diagnostics);
+    }
 }

@@ -1137,11 +1137,19 @@ public sealed class FluentConfigParser
 
     private static readonly string[] IgnoredNestedBuilderCallNames = { "ToTable", "WithOwner" };
 
-    /// True if `call`'s second lambda argument (the builder) contains any `ToTable`/`WithOwner`
-    /// call — the two builder-lambda calls this pass still doesn't apply (table splitting and owner
-    /// customization are explicit non-goals). Everything else inside the builder is now genuinely
-    /// parsed via the nested scope FluentSyntaxHelpers.FindConfigurationScopes yields for it, so it no
-    /// longer needs a "something was ignored" diagnostic.
+    /// True if `call`'s second lambda argument (the builder) contains config this pass doesn't
+    /// apply. For the usual block-bodied builder (`b => { ... }`), that's just `ToTable`/`WithOwner`
+    /// — the two builder-lambda calls this pass still doesn't apply (table splitting and owner
+    /// customization are explicit non-goals); everything else inside a block-bodied builder is
+    /// genuinely parsed via the nested scope `FluentSyntaxHelpers.FindConfigurationScopes` yields for
+    /// it, so it no longer needs a "something was ignored" diagnostic there.
+    ///
+    /// An EXPRESSION-bodied builder (`b => b.Property(a => a.Street).HasMaxLength(100)`), however,
+    /// gets no nested scope at all — `FindConfigurationScopes`'s nested-scope discovery only looks
+    /// for a block body — so nothing inside one is ever read by any `Parse*`/`Set*` pass. Rather than
+    /// silently dropping whatever config it holds with zero diagnostic, this flags it whenever it
+    /// contains at least one invocation (i.e. actually configures something); an empty or call-free
+    /// expression body has nothing to lose, so it's left unflagged.
     private static bool HasIgnoredNestedConfigCalls(InvocationExpressionSyntax call)
     {
         var builderLambda = call.ArgumentList.Arguments
@@ -1153,6 +1161,11 @@ public sealed class FluentConfigParser
         if (builderLambda is null)
         {
             return false;
+        }
+
+        if (builderLambda.Block is null)
+        {
+            return builderLambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any();
         }
 
         return builderLambda.DescendantNodes()

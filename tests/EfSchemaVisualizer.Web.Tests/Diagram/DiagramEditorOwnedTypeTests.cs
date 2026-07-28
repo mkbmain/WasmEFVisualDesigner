@@ -48,6 +48,43 @@ public class DiagramEditorOwnedTypeTests
     }
 
     [Fact]
+    public void RenameProperty_FoldedOwnedProperty_UpdatesExistingConfigReferenceAndKeepsItsValue()
+    {
+        const string configWithExistingMaxLength = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasMaxLength(100);
+                        });
+                    });
+                }
+            }
+            """;
+        var editor = new DiagramEditor(ClassSource, configWithExistingMaxLength);
+
+        var result = editor.RenameProperty("Order", "Street", "StreetLine1");
+
+        Assert.True(result.Success);
+        Assert.Contains("public string StreetLine1 { get; set; }", editor.ClassSource);
+        Assert.DoesNotContain("public string Street {", editor.ClassSource);
+
+        // The config's property selector must follow the rename, not just the class declaration —
+        // otherwise `b.Property(a => a.Street)` would reference a property that no longer exists
+        // (non-compiling) and its HasMaxLength(100) would silently stop applying.
+        Assert.Contains("a.StreetLine1", editor.ConfigSource);
+        Assert.DoesNotContain("a.Street)", editor.ConfigSource);
+        Assert.Contains("HasMaxLength(100)", editor.ConfigSource);
+
+        var street = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "StreetLine1");
+        Assert.Equal(100, street.MaxLength);
+    }
+
+    [Fact]
     public void RemoveProperty_FoldedOwnedProperty_RemovesFromAddressClass()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);
