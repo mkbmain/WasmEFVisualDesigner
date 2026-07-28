@@ -385,4 +385,17 @@ public static class ModelMerger
 
         return constraints.Count == 0 ? entity : entity with { CheckConstraints = constraints };
     }
+
+    public static EntityModel ApplyUseSequences(EntityModel entity, IReadOnlyList<UseSequenceConfig> configs)
+    {
+        var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var config)
+                ? property with { SequenceName = config.SequenceName, SequenceSchema = config.Schema }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
 }

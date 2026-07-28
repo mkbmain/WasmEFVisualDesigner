@@ -25,4 +25,6 @@ public sealed record PropertyModel(
     bool IsOwned = false,
     string? OwnerNavigationProperty = null,
     string? ComputedColumnSql = null,
-    bool? ComputedColumnSqlIsStored = null);
+    bool? ComputedColumnSqlIsStored = null,
+    string? SequenceName = null,
+    string? SequenceSchema = null);

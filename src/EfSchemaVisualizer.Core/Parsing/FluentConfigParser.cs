@@ -22,7 +22,7 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint",
+        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -2039,5 +2039,62 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<CheckConstraintConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<UseSequenceConfig>> ParseUseSequences(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<UseSequenceConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "UseSequence"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which property this UseSequence call configures.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                var arguments = call.ArgumentList.Arguments;
+
+                if (arguments.Count == 0
+                    || arguments[0].Expression is not LiteralExpressionSyntax sequenceNameLiteral
+                    || !sequenceNameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableUseSequenceArgument,
+                        "UseSequence argument is not a string literal and could not be read.",
+                        entityName,
+                        propertyName,
+                        call.Span));
+                    continue;
+                }
+
+                var sequenceName = sequenceNameLiteral.Token.ValueText;
+
+                string? schema = null;
+                if (arguments.Count >= 2
+                    && arguments[1].Expression is LiteralExpressionSyntax schemaLiteral
+                    && schemaLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    schema = schemaLiteral.Token.ValueText;
+                }
+
+                results.Add(new UseSequenceConfig(entityName, propertyName, sequenceName, schema));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<UseSequenceConfig>>(results, diagnostics);
     }
 }

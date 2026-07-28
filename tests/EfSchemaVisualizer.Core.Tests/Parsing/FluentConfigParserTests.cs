@@ -4152,4 +4152,55 @@ public class FluentConfigParserTests
         var sequence = Assert.Single(result.Value);
         Assert.Null(sequence.IsCyclic);
     }
+
+    private const string UseSequenceSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Number).UseSequence("OrderNumbers", "shared");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUseSequences_ReadsSequenceNameAndSchema()
+    {
+        var result = new FluentConfigParser().ParseUseSequences(UseSequenceSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Order", config.EntityName);
+        Assert.Equal("Number", config.PropertyName);
+        Assert.Equal("OrderNumbers", config.SequenceName);
+        Assert.Equal("shared", config.Schema);
+    }
+
+    private const string UseSequenceSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Number).UseSequence(SomeNameConstant);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUseSequences_NonLiteralArgument_EmitsUnreadableDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseUseSequences(UseSequenceSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableUseSequenceArgument, diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        Assert.Equal("Number", diagnostic.PropertyName);
+    }
 }

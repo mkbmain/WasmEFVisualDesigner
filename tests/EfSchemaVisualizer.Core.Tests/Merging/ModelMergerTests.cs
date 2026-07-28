@@ -938,4 +938,30 @@ public class ModelMergerTests
         Assert.Equal(1000, orderNumbers.StartsAt);
         Assert.True(orderNumbers.IsCyclic);
     }
+
+    // ─── ApplyUseSequences ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyUseSequences_SetsSequenceNameAndSchemaOnMatchingProperty()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Number", "int", IsNullable: false, MaxLength: null),
+            new("Total", "decimal", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<UseSequenceConfig>
+        {
+            new("Order", "Number", "OrderNumbers", "shared"),
+        };
+
+        var result = ModelMerger.ApplyUseSequences(entity, configs);
+
+        var number = result.Properties.Single(p => p.Name == "Number");
+        Assert.Equal("OrderNumbers", number.SequenceName);
+        Assert.Equal("shared", number.SequenceSchema);
+
+        var total = result.Properties.Single(p => p.Name == "Total");
+        Assert.Null(total.SequenceName);
+    }
 }

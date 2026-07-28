@@ -59,6 +59,7 @@ public static class DiagramModelBuilder
         var unrecognizedModelLevelCalls = configParser.ParseUnrecognizedModelLevelCalls(configSource);
         var defaultSchema = configParser.ParseDefaultSchema(configSource);
         var sequences = configParser.ParseSequences(configSource);
+        var useSequences = configParser.ParseUseSequences(configSource);
 
         diagnostics.AddRange(maxLengths.Diagnostics);
         diagnostics.AddRange(precisions.Diagnostics);
@@ -94,6 +95,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(unrecognizedModelLevelCalls);
         diagnostics.AddRange(defaultSchema.Diagnostics);
         diagnostics.AddRange(sequences.Diagnostics);
+        diagnostics.AddRange(useSequences.Diagnostics);
         diagnostics.AddRange(ownedTypeCalls.Diagnostics);
 
         var fluentIndexKeys = indexes.Value.Select(IndexDedupeKey).ToHashSet();
@@ -131,6 +133,7 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyDefaultValueSqls(entity, defaultValueSqls.Value))
             .Select(entity => ModelMerger.ApplyComputedColumnSqls(entity, computedColumnSqls.Value))
             .Select(entity => ModelMerger.ApplyCheckConstraints(entity, checkConstraints.Value))
+            .Select(entity => ModelMerger.ApplyUseSequences(entity, useSequences.Value))
             .Select(entity => ModelMerger.ApplyIndexes(entity, mergedIndexConfigs))
             .Select(entity => ModelMerger.ApplyValueGeneration(entity, valueGeneration.Value))
             .Select(entity => ModelMerger.ApplyConcurrencyTokens(entity, concurrencyTokens.Value))
