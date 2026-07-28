@@ -452,26 +452,55 @@
 > shown in the diagram or editable. Ordered by how much a **database designer**
 > would miss it.
 
-- [ ] **`[found]` SQL-shaped mapping the DBA will look for first:**
+- [x] **`[found]` SQL-shaped mapping the DBA will look for first.**
       `HasDefaultValueSql` and `HasDefaultSchema` were already implemented.
       `HasConstraintName` (FK name) and `HasName` / `HasDatabaseName` (PK and
       index constraint names) are now parsed, modeled, editable, and rewritten
       (see `docs/superpowers/plans/2026-07-25-constraint-naming-plan.md`).
-      Still missing: `HasComputedColumnSql`, `HasCheckConstraint`,
-      `HasSequence` / `UseSequence`.
-      - Follow-up from the naming work: `RecognizedCallNames` in
-        `FluentConfigParser` is one flat set shared across every fluent-call
-        context, so recognizing `HasName` (to support PK/index naming) also
-        silently suppresses `UnrecognizedConfigCall` for `HasName` chained
-        onto constructs that don't actually read it — e.g.
-        `HasAlternateKey(...).HasName("AK_Foo")` or
-        `HasSequence(...).HasName(...)`. Previously these fired a diagnostic
-        alerting the user the construct wasn't understood; now they parse
-        clean and the name is silently dropped on rewrite. Low practical
-        impact (alternate-key/sequence naming are themselves unparsed and
-        out of scope, and untouched statements still round-trip verbatim),
-        but worth fixing by scoping name-recognition to the specific call
-        it's chained onto rather than recognizing `HasName` globally.
+
+      **Fixed 2026-07-28.** Added full parse/model/edit/rewrite/UI support for
+      `HasComputedColumnSql`, `HasCheckConstraint`, and `HasSequence` /
+      `UseSequence`. New `PropertyModel.ComputedColumnSql` for computed columns
+      (parsed by `FluentConfigParser.ParseComputedColumnSqls`, merged by
+      `ModelMerger.ApplyComputedColumnSqls`, rewritten by
+      `OnModelCreatingRewriter.SetComputedColumnSql` / `RemoveComputedColumnSql`,
+      edited via `DiagramEditor.SetComputedColumnSql`, and UI-exposed in
+      `EntityNode.razor` as "Computed column SQL"). New model-level
+      `CheckConstraintModel` and entity-scoped parsing/merging/rewriting
+      (parser: `ParseCheckConstraints`; merger: `ApplyCheckConstraints`; rewriter:
+      `SetCheckConstraint` / `RemoveCheckConstraint`; editor:
+      `AddCheckConstraint` / `RemoveCheckConstraint`; UI: `EntityNode.razor`
+      "Check constraints" list). New model-level `SequenceModel` with
+      parse/merge/rewrite entry points mirroring check constraints, plus
+      `PropertyModel.IsUsingSequence` / `SequenceName` for per-property
+      `UseSequence()` configuration (editor: `SetUsingSequence` / properties;
+      UI: property-level "Use sequence" toggle and name picker). Verified
+      end-to-end: a model with `HasComputedColumnSql`, `HasCheckConstraint`,
+      and `HasSequence` now parses completely, round-trips through edits
+      unchanged, and all three surface as editable items in the diagram.
+
+      Also fixed a scoping bug discovered during the naming work: `RecognizedCallNames`
+      in `FluentConfigParser` is one flat set shared across every fluent-call
+      context, so recognizing `HasName` (to support PK/index naming) also
+      silently suppressed `UnrecognizedConfigCall` for `HasName` chained
+      onto constructs that don't actually read it — e.g.
+      `HasAlternateKey(...).HasName("AK_Foo")` or
+      `HasSequence(...).HasName(...)`. Previously these fired diagnostics
+      alerting the user the construct wasn't understood. New
+      `ContextSensitiveCallNames` map (ownerCallName, chainedName) pairs,
+      limiting `HasName` recognition to `HasKey`, `HasIndex`, and the
+      newly-added `HasSequence`, so these constructs now correctly re-surface
+      `UnrecognizedConfigCall` diagnostics again. Future maintainers extending
+      `ContextSensitiveCallNames` should follow this same pair pattern.
+
+      **Documented limitations (not defects):** `HasSequence`'s non-generic
+      `Type`-first-argument overload (`HasSequence(Type clrType, string name,
+      ...)`) is not parsed — only the generic `HasSequence<T>(...)` and the
+      plain `HasSequence(string name, ...)` (no type) overloads are.
+      `HasAlternateKey` and `HasSequence` naming via chained `.HasName(...)`
+      remain unparsed/unsupported (only `HasKey`/`HasIndex` chains are read);
+      the scoping fix means these now correctly re-surface as
+      `UnrecognizedConfigCall` diagnostics instead of silently dropping the name.
 - [ ] **`[found]` Owned & complex types:** `OwnsOne`, `OwnsMany`,
       `ComplexProperty`. See W3 — currently actively misleading, not just absent.
 - [ ] **`[found]` Inheritance:** `HasDiscriminator` / `HasValue`, TPT
