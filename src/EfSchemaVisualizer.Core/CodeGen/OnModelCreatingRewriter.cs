@@ -1880,12 +1880,19 @@ public sealed class OnModelCreatingRewriter
             return (configureMethod.Body, configureMethod.ParameterList.Parameters.Single().Identifier.Text);
         }
 
-        if (scope is BlockSyntax { Parent: SimpleLambdaExpressionSyntax builderLambda } builderBlock)
+        if (scope is BlockSyntax { Parent: SimpleLambdaExpressionSyntax simpleBuilderLambda } simpleBuilderBlock)
         {
             // An OwnsOne/OwnsMany/ComplexProperty builder-lambda block, as returned by
             // FindOrCreateOwnedConfigScope — the scope IS the block itself, not an invocation
             // wrapping one, so the receiver name comes from the enclosing lambda's parameter.
-            return (builderBlock, builderLambda.Parameter.Identifier.Text);
+            return (simpleBuilderBlock, simpleBuilderLambda.Parameter.Identifier.Text);
+        }
+
+        if (scope is BlockSyntax { Parent: ParenthesizedLambdaExpressionSyntax parenthesizedBuilderLambda } parenthesizedBuilderBlock)
+        {
+            // Same as above, but for a user-authored `(b) => { ... }` builder lambda (parsed source
+            // isn't guaranteed to use the simple-lambda form) — single parameter, parenthesized.
+            return (parenthesizedBuilderBlock, parenthesizedBuilderLambda.ParameterList.Parameters[0].Identifier.Text);
         }
 
         throw new InvalidOperationException($"Unsupported configuration scope node type: {scope.GetType().Name}");
@@ -1931,11 +1938,7 @@ public sealed class OnModelCreatingRewriter
                 continue;
             }
 
-            var builderLambda = call.ArgumentList.Arguments
-                .Select(a => a.Expression)
-                .OfType<AnonymousFunctionExpressionSyntax>()
-                .Skip(1)
-                .FirstOrDefault();
+            var builderLambda = FluentSyntaxHelpers.TryGetFoldingBuilderLambda(call);
 
             if (builderLambda?.Block is { } existingBlock)
             {
@@ -1962,11 +1965,15 @@ public sealed class OnModelCreatingRewriter
 
             // Re-locate the block in the new tree (the old `newBlock` node instance isn't part of
             // `newRoot` — ReplaceNode produces fresh nodes throughout the ancestor chain) by
-            // re-running the same lookup against it.
+            // re-running the same lookup against it. Find the builder lambda by the same
+            // position-based search used above (not a hard-coded `Arguments[1]`) so this stays
+            // correct even if the argument list shape ever changes.
             var relocatedCall = FindConfigScopes(newRoot, ownerEntityName)
                 .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, callName))
                 .First(c => FluentSyntaxHelpers.TryReadSinglePropertyNameArgument(c) == navPropertyName);
-            var relocatedBlock = ((SimpleLambdaExpressionSyntax)relocatedCall.ArgumentList.Arguments[1].Expression).Block!;
+            var relocatedBlock = FluentSyntaxHelpers.TryGetFoldingBuilderLambda(relocatedCall)?.Block
+                ?? throw new InvalidOperationException(
+                    "Synthesized builder lambda not found after relocating the call in the new tree.");
 
             return (relocatedBlock, newRoot);
         }

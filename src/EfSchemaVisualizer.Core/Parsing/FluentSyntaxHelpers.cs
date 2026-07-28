@@ -74,10 +74,15 @@ internal static class FluentSyntaxHelpers
     }
 
     /// If `invocation` is an `OwnsOne`/`OwnsMany`/`ComplexProperty` call with a second (builder)
-    /// lambda argument, returns that lambda node; otherwise null. The first lambda argument is
-    /// always the navigation-property selector, never the builder (same convention as
-    /// `FluentConfigParser`'s `HasIgnoredNestedConfigCalls`).
-    private static AnonymousFunctionExpressionSyntax? TryGetFoldingBuilderLambda(InvocationExpressionSyntax invocation)
+    /// lambda argument, returns that lambda node; otherwise null. The first argument is always the
+    /// navigation-property selector (either a lambda `e => e.Foo` OR a string literal `"Foo"`, per
+    /// `TryReadSinglePropertyNameArgument`), never the builder, so the builder lambda is found by
+    /// ARGUMENT POSITION — skip the first argument, then find the first lambda among what remains —
+    /// not by "skip the first lambda encountered." Counting lambdas instead of argument positions
+    /// would wrongly treat the string-overload form `OwnsOne("Foo", b => {...})` as having zero
+    /// lambdas before the builder (there's only one lambda in the whole call), concluding the call
+    /// is "bare" and needs a synthesized second lambda.
+    internal static AnonymousFunctionExpressionSyntax? TryGetFoldingBuilderLambda(InvocationExpressionSyntax invocation)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var name }
             || (name != "OwnsOne" && name != "OwnsMany" && name != "ComplexProperty"))
@@ -86,9 +91,9 @@ internal static class FluentSyntaxHelpers
         }
 
         return invocation.ArgumentList.Arguments
+            .Skip(1)
             .Select(a => a.Expression)
             .OfType<AnonymousFunctionExpressionSyntax>()
-            .Skip(1)
             .FirstOrDefault();
     }
 
