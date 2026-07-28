@@ -16,7 +16,7 @@ public sealed class FluentConfigParser
     private static readonly HashSet<string> RecognizedCallNames = new()
     {
         "Property", "HasMaxLength", "HasPrecision", "IsRequired", "IsUnicode", "IsFixedLength", "HasKey", "HasAlternateKey", "ToTable",
-        "HasColumnName", "HasColumnType", "HasDefaultValue", "HasDefaultValueSql", "HasIndex", "IsUnique",
+        "HasColumnName", "HasColumnType", "HasDefaultValue", "HasDefaultValueSql", "HasComputedColumnSql", "HasIndex", "IsUnique",
         "HasFilter", "IsDescending", "IncludeProperties",
         "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
@@ -1177,6 +1177,60 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<DefaultValueSqlConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<ComputedColumnSqlConfig>> ParseComputedColumnSqls(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<ComputedColumnSqlConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasComputedColumnSql"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which property this HasComputedColumnSql call configures.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                var arguments = call.ArgumentList.Arguments;
+                var sqlArg = arguments.FirstOrDefault();
+
+                if (sqlArg?.Expression is not LiteralExpressionSyntax sqlLiteral || !sqlLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasComputedColumnSqlArgument,
+                        "HasComputedColumnSql argument is not a string literal and could not be read.",
+                        entityName,
+                        propertyName,
+                        (sqlArg ?? (SyntaxNode)call).Span));
+                    continue;
+                }
+
+                bool? isStored = null;
+                if (arguments.Count >= 2
+                    && arguments[1].Expression is LiteralExpressionSyntax storedLiteral
+                    && (storedLiteral.IsKind(SyntaxKind.TrueLiteralExpression) || storedLiteral.IsKind(SyntaxKind.FalseLiteralExpression)))
+                {
+                    isStored = storedLiteral.IsKind(SyntaxKind.TrueLiteralExpression);
+                }
+
+                results.Add(new ComputedColumnSqlConfig(entityName, propertyName, sqlLiteral.Token.ValueText, isStored));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<ComputedColumnSqlConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexes(string sourceCode)

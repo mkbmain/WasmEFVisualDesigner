@@ -477,6 +477,32 @@ public class ModelMergerTests
         Assert.Equal("GETDATE()", merged.Properties.Single(p => p.Name == "CreatedAt").DefaultValueSql);
     }
 
+    // ─── ApplyComputedColumnSqls ────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyComputedColumnSqls_SetsSqlAndIsStoredOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Order", new List<PropertyModel>
+        {
+            new("Total", "decimal", IsNullable: false, MaxLength: null),
+            new("Quantity", "int", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<ComputedColumnSqlConfig>
+        {
+            new("Order", "Total", "[Quantity] * [UnitPrice]", true),
+        };
+
+        var result = ModelMerger.ApplyComputedColumnSqls(entity, configs);
+
+        var total = result.Properties.Single(p => p.Name == "Total");
+        Assert.Equal("[Quantity] * [UnitPrice]", total.ComputedColumnSql);
+        Assert.True(total.ComputedColumnSqlIsStored);
+
+        var quantity = result.Properties.Single(p => p.Name == "Quantity");
+        Assert.Null(quantity.ComputedColumnSql);
+    }
+
     // ─── ApplyRelationships ─────────────────────────────────────────────────────
 
     [Fact]

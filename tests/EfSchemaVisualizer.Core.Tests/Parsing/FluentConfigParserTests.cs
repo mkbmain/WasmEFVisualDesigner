@@ -1896,6 +1896,82 @@ public class FluentConfigParserTests
         Assert.Equal("CreatedAt", diagnostic.PropertyName);
     }
 
+    // ─── ParseComputedColumnSqls ────────────────────────────────────────────────
+
+    private const string ComputedColumnSqlSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasComputedColumnSql("[Quantity] * [UnitPrice]", stored: true);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseComputedColumnSqls_ReadsSqlAndStoredArguments()
+    {
+        var result = new FluentConfigParser().ParseComputedColumnSqls(ComputedColumnSqlSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Order", config.EntityName);
+        Assert.Equal("Total", config.PropertyName);
+        Assert.Equal("[Quantity] * [UnitPrice]", config.Sql);
+        Assert.True(config.IsStored);
+    }
+
+    private const string ComputedColumnSqlSourceNoStored = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasComputedColumnSql("[Quantity] * [UnitPrice]");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseComputedColumnSqls_NoStoredArgument_LeavesIsStoredNull()
+    {
+        var result = new FluentConfigParser().ParseComputedColumnSqls(ComputedColumnSqlSourceNoStored);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Null(config.IsStored);
+    }
+
+    private const string ComputedColumnSqlSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Total).HasComputedColumnSql(SomeSqlConstant);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseComputedColumnSqls_NonLiteralArgument_EmitsUnreadableDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseComputedColumnSqls(ComputedColumnSqlSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasComputedColumnSqlArgument, diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        Assert.Equal("Total", diagnostic.PropertyName);
+    }
+
     // ─── ParseRelationships ─────────────────────────────────────────────────────
 
     private static readonly IReadOnlyList<EntityModel> OrderCustomerEntities = new List<EntityModel>

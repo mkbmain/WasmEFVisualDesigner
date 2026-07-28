@@ -23,4 +23,6 @@ public sealed record PropertyModel(
     string? InverseProperty = null,
     string? DeclaringEntityName = null,
     bool IsOwned = false,
-    string? OwnerNavigationProperty = null);
+    string? OwnerNavigationProperty = null,
+    string? ComputedColumnSql = null,
+    bool? ComputedColumnSqlIsStored = null);
