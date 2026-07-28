@@ -78,6 +78,38 @@
 }</pre>
     }
 
+    @if (_editor is not null)
+    {
+        <div>
+            <div>Sequences:</div>
+            @foreach (var sequence in _editor.Current.Sequences)
+            {
+                <div style="display: flex; gap: 4px; align-items: center;">
+                    <input style="width: 100px;" value="@sequence.Name" disabled />
+                    <input style="width: 80px;" value="@sequence.Schema" placeholder="(schema)"
+                           @onchange="e => CommitSequenceSchema(sequence, e.Value?.ToString())" />
+                    <input style="width: 60px;" value="@sequence.ClrType" placeholder="(type)"
+                           @onchange="e => CommitSequenceClrType(sequence, e.Value?.ToString())" />
+                    <input style="width: 60px;" type="number" value="@sequence.StartsAt" title="Starts at"
+                           @onchange="e => CommitSequenceStartsAt(sequence, e.Value?.ToString())" />
+                    <input style="width: 60px;" type="number" value="@sequence.IncrementsBy" title="Increments by"
+                           @onchange="e => CommitSequenceIncrementsBy(sequence, e.Value?.ToString())" />
+                    <input style="width: 60px;" type="number" value="@sequence.MinValue" title="Min value"
+                           @onchange="e => CommitSequenceMinValue(sequence, e.Value?.ToString())" />
+                    <input style="width: 60px;" type="number" value="@sequence.MaxValue" title="Max value"
+                           @onchange="e => CommitSequenceMaxValue(sequence, e.Value?.ToString())" />
+                    <label title="Cyclic">
+                        <input type="checkbox" checked="@(sequence.IsCyclic ?? false)"
+                               @onchange="e => CommitSequenceIsCyclic(sequence, (bool)(e.Value ?? false))" />
+                        Cyclic
+                    </label>
+                    <button @onclick="() => RemoveSequenceAsync(sequence)">x</button>
+                </div>
+            }
+            <button @onclick="AddSequenceAsync">Add sequence</button>
+        </div>
+    }
+
     @if (_diagram is not null && _editContext is not null)
     {
         <details style="margin: 8px 0; font-size: 0.85em;">
@@ -420,6 +452,181 @@
         }
 
         _editor.Undo();
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task AddSequenceAsync()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var name = $"Sequence{_editor.Current.Sequences.Count + 1}";
+        var result = _editor.AddSequence(name, schema: null, clrType: "int",
+            startsAt: null, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task RemoveSequenceAsync(SequenceModel sequence)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var result = _editor.RemoveSequence(sequence.Name);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task CommitSequenceSchema(SequenceModel sequence, string? newSchema)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var result = _editor.SetSequence(sequence.Name, newSchema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task CommitSequenceClrType(SequenceModel sequence, string? newClrType)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var result = _editor.SetSequence(sequence.Name, sequence.Schema, newClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task CommitSequenceStartsAt(SequenceModel sequence, string? newStartsAt)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        long? startsAt = long.TryParse(newStartsAt, out var parsed) ? parsed : null;
+        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            startsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task CommitSequenceIncrementsBy(SequenceModel sequence, string? newIncrementsBy)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        int? incrementsBy = int.TryParse(newIncrementsBy, out var parsed) ? parsed : null;
+        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, incrementsBy, sequence.MinValue, sequence.MaxValue, sequence.IsCyclic);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task CommitSequenceMinValue(SequenceModel sequence, string? newMinValue)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        long? minValue = long.TryParse(newMinValue, out var parsed) ? parsed : null;
+        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, minValue, sequence.MaxValue, sequence.IsCyclic);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task CommitSequenceMaxValue(SequenceModel sequence, string? newMaxValue)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        long? maxValue = long.TryParse(newMaxValue, out var parsed) ? parsed : null;
+        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, maxValue, sequence.IsCyclic);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await OnDiagramEditedAsync();
+    }
+
+    private async Task CommitSequenceIsCyclic(SequenceModel sequence, bool isCyclic)
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var result = _editor.SetSequence(sequence.Name, sequence.Schema, sequence.ClrType,
+            sequence.StartsAt, sequence.IncrementsBy, sequence.MinValue, sequence.MaxValue, isCyclic);
+        if (!result.Success)
+        {
+            _error = result.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         await OnDiagramEditedAsync();
     }
 

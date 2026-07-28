@@ -6,6 +6,13 @@
 @using Blazor.Diagrams.Core.Models
 @using Blazor.Diagrams.Components.Renderers
 
+<datalist id="sequence-names">
+    @foreach (var sequence in EditContext.Editor.Current.Sequences)
+    {
+        <option value="@sequence.Name" />
+    }
+</datalist>
+
 <div class="card" style="width: 260px; border: 1px solid #444; position: relative;">
     <PortRenderer Port="@(Node.GetPort(PortAlignment.Left))" Class="entity-port"
                   Style="position: absolute; left: -6px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: #666; cursor: crosshair;">
@@ -309,6 +316,13 @@
                                            @onpointerdown:stopPropagation="true"
                                            @onmousedown:stopPropagation="true" />
                                     Stored
+                                </label>
+                                <label style="display: block;">
+                                    Uses sequence:
+                                    <input list="sequence-names" style="width: 100px;" value="@property.SequenceName" placeholder="(none)"
+                                           @onchange="e => CommitUseSequence(property, e.Value?.ToString())"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
                                 </label>
                             </div>
                             <div style="font-size: 0.8em; margin-top: 4px;">
@@ -1070,6 +1084,21 @@
     private async Task CommitComputedColumnSqlIsStored(PropertyModel property, bool isStored)
     {
         var result = SafeEdit(() => EditContext.Editor.SetComputedColumnSql(Node.Entity.Name, property.Name, property.ComputedColumnSql, isStored));
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitUseSequence(PropertyModel property, string? sequenceName)
+    {
+        var schema = EditContext.Editor.Current.Sequences.FirstOrDefault(s => s.Name == sequenceName)?.Schema;
+        var result = SafeEdit(() => EditContext.Editor.SetUseSequence(Node.Entity.Name, property.Name, sequenceName, schema));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
