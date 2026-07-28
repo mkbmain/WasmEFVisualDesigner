@@ -2593,21 +2593,25 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(withoutExisting);
         var root = tree.GetCompilationUnitRoot();
 
-        var method = TryFindOnModelCreatingMethod(root);
-
-        if (method is null)
+        if (!root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any())
         {
             // Bare fluent-config source: just top-level `modelBuilder.HasSequence(...)`-shaped
             // statements, with no wrapping OnModelCreating method or DbContext class at all - the
             // form the app's own sample data and pasted-snippet workflow both use (see
             // AddEntity's identical bare-config branch). There's no method body to append into,
-            // so append the new sequence statement as another top-level statement instead.
+            // so append the new sequence statement as another top-level statement instead. This
+            // is distinct from "a real class exists (e.g. an IEntityTypeConfiguration<T> config
+            // class) but has no OnModelCreating method" - there we can't tell whether adding a
+            // synthesized method is the right fix, so we fall through and let
+            // FindOnModelCreatingMethod throw below (see AddEntity's identical distinction).
             var bareModelBuilderParamName = FindBareReceiverName(root) ?? "modelBuilder";
             var bareStatement = SyntaxFactory.ExpressionStatement(
                 BuildSequenceExpression(bareModelBuilderParamName, name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic));
             var newBareRoot = root.AddMembers(SyntaxFactory.GlobalStatement(bareStatement));
             return newBareRoot.NormalizeWhitespace().ToFullString();
         }
+
+        var method = FindOnModelCreatingMethod(root);
 
         var methodBody = method.Body
             ?? throw new InvalidOperationException("OnModelCreating has no method body.");

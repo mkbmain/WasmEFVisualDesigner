@@ -3433,4 +3433,30 @@ public class OnModelCreatingRewriterTests
         Assert.DoesNotContain("StartsAt(1000)", result);
         Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
     }
+
+    // A real IEntityTypeConfiguration<T> class has no OnModelCreating method either, but unlike a
+    // truly bare fluent-config source (SourceWithBareTopLevelStatementsNoSequence above) it does
+    // have a class declaration, so it must not be treated as a bare-statement target: there's no
+    // safe place to append a top-level `modelBuilder.HasSequence(...)` statement after a class
+    // declaration (CS8803). SetSequence should fall through to FindOnModelCreatingMethod's throw,
+    // same as AddEntity does for this shape (see AddEntity_NoOnModelCreatingMethod_Throws).
+    private const string SourceWithEntityTypeConfigurationClassNoOnModelCreating = """
+        public class BlogConfiguration : IEntityTypeConfiguration<Blog>
+        {
+            public void Configure(EntityTypeBuilder<Blog> builder)
+            {
+                builder.HasKey(e => e.Id);
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetSequence_EntityTypeConfigurationClassNoOnModelCreatingMethod_Throws()
+    {
+        var rewriter = new OnModelCreatingRewriter();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            rewriter.SetSequence(SourceWithEntityTypeConfigurationClassNoOnModelCreating, name: "OrderNumbers", schema: null, clrType: "int",
+                startsAt: 1000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null));
+    }
 }

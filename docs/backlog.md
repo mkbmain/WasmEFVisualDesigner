@@ -477,9 +477,10 @@
       `RemoveSequence`; editor: `AddSequence` / `SetSequence` /
       `RemoveSequence`), plus `PropertyModel.SequenceName` / `SequenceSchema`
       for per-property `UseSequence()` configuration (editor:
-      `SetUseSequence` / `RemoveUseSequence`; UI: a single "Uses sequence:"
-      text input backed by a datalist of existing sequence names, not a
-      toggle). Verified end-to-end: a model with `HasComputedColumnSql`,
+      `DiagramEditor.SetUseSequence`, which internally calls the rewriter's
+      `SetUseSequence` / `RemoveUseSequence` to apply or clear a value; UI: a
+      single "Uses sequence:" text input backed by a datalist of existing
+      sequence names, not a toggle). Verified end-to-end: a model with `HasComputedColumnSql`,
       `HasCheckConstraint`, and `HasSequence` now parses completely,
       round-trips through edits unchanged, and all three surface as editable
       items in the diagram.
@@ -507,12 +508,11 @@
       `HasAlternateKey` naming via chained `.HasName(...)` is now correctly
       re-flagged as `UnrecognizedConfigCall` (scoping fix for entity-scoped
       constructs). `HasSequence(...).HasName(...)` is a separate, model-level
-      construct not added to the scoping table; it remains a known gap where
-      neither `ParseUnrecognizedCalls` (entity-scoped only) nor
-      `ParseUnrecognizedModelLevelCalls` (only inspects calls made directly on
-      modelBuilder, not their chained tails) ever visits the chained
-      `.HasName(...)`, producing no diagnostic at all — this is pre-existing,
-      documented, acceptable behavior unrelated to this fix.
+      construct not added to the scoping table; it is nonetheless flagged as
+      `UnrecognizedConfigCall`, since `ParseSequences`'s chained-tail walk over
+      `HasSequence(...)` now has a `default:` case that reports any chained
+      call it doesn't recognize (including `.HasName(...)`) — added as part of
+      this same fix.
 - [ ] **`[found]` Owned & complex types:** `OwnsOne`, `OwnsMany`,
       `ComplexProperty`. See W3 — currently actively misleading, not just absent.
 - [ ] **`[found]` Inheritance:** `HasDiscriminator` / `HasValue`, TPT
