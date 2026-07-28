@@ -2,6 +2,7 @@ using System.Linq;
 using EfSchemaVisualizer.Core.CodeGen;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
+using EfSchemaVisualizer.Web.Diagram;
 using Xunit;
 
 namespace EfSchemaVisualizer.Core.Tests;
@@ -306,6 +307,128 @@ public class RoundTripFuzzTests
         var reparsedIndex = new FluentConfigParser().ParseIndexes(renamedConfigSource).Value.Single(c => c.EntityName == "Blog");
         Assert.True(reparsedIndex.IsUnique);
         Assert.Equal(new[] { "Url" }, reparsedIndex.PropertyNames);
+    }
+
+    private const string CheckConstraintEntitySource = """
+        public class Product
+        {
+            public int ProductId { get; set; }
+            public decimal Price { get; set; }
+            public int Quantity { get; set; }
+        }
+
+        public class Category
+        {
+            public int CategoryId { get; set; }
+            public string Name { get; set; }
+        }
+        """;
+
+    private const string CheckConstraintConfigSource = """
+        public class ShopContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Product>(entity =>
+                {
+                    entity.HasKey(e => e.ProductId);
+                    entity.HasCheckConstraint("CK_Product_Price", "[Price] >= 0");
+                    entity.HasCheckConstraint("CK_Product_Quantity", "[Quantity] >= 0");
+                });
+
+                modelBuilder.Entity<Category>(entity =>
+                {
+                    entity.HasKey(e => e.CategoryId);
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void CheckConstraintRoundTrip_RenamingOneAndRemovingTheOther_SurvivesReparseAndLeavesRestUntouched()
+    {
+        var editor = new DiagramEditor(CheckConstraintEntitySource, CheckConstraintConfigSource);
+
+        var renameResult = editor.SetCheckConstraint(
+            "Product", "CK_Product_Price", "CK_Product_Price_NonNegative", "[Price] >= 0.00");
+        Assert.True(renameResult.Success, renameResult.Error);
+
+        var removeResult = editor.RemoveCheckConstraint("Product", "CK_Product_Quantity");
+        Assert.True(removeResult.Success, removeResult.Error);
+
+        var reparsed = new FluentConfigParser().ParseCheckConstraints(editor.ConfigSource).Value;
+
+        Assert.Contains(
+            reparsed,
+            c => c is { EntityName: "Product", Name: "CK_Product_Price_NonNegative", Sql: "[Price] >= 0.00" });
+        Assert.DoesNotContain(reparsed, c => c.Name == "CK_Product_Quantity");
+        Assert.DoesNotContain("CK_Product_Quantity", editor.ConfigSource);
+
+        // The unrelated Category entity's config is untouched.
+        Assert.Contains("entity.HasKey(e => e.CategoryId);", editor.ConfigSource);
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100);", editor.ConfigSource);
+    }
+
+    private const string ComputedSequenceEntitySource = """
+        public class Order
+        {
+            public int OrderId { get; set; }
+            public int Quantity { get; set; }
+            public decimal UnitPrice { get; set; }
+            public decimal Total { get; set; }
+            public int Number { get; set; }
+        }
+        """;
+
+    private const string ComputedSequenceConfigSource = """
+        public class SalesContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence<int>("OrderNumbers", schema: "shared")
+                    .StartsAt(1000);
+
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasKey(e => e.OrderId);
+                    entity.Property(e => e.Total).HasComputedColumnSql("[Quantity] * [UnitPrice]", stored: true);
+                    entity.Property(e => e.Number).UseSequence("OrderNumbers", "shared");
+                    // Business rule intentionally left unmodeled by the parser.
+                    entity.HasCheckConstraint("CK_Order_Quantity", "[Quantity] >= 0");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ComputedColumnAndSequenceRoundTrip_EditingBothLeavesUnmodeledCheckConstraintUntouched()
+    {
+        var editor = new DiagramEditor(ComputedSequenceEntitySource, ComputedSequenceConfigSource);
+
+        var computedResult = editor.SetComputedColumnSql(
+            "Order", "Total", "[Quantity] * [UnitPrice] * 1.1", true);
+        Assert.True(computedResult.Success, computedResult.Error);
+
+        var sequenceResult = editor.SetSequence(
+            "OrderNumbers", schema: "shared", clrType: "int",
+            startsAt: 2000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null);
+        Assert.True(sequenceResult.Success, sequenceResult.Error);
+
+        var parser = new FluentConfigParser();
+
+        var computed = parser.ParseComputedColumnSqls(editor.ConfigSource).Value
+            .Single(c => c is { EntityName: "Order", PropertyName: "Total" });
+        Assert.Equal("[Quantity] * [UnitPrice] * 1.1", computed.Sql);
+        Assert.True(computed.IsStored);
+
+        var sequence = parser.ParseSequences(editor.ConfigSource).Value.Single(s => s.Name == "OrderNumbers");
+        Assert.Equal(2000, sequence.StartsAt);
+
+        // The check constraint the parser doesn't model at all survives byte-for-byte.
+        Assert.Contains(
+            "entity.HasCheckConstraint(\"CK_Order_Quantity\", \"[Quantity] >= 0\");",
+            editor.ConfigSource);
     }
 
     // The synthesis paths (SetKey/SetTable/SetIndex, and any rename that
