@@ -567,4 +567,31 @@ public class DiagramEditorPropertyPanelTests
 
         Assert.False(result.Success);
     }
+
+    [Fact]
+    public void SetComputedColumnSql_NoExistingConfig_InsertsHasComputedColumnSql()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetComputedColumnSql("Person", "Name", "UPPER([Name])", true);
+
+        Assert.True(result.Success);
+        var property = editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal("UPPER([Name])", property.ComputedColumnSql);
+        Assert.True(property.ComputedColumnSqlIsStored);
+        Assert.Contains("HasComputedColumnSql(\"UPPER([Name])\", true)", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetComputedColumnSql_ClearingExistingConfig_RemovesHasComputedColumnSql()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetComputedColumnSql("Person", "Name", "UPPER([Name])", true);
+
+        var result = editor.SetComputedColumnSql("Person", "Name", null, null);
+
+        Assert.True(result.Success);
+        Assert.Null(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").ComputedColumnSql);
+        Assert.DoesNotContain("HasComputedColumnSql", editor.ConfigSource);
+    }
 }

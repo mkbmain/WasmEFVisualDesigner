@@ -984,6 +984,34 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetComputedColumnSql(string entityName, string propertyName, string? sql, bool? isStored)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var normalizedSql = string.IsNullOrWhiteSpace(sql) ? null : sql.Trim();
+        if (normalizedSql == property.ComputedColumnSql && isStored == property.ComputedColumnSqlIsStored)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
+        var newConfigSource = normalizedSql is null
+            ? _configRewriter.RemoveComputedColumnSql(ConfigSource, owningEntityName, propertyName)
+            : _configRewriter.SetComputedColumnSql(ConfigSource, owningEntityName, propertyName, normalizedSql, isStored);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static readonly HashSet<string> QuotedDefaultValueClrTypes = new(StringComparer.Ordinal)
     {
         "string", "Guid", "DateTime", "DateTimeOffset", "DateOnly", "TimeOnly",

@@ -273,6 +273,20 @@
                                            @onpointerdown:stopPropagation="true"
                                            @onmousedown:stopPropagation="true" />
                                 </label>
+                                <label style="display: block;">
+                                    Computed column SQL:
+                                    <input style="width: 100px;" value="@property.ComputedColumnSql" placeholder="(none)"
+                                           @onchange="e => CommitComputedColumnSql(property, e.Value?.ToString())"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                </label>
+                                <label style="display: block;">
+                                    <input type="checkbox" checked="@(property.ComputedColumnSqlIsStored ?? false)"
+                                           @onchange="e => CommitComputedColumnSqlIsStored(property, (bool)(e.Value ?? false))"
+                                           @onpointerdown:stopPropagation="true"
+                                           @onmousedown:stopPropagation="true" />
+                                    Stored
+                                </label>
                             </div>
                             <div style="font-size: 0.8em; margin-top: 4px;">
                                 <div>Indexes:</div>
@@ -936,6 +950,34 @@
     private async Task CommitDefaultValueSql(PropertyModel property, string? newSql)
     {
         var result = SafeEdit(() => EditContext.Editor.SetDefaultValueSql(Node.Entity.Name, property.Name, newSql));
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitComputedColumnSql(PropertyModel property, string? newSql)
+    {
+        var result = SafeEdit(() => EditContext.Editor.SetComputedColumnSql(Node.Entity.Name, property.Name, newSql, property.ComputedColumnSqlIsStored));
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitComputedColumnSqlIsStored(PropertyModel property, bool isStored)
+    {
+        var result = SafeEdit(() => EditContext.Editor.SetComputedColumnSql(Node.Entity.Name, property.Name, property.ComputedColumnSql, isStored));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
