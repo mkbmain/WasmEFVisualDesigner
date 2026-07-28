@@ -891,7 +891,7 @@ public class DiagramModelBuilderTests
             {
                 protected override void OnModelCreating(ModelBuilder modelBuilder)
                 {
-                    modelBuilder.HasSequence<int>("OrderNumbers");
+                    modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
                     modelBuilder.Entity<Customer>(entity =>
                     {
@@ -904,6 +904,6 @@ public class DiagramModelBuilderTests
         var result = DiagramModelBuilder.Build(classSource, configSource);
 
         Assert.Contains(result.Diagnostics, d =>
-            d.Code == DiagnosticCodes.UnrecognizedConfigCall && d.Message.Contains("HasSequence"));
+            d.Code == DiagnosticCodes.UnrecognizedConfigCall && d.Message.Contains("ApplyConfigurationsFromAssembly"));
     }
 }

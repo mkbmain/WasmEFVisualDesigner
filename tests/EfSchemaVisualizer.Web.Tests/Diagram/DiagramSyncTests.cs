@@ -19,7 +19,7 @@ public class DiagramSyncTests
         var result = new DiagramModelResult(
             new[] { Entity("Person"), Entity("Address") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>());
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
         var entityIds = new Dictionary<string, Guid> { ["Person"] = Guid.NewGuid(), ["Address"] = Guid.NewGuid() };
 
         DiagramSync.Rebuild(diagram, result, entityIds);
@@ -40,7 +40,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person", "Id", "Name") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var originalNode = diagram.Nodes.OfType<EntityNodeModel>().Single();
 
@@ -48,7 +48,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person", "Id", "Name", "Email") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var rebuiltNode = diagram.Nodes.OfType<EntityNodeModel>().Single();
 
@@ -65,14 +65,14 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person"), Entity("Address") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var addressNode = diagram.Nodes.OfType<EntityNodeModel>().Single(n => n.Entity.Name == "Address");
 
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var nodes = diagram.Nodes.OfType<EntityNodeModel>().ToList();
         Assert.Single(nodes);
@@ -90,7 +90,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var originalPersonNode = diagram.Nodes.OfType<EntityNodeModel>().Single();
 
@@ -99,7 +99,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person"), Entity("Address") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var nodes = diagram.Nodes.OfType<EntityNodeModel>().ToList();
         Assert.Equal(2, nodes.Count);
@@ -119,7 +119,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Customer"), Entity("Order") },
             new[] { relationship },
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         Assert.Single(diagram.Links);
 
@@ -127,7 +127,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Customer"), Entity("Order") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         Assert.Empty(diagram.Links);
     }
@@ -144,7 +144,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Order") },
             new[] { relationship },
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         Assert.Empty(diagram.Links);
     }
@@ -163,7 +163,7 @@ public class DiagramSyncTests
             entities.Add(Entity(name));
 
             DiagramSync.Rebuild(diagram, new DiagramModelResult(
-                entities, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+                entities, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
         }
 
         var nodes = diagram.Nodes.OfType<EntityNodeModel>().ToList();
@@ -186,7 +186,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Customer"), Entity("Order") },
             new[] { relationship },
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var link = diagram.Links.OfType<LinkModel>().Single();
         Assert.Equal("#aaaaaa", link.Color);
@@ -205,7 +205,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Customer"), Entity("Order") },
             new[] { relationship },
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var link = diagram.Links.OfType<LinkModel>().Single();
         Assert.Null(link.Color);
@@ -223,7 +223,7 @@ public class DiagramSyncTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person"), Entity("Student") },
             new[] { relationship },
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var link = diagram.Links.OfType<LinkModel>().Single();
         Assert.NotNull(link.Color);

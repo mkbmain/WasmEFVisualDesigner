@@ -16,7 +16,7 @@ public class SvgExporterTests
     public void Export_EmitsValidSvgRoot()
     {
         var result = new DiagramModelResult(
-            Array.Empty<EntityModel>(), Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+            Array.Empty<EntityModel>(), Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
         var layout = new Dictionary<string, (Point Position, Size Size)>();
 
         var svg = SvgExporter.Export(result, layout);
@@ -32,7 +32,7 @@ public class SvgExporterTests
         {
             KeyPropertyNames = new[] { "Id" },
         };
-        var result = new DiagramModelResult(new[] { blog }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+        var result = new DiagramModelResult(new[] { blog }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
         var layout = new Dictionary<string, (Point Position, Size Size)>
         {
             ["Blog"] = (new Point(0, 0), new Size(260, 160)),
@@ -50,7 +50,7 @@ public class SvgExporterTests
     public void Export_NullableProperty_HasQuestionMarkSuffix()
     {
         var entity = Entity("Widget", Property("Note", "string", isNullable: true));
-        var result = new DiagramModelResult(new[] { entity }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+        var result = new DiagramModelResult(new[] { entity }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
         var layout = new Dictionary<string, (Point Position, Size Size)>
         {
             ["Widget"] = (new Point(0, 0), new Size(260, 160)),
@@ -71,7 +71,7 @@ public class SvgExporterTests
         var relationship = new RelationshipModel(
             "Blog", "Post", RelationshipKind.OneToMany, PrincipalNavigation: null, DependentNavigation: null,
             ForeignKeyProperties: new[] { "BlogId" });
-        var result = new DiagramModelResult(new[] { Entity("Blog"), post }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>());
+        var result = new DiagramModelResult(new[] { Entity("Blog"), post }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
         var layout = new Dictionary<string, (Point Position, Size Size)>
         {
             ["Blog"] = (new Point(0, 0), new Size(260, 160)),
@@ -89,7 +89,7 @@ public class SvgExporterTests
         var relationship = new RelationshipModel(
             "Blog", "Post", RelationshipKind.OneToMany, PrincipalNavigation: null, DependentNavigation: null);
         var result = new DiagramModelResult(
-            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>());
+            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
         var layout = new Dictionary<string, (Point Position, Size Size)>
         {
             ["Blog"] = (new Point(0, 0), new Size(260, 160)),
@@ -107,7 +107,7 @@ public class SvgExporterTests
         var relationship = new RelationshipModel(
             "Blog", "Post", RelationshipKind.OneToMany, PrincipalNavigation: null, DependentNavigation: null);
         var result = new DiagramModelResult(
-            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>());
+            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
         var layout = new Dictionary<string, (Point Position, Size Size)>
         {
             ["Blog"] = (new Point(0, 0), new Size(260, 160)),

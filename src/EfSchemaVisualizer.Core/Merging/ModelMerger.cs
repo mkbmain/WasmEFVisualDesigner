@@ -7,6 +7,13 @@ namespace EfSchemaVisualizer.Core.Merging;
 
 public static class ModelMerger
 {
+    public static IReadOnlyList<SequenceModel> ApplySequences(IReadOnlyList<SequenceConfig> configs)
+    {
+        return configs
+            .Select(c => new SequenceModel(c.Name, c.Schema, c.ClrType, c.StartsAt, c.IncrementsBy, c.MinValue, c.MaxValue, c.IsCyclic))
+            .ToList();
+    }
+
     public static EntityModel ApplyMaxLengths(EntityModel entity, IReadOnlyList<MaxLengthConfig> configs)
     {
         var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);

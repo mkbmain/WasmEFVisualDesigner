@@ -919,4 +919,23 @@ public class ModelMergerTests
         Assert.Contains(result.CheckConstraints, c => c.Name == "CK_Order_Quantity" && c.Sql == "[Quantity] >= 0");
         Assert.Contains(result.CheckConstraints, c => c.Name == "CK_Order_Total" && c.Sql == "[Total] >= 0");
     }
+
+    [Fact]
+    public void ApplySequences_MapsEachConfigToASequenceModel()
+    {
+        var configs = new List<SequenceConfig>
+        {
+            new("OrderNumbers", "shared", "int", 1000, 5, 1, 1000000, true),
+            new("Simple", null, null, null, null, null, null, null),
+        };
+
+        var result = ModelMerger.ApplySequences(configs);
+
+        Assert.Equal(2, result.Count);
+        var orderNumbers = result.Single(s => s.Name == "OrderNumbers");
+        Assert.Equal("shared", orderNumbers.Schema);
+        Assert.Equal("int", orderNumbers.ClrType);
+        Assert.Equal(1000, orderNumbers.StartsAt);
+        Assert.True(orderNumbers.IsCyclic);
+    }
 }

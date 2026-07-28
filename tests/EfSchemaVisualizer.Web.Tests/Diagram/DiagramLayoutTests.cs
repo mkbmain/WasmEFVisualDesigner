@@ -19,7 +19,7 @@ public class DiagramLayoutTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person"), Entity("Address") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var personNode = diagram.Nodes.OfType<EntityNodeModel>().Single(n => n.Entity.Name == "Person");
         personNode.SetPosition(123, 456);
@@ -38,7 +38,7 @@ public class DiagramLayoutTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var layout = new Dictionary<string, EntityPosition> { ["Person"] = new(200, 300) };
 
@@ -57,7 +57,7 @@ public class DiagramLayoutTests
         DiagramSync.Rebuild(diagram, new DiagramModelResult(
             new[] { Entity("Person") },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>()), entityIds);
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>()), entityIds);
 
         var node = diagram.Nodes.OfType<EntityNodeModel>().Single();
         var originalPosition = node.Position;

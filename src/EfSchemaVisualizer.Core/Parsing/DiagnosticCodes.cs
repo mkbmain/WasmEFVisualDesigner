@@ -43,6 +43,7 @@ public static class DiagnosticCodes
     public const string ArchiveBuildArtifactSkipped = nameof(ArchiveBuildArtifactSkipped);
     public const string OwnedNestedConfigIgnored = nameof(OwnedNestedConfigIgnored);
     public const string UnreadableHasDefaultSchemaArgument = nameof(UnreadableHasDefaultSchemaArgument);
+    public const string UnreadableHasSequenceArgument = nameof(UnreadableHasSequenceArgument);
 
     // Model-validity diagnostics: unlike the codes above (all "I couldn't read this syntax"),
     // these mean "this parsed fine, but the resulting model would fail at EF's model-build time".

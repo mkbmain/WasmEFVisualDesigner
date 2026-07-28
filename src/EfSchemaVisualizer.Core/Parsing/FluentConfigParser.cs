@@ -66,7 +66,7 @@ public sealed class FluentConfigParser
     /// and `HasDefaultSchema` (read by `ParseDefaultSchema` below). Anything else called directly on
     /// the `ModelBuilder` receiver — `HasSequence`, `ApplyConfigurationsFromAssembly`,
     /// `HasAnnotation`, etc. — has no parser and is flagged here instead of silently dropped.
-    private static readonly HashSet<string> RecognizedModelLevelCallNames = new() { "Entity", "Ignore", "HasDefaultSchema" };
+    private static readonly HashSet<string> RecognizedModelLevelCallNames = new() { "Entity", "Ignore", "HasDefaultSchema", "HasSequence" };
 
     /// Flags every call made directly on the `ModelBuilder` receiver (as opposed to one chained onto
     /// an `Entity&lt;T&gt;()` result, which `ParseUnrecognizedCalls` already covers) whose method name
@@ -136,6 +136,107 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<string?>(null, diagnostics);
+    }
+
+    /// Reads `modelBuilder.HasSequence<T>("Name", schema: "...")` (or the non-generic
+    /// `HasSequence("Name")` overload) and its chained tail of `StartsAt`/`IncrementsBy`/
+    /// `HasMin`/`HasMax`/`IsCyclic` options. Model-level, like `ParseDefaultSchema` above.
+    public ParseResult<IReadOnlyList<SequenceConfig>> ParseSequences(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<SequenceConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var call in FluentSyntaxHelpers.FindModelLevelCalls(root))
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "HasSequence" } memberAccess)
+            {
+                continue;
+            }
+
+            var arguments = call.ArgumentList.Arguments;
+
+            if (arguments.Count == 0
+                || arguments[0].Expression is not LiteralExpressionSyntax nameLiteral
+                || !nameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticCodes.UnreadableHasSequenceArgument,
+                    "HasSequence name argument is not a string literal and could not be read.",
+                    EntityName: null,
+                    PropertyName: null,
+                    call.Span));
+                continue;
+            }
+
+            var name = nameLiteral.Token.ValueText;
+
+            string? schema = null;
+            if (arguments.Count >= 2
+                && arguments[1].Expression is LiteralExpressionSyntax schemaLiteral
+                && schemaLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                schema = schemaLiteral.Token.ValueText;
+            }
+
+            var clrType = memberAccess.Name is GenericNameSyntax { TypeArgumentList.Arguments.Count: 1 } generic
+                ? generic.TypeArgumentList.Arguments[0].ToString()
+                : null;
+
+            long? startsAt = null;
+            int? incrementsBy = null;
+            long? minValue = null;
+            long? maxValue = null;
+            bool? isCyclic = null;
+
+            FluentSyntaxHelpers.WalkChainedTail(call, chained =>
+            {
+                if (chained.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var methodName })
+                {
+                    return;
+                }
+
+                var arg = chained.ArgumentList.Arguments.FirstOrDefault();
+
+                switch (methodName)
+                {
+                    case "StartsAt":
+                        if (arg?.Expression is LiteralExpressionSyntax startsAtLiteral && long.TryParse(startsAtLiteral.Token.ValueText, out var startsAtValue))
+                        {
+                            startsAt = startsAtValue;
+                        }
+                        break;
+                    case "IncrementsBy":
+                        if (arg?.Expression is LiteralExpressionSyntax incrementLiteral && int.TryParse(incrementLiteral.Token.ValueText, out var incrementValue))
+                        {
+                            incrementsBy = incrementValue;
+                        }
+                        break;
+                    case "HasMin":
+                        if (arg?.Expression is LiteralExpressionSyntax minLiteral && long.TryParse(minLiteral.Token.ValueText, out var minValueParsed))
+                        {
+                            minValue = minValueParsed;
+                        }
+                        break;
+                    case "HasMax":
+                        if (arg?.Expression is LiteralExpressionSyntax maxLiteral && long.TryParse(maxLiteral.Token.ValueText, out var maxValueParsed))
+                        {
+                            maxValue = maxValueParsed;
+                        }
+                        break;
+                    case "IsCyclic":
+                        isCyclic = arg is null
+                            || (arg.Expression is LiteralExpressionSyntax cyclicLiteral && cyclicLiteral.IsKind(SyntaxKind.TrueLiteralExpression));
+                        break;
+                }
+            });
+
+            results.Add(new SequenceConfig(name, schema, clrType, startsAt, incrementsBy, minValue, maxValue, isCyclic));
+        }
+
+        return new ParseResult<IReadOnlyList<SequenceConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<MaxLengthConfig>> ParseMaxLengths(string sourceCode)

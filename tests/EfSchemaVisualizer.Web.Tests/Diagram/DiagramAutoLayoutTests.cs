@@ -97,7 +97,7 @@ public class DiagramAutoLayoutTests
         var result = new DiagramModelResult(
             new[] { blog, post },
             new[] { Relationship("Blog", "Post") },
-            Array.Empty<Core.Parsing.Diagnostic>());
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         DiagramAutoLayout.Apply(diagram, result);
 
@@ -116,7 +116,7 @@ public class DiagramAutoLayoutTests
         var result = new DiagramModelResult(
             new[] { blog, author },
             Array.Empty<RelationshipModel>(),
-            Array.Empty<Core.Parsing.Diagnostic>());
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         DiagramAutoLayout.Apply(diagram, result);
 
@@ -134,7 +134,7 @@ public class DiagramAutoLayoutTests
         var result = new DiagramModelResult(
             new[] { blog, post },
             new[] { Relationship("Blog", "Post") },
-            Array.Empty<Core.Parsing.Diagnostic>());
+            Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         DiagramAutoLayout.Apply(diagram, result);
 
@@ -148,7 +148,7 @@ public class DiagramAutoLayoutTests
     {
         var diagram = new BlazorDiagram();
         var result = new DiagramModelResult(
-            Array.Empty<EntityModel>(), Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+            Array.Empty<EntityModel>(), Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         DiagramAutoLayout.Apply(diagram, result);
 

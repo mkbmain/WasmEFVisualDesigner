@@ -658,7 +658,7 @@ public class DiagramEditorPropertyPanelTests
         Assert.False(result.Success);
         var constraints = editor.Current.Entities.Single().CheckConstraints;
         Assert.Equal(2, constraints.Count);
-        Assert.Single(constraints.Where(c => c.Name == "CK_Person_Name"));
-        Assert.Single(constraints.Where(c => c.Name == "CK_Person_Email"));
+        Assert.Single(constraints, c => c.Name == "CK_Person_Name");
+        Assert.Single(constraints, c => c.Name == "CK_Person_Email");
     }
 }

@@ -10,7 +10,8 @@ namespace EfSchemaVisualizer.Web;
 public sealed record DiagramModelResult(
     IReadOnlyList<EntityModel> Entities,
     IReadOnlyList<RelationshipModel> Relationships,
-    IReadOnlyList<Diagnostic> Diagnostics);
+    IReadOnlyList<Diagnostic> Diagnostics,
+    IReadOnlyList<SequenceModel> Sequences);
 
 public static class DiagramModelBuilder
 {
@@ -57,6 +58,7 @@ public static class DiagramModelBuilder
         var unrecognizedCalls = configParser.ParseUnrecognizedCalls(configSource);
         var unrecognizedModelLevelCalls = configParser.ParseUnrecognizedModelLevelCalls(configSource);
         var defaultSchema = configParser.ParseDefaultSchema(configSource);
+        var sequences = configParser.ParseSequences(configSource);
 
         diagnostics.AddRange(maxLengths.Diagnostics);
         diagnostics.AddRange(precisions.Diagnostics);
@@ -91,6 +93,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(unrecognizedCalls);
         diagnostics.AddRange(unrecognizedModelLevelCalls);
         diagnostics.AddRange(defaultSchema.Diagnostics);
+        diagnostics.AddRange(sequences.Diagnostics);
         diagnostics.AddRange(ownedTypeCalls.Diagnostics);
 
         var fluentIndexKeys = indexes.Value.Select(IndexDedupeKey).ToHashSet();
@@ -177,7 +180,7 @@ public static class DiagramModelBuilder
 
         diagnostics.AddRange(ModelValidityChecker.Check(entities, allRelationships));
 
-        return new DiagramModelResult(entities, allRelationships, diagnostics);
+        return new DiagramModelResult(entities, allRelationships, diagnostics, ModelMerger.ApplySequences(sequences.Value));
     }
 
     private static (string PrincipalEntity, string DependentEntity, string ForeignKeyProperties) RelationshipDedupeKey(

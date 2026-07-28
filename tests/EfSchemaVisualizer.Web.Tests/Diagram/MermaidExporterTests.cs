@@ -15,7 +15,7 @@ public class MermaidExporterTests
     public void Export_StartsWithErDiagramHeader()
     {
         var result = new DiagramModelResult(
-            Array.Empty<EntityModel>(), Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+            Array.Empty<EntityModel>(), Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         var mermaid = MermaidExporter.Export(result);
 
@@ -29,7 +29,7 @@ public class MermaidExporterTests
         {
             KeyPropertyNames = new[] { "Id" },
         };
-        var result = new DiagramModelResult(new[] { blog }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+        var result = new DiagramModelResult(new[] { blog }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         var mermaid = MermaidExporter.Export(result);
 
@@ -43,7 +43,7 @@ public class MermaidExporterTests
     public void Export_EntityWithNoProperties_EmitsNoAttributeBlock()
     {
         var empty = Entity("Empty");
-        var result = new DiagramModelResult(new[] { empty }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+        var result = new DiagramModelResult(new[] { empty }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         var mermaid = MermaidExporter.Export(result);
 
@@ -58,7 +58,7 @@ public class MermaidExporterTests
     {
         var relationship = new RelationshipModel("Blog", "Post", kind, PrincipalNavigation: "Posts", DependentNavigation: "Blog");
         var result = new DiagramModelResult(
-            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>());
+            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         var mermaid = MermaidExporter.Export(result);
 
@@ -71,7 +71,7 @@ public class MermaidExporterTests
         var relationship = new RelationshipModel(
             "Blog", "Post", RelationshipKind.OneToMany, PrincipalNavigation: "Posts", DependentNavigation: "Blog");
         var result = new DiagramModelResult(
-            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>());
+            new[] { Entity("Blog"), Entity("Post") }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         var mermaid = MermaidExporter.Export(result);
 
@@ -88,7 +88,7 @@ public class MermaidExporterTests
         var relationship = new RelationshipModel(
             "Blog", "Post", RelationshipKind.OneToMany, PrincipalNavigation: null, DependentNavigation: null,
             ForeignKeyProperties: new[] { "BlogId" });
-        var result = new DiagramModelResult(new[] { Entity("Blog"), post }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>());
+        var result = new DiagramModelResult(new[] { Entity("Blog"), post }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         var mermaid = MermaidExporter.Export(result);
 
@@ -102,7 +102,7 @@ public class MermaidExporterTests
     public void Export_SanitizesTypesForMermaidAttributeSyntax(string clrType, string expectedToken)
     {
         var entity = Entity("Widget", Property("Value", clrType));
-        var result = new DiagramModelResult(new[] { entity }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>());
+        var result = new DiagramModelResult(new[] { entity }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
         var mermaid = MermaidExporter.Export(result);
 

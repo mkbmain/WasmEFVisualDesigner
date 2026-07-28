@@ -1,3 +1,4 @@
+using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
@@ -3907,7 +3908,7 @@ public class FluentConfigParserTests
     }
 
     [Fact]
-    public void ParseUnrecognizedModelLevelCalls_FlagsHasSequenceAndApplyConfigurationsFromAssembly()
+    public void ParseUnrecognizedModelLevelCalls_FlagsApplyConfigurationsFromAssembly()
     {
         const string source = """
             public class AppDbContext : DbContext
@@ -3927,11 +3928,12 @@ public class FluentConfigParserTests
 
         var diagnostics = new FluentConfigParser().ParseUnrecognizedModelLevelCalls(source);
 
-        Assert.Equal(2, diagnostics.Count);
-        Assert.All(diagnostics, d => Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, d.Code));
-        Assert.All(diagnostics, d => Assert.Null(d.EntityName));
-        Assert.Contains(diagnostics, d => d.Message.Contains("HasSequence"));
-        Assert.Contains(diagnostics, d => d.Message.Contains("ApplyConfigurationsFromAssembly"));
+        // HasSequence is now a recognized model-level call (parsed by ParseSequences), so only
+        // ApplyConfigurationsFromAssembly should still be flagged here.
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, diagnostic.Code);
+        Assert.Null(diagnostic.EntityName);
+        Assert.Contains("ApplyConfigurationsFromAssembly", diagnostic.Message);
     }
 
     [Fact]
@@ -4028,5 +4030,84 @@ public class FluentConfigParserTests
         var diagnostic = Assert.Single(result.Diagnostics);
         Assert.Equal(DiagnosticCodes.UnreadableHasCheckConstraintArgument, diagnostic.Code);
         Assert.Equal("Order", diagnostic.EntityName);
+    }
+
+    private const string SequenceSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence<int>("OrderNumbers", schema: "shared")
+                    .StartsAt(1000)
+                    .IncrementsBy(5)
+                    .HasMin(1)
+                    .HasMax(1000000)
+                    .IsCyclic();
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSequences_ReadsNameSchemaTypeAndAllChainedOptions()
+    {
+        var result = new FluentConfigParser().ParseSequences(SequenceSource);
+
+        Assert.Empty(result.Diagnostics);
+        var sequence = Assert.Single(result.Value);
+        Assert.Equal("OrderNumbers", sequence.Name);
+        Assert.Equal("shared", sequence.Schema);
+        Assert.Equal("int", sequence.ClrType);
+        Assert.Equal(1000, sequence.StartsAt);
+        Assert.Equal(5, sequence.IncrementsBy);
+        Assert.Equal(1, sequence.MinValue);
+        Assert.Equal(1000000, sequence.MaxValue);
+        Assert.True(sequence.IsCyclic);
+    }
+
+    private const string SequenceSourceMinimal = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence("Simple");
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSequences_NameOnly_LeavesOptionalFieldsNull()
+    {
+        var result = new FluentConfigParser().ParseSequences(SequenceSourceMinimal);
+
+        Assert.Empty(result.Diagnostics);
+        var sequence = Assert.Single(result.Value);
+        Assert.Equal("Simple", sequence.Name);
+        Assert.Null(sequence.Schema);
+        Assert.Null(sequence.ClrType);
+        Assert.Null(sequence.StartsAt);
+        Assert.Null(sequence.IncrementsBy);
+        Assert.Null(sequence.MinValue);
+        Assert.Null(sequence.MaxValue);
+        Assert.Null(sequence.IsCyclic);
+    }
+
+    private const string SequenceSourceNonLiteralName = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence(SomeNameConstant);
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSequences_NonLiteralNameArgument_EmitsUnreadableDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseSequences(SequenceSourceNonLiteralName);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasSequenceArgument, diagnostic.Code);
     }
 }
