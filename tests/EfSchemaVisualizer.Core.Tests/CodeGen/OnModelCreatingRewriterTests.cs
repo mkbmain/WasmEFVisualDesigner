@@ -3191,4 +3191,30 @@ public class OnModelCreatingRewriterTests
         Assert.DoesNotContain("CK_Order_Quantity", result);
         Assert.Contains("CK_Order_Total", result);
     }
+
+    private const string SourceWithNoCheckConstraintEntity = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.Property(e => e.Name).HasMaxLength(100);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void AddCheckConstraint_NewEntity_CreatesEntityBlockWithCheckConstraint()
+    {
+        var result = new OnModelCreatingRewriter()
+            .AddCheckConstraint(SourceWithNoCheckConstraintEntity, entityName: "Order", name: "CK_Order_Qty", sql: "[Qty] > 0");
+
+        Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
+        Assert.Contains("entity.HasCheckConstraint(\"CK_Order_Qty\", \"[Qty] > 0\")", result);
+
+        // Existing entity untouched.
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100)", result);
+    }
 }
