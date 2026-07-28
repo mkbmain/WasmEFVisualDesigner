@@ -3459,4 +3459,49 @@ public class OnModelCreatingRewriterTests
             rewriter.SetSequence(SourceWithEntityTypeConfigurationClassNoOnModelCreating, name: "OrderNumbers", schema: null, clrType: "int",
                 startsAt: 1000, incrementsBy: null, minValue: null, maxValue: null, isCyclic: null));
     }
+
+    [Fact]
+    public void RenameOwnedNavigationReference_OwnsOneCall_RenamesLambdaParameterReference()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasMaxLength(100);
+                        });
+                    });
+                }
+            }
+            """;
+
+        var rewriter = new OnModelCreatingRewriter();
+        var newSource = rewriter.RenameOwnedNavigationReference(source, "Order", "ShippingAddress", "DeliveryAddress");
+
+        Assert.Contains("OwnsOne(e => e.DeliveryAddress, b =>", newSource);
+        Assert.DoesNotContain("ShippingAddress", newSource);
+    }
+
+    [Fact]
+    public void RenameOwnedNavigationReference_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity => { });
+                }
+            }
+            """;
+
+        var rewriter = new OnModelCreatingRewriter();
+        var newSource = rewriter.RenameOwnedNavigationReference(source, "Order", "ShippingAddress", "DeliveryAddress");
+
+        Assert.Equal(source, newSource);
+    }
 }

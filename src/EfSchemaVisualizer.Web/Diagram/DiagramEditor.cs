@@ -148,7 +148,10 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"A property cannot have the same name as its entity '{entityName}'.");
         }
 
-        if (!entity.Properties.Any(p => p.Name == oldPropertyName))
+        // A folded-away owner nav property (e.g. Order.ShippingAddress once OwnedTypeInference.Fold
+        // splices Address's properties into Order) never appears in entity.Properties — it's replaced
+        // there, not merely hidden — so also check the raw class declaration directly before failing.
+        if (!entity.Properties.Any(p => p.Name == oldPropertyName) && !_classRewriter.HasProperty(ClassSource, entityName, oldPropertyName))
         {
             return DiagramEditResult.Fail($"Property '{oldPropertyName}' not found on '{entityName}'.");
         }
@@ -161,6 +164,13 @@ public sealed class DiagramEditor
         var owningEntityName = ResolveDeclaringEntity(entityName, oldPropertyName);
         var newClassSource = _classRewriter.RenameProperty(ClassSource, owningEntityName, oldPropertyName, newPropertyName);
         var newConfigSource = _configRewriter.RenamePropertyReferences(ConfigSource, owningEntityName, oldPropertyName, newPropertyName);
+
+        // If oldPropertyName is itself an owner-side nav property with an OwnsOne/OwnsMany/ComplexProperty
+        // call (owningEntityName == entityName in that case, since a nav property's own DeclaringEntityName
+        // is never stamped by the fold — only the properties folded IN from the target get stamped), also
+        // patch the outer call's lambda parameter.
+        newConfigSource = _configRewriter.RenameOwnedNavigationReference(newConfigSource, entityName, oldPropertyName, newPropertyName);
+
         Apply(newClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }

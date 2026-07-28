@@ -2519,6 +2519,70 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    /// Renaming an owner's navigation property (e.g. `Order.ShippingAddress` -> `Order.DeliveryAddress`)
+    /// must also patch the outer `OwnsOne(e => e.ShippingAddress, ...)` call's lambda parameter, not
+    /// just the property declaration on Order's class — `RenamePropertyReferences` only rewrites
+    /// `Property(e => e.X)`-shaped calls and doesn't know to look here. No-ops (returns `sourceCode`
+    /// unchanged) if no OwnsOne/OwnsMany/ComplexProperty call targets `oldNavName` on `ownerEntityName`.
+    public string RenameOwnedNavigationReference(
+        string sourceCode, string ownerEntityName, string oldNavName, string newNavName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, ownerEntityName);
+
+        foreach (var callName in new[] { "OwnsOne", "OwnsMany", "ComplexProperty" })
+        {
+            var call = scopes
+                .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, callName))
+                .FirstOrDefault(c => FluentSyntaxHelpers.TryReadSinglePropertyNameArgument(c) == oldNavName);
+
+            if (call is null)
+            {
+                continue;
+            }
+
+            var navArgument = call.ArgumentList.Arguments[0];
+            var argumentExpression = navArgument.Expression;
+
+            ArgumentSyntax newArgument;
+
+            if (argumentExpression is SimpleLambdaExpressionSyntax { ExpressionBody: MemberAccessExpressionSyntax expressionBodyAccess } exprLambda)
+            {
+                var newLambda = exprLambda.WithExpressionBody(expressionBodyAccess.WithName(SyntaxFactory.IdentifierName(newNavName)));
+                newArgument = navArgument.WithExpression(newLambda);
+            }
+            else if (argumentExpression is SimpleLambdaExpressionSyntax { Block: BlockSyntax block } blockLambda
+                && block.Statements is [ReturnStatementSyntax { Expression: MemberAccessExpressionSyntax blockAccess } returnStatement])
+            {
+                var newReturnStatement = returnStatement.WithExpression(blockAccess.WithName(SyntaxFactory.IdentifierName(newNavName)));
+                var newBlock = block.WithStatements(SyntaxFactory.SingletonList<StatementSyntax>(newReturnStatement));
+                var newLambda = blockLambda.WithBlock(newBlock);
+                newArgument = navArgument.WithExpression(newLambda);
+            }
+            else if (argumentExpression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+            {
+                var newLiteral = SyntaxFactory.LiteralExpression(
+                    SyntaxKind.StringLiteralExpression,
+                    SyntaxFactory.Literal(newNavName));
+                newArgument = navArgument.WithExpression(newLiteral);
+            }
+            else
+            {
+                continue;
+            }
+
+            var newCall = call.WithArgumentList(
+                call.ArgumentList.WithArguments(call.ArgumentList.Arguments.Replace(navArgument, newArgument)));
+
+            var newRoot = root.ReplaceNode(call, newCall);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        return sourceCode;
+    }
+
     public string RenamePropertyReferences(string sourceCode, string entityName, string oldPropertyName, string newPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

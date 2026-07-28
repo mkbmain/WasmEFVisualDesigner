@@ -9,6 +9,33 @@ namespace EfSchemaVisualizer.Core.CodeGen;
 
 public sealed class EntityClassRewriter
 {
+    /// Returns true if `className`'s top-level type declares a property (or, for a record, a
+    /// positional parameter) named `propertyName` directly in `sourceCode` — regardless of whether
+    /// the diagram model currently exposes that property. An owner's own OwnsOne/OwnsMany/
+    /// ComplexProperty navigation property (e.g. `Order.ShippingAddress`) is folded OUT of the
+    /// folded model's `Properties` list entirely (replaced by the target type's properties spliced
+    /// in), even though it remains a perfectly real declared property on the class — so callers that
+    /// need to validate a rename/edit against the raw class declaration, not the folded model, use
+    /// this instead of checking `EntityModel.Properties`.
+    public bool HasProperty(string sourceCode, string className, string propertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targetType = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(t => !t.Ancestors().OfType<TypeDeclarationSyntax>().Any())
+            .FirstOrDefault(t => t.Identifier.Text == className);
+
+        if (targetType is null)
+        {
+            return false;
+        }
+
+        return targetType.Members.OfType<PropertyDeclarationSyntax>().Any(p => p.Identifier.Text == propertyName)
+            || (targetType.ParameterList?.Parameters.Any(p => p.Identifier.Text == propertyName) ?? false);
+    }
+
     public string AddProperty(string sourceCode, string className, PropertyModel property)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

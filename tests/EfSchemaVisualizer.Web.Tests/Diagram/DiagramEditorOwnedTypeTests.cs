@@ -284,6 +284,23 @@ public class DiagramEditorOwnedTypeTests
     }
 
     [Fact]
+    public void RenameProperty_OwnerNavigationProperty_PatchesOuterOwnsOneCallAndPropertyDeclaration()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.RenameProperty("Order", "ShippingAddress", "DeliveryAddress");
+
+        Assert.True(result.Success);
+        Assert.Contains("public Address DeliveryAddress { get; set; }", editor.ClassSource);
+        Assert.Contains("OwnsOne(e => e.DeliveryAddress", editor.ConfigSource);
+        Assert.DoesNotContain("ShippingAddress", editor.ClassSource);
+        Assert.DoesNotContain("ShippingAddress", editor.ConfigSource);
+
+        var order = editor.Current.Entities.Single(e => e.Name == "Order");
+        Assert.Contains(order.Properties, p => p.Name == "Street" && p.OwnerNavigationProperty == "DeliveryAddress");
+    }
+
+    [Fact]
     public void SetColumnName_SingleLevelFoldedPropertyInMultiLevelFixture_StillSucceedsAndRoundTrips()
     {
         var editor = new DiagramEditor(MultiLevelClassSource, MultiLevelConfigSource);
