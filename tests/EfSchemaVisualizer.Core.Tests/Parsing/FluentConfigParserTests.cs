@@ -648,6 +648,72 @@ public class FluentConfigParserTests
         Assert.Null(config.Name);
     }
 
+    private const string AlternateKeyWithHasNameSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasAlternateKey(e => e.Code).HasName("AK_Order_Code");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUnrecognizedCalls_HasNameChainedOntoHasAlternateKey_IsStillFlagged()
+    {
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(AlternateKeyWithHasNameSource);
+
+        Assert.Contains(diagnostics, d => d.Code == DiagnosticCodes.UnrecognizedConfigCall);
+    }
+
+    private const string HasKeyWithHasNameSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.HasKey(e => e.Id).HasName("PK_Order");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUnrecognizedCalls_HasNameChainedOntoHasKey_IsNotFlagged()
+    {
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(HasKeyWithHasNameSource);
+
+        Assert.DoesNotContain(diagnostics, d => d.Code == DiagnosticCodes.UnrecognizedConfigCall && d.Message.Contains("HasName"));
+    }
+
+    private const string SequenceWithHasNameSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence<int>("OrderNumbers").HasName("SEQ_OrderNumbers");
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseUnrecognizedModelLevelCalls_HasNameChainedOntoHasSequence_IsNotVisitedAtAll()
+    {
+        // `.HasName(...)` chained onto a model-level call is never visited by either
+        // ParseUnrecognizedCalls (entity-scoped only) or ParseUnrecognizedModelLevelCalls
+        // (only inspects the call made directly on modelBuilder, not its chained tail) —
+        // so it neither fires a diagnostic nor gets silently "recognized". This documents
+        // that current, acceptable behavior rather than asserting a diagnostic that the
+        // codebase has no mechanism to produce yet.
+        var diagnostics = new FluentConfigParser().ParseUnrecognizedModelLevelCalls(SequenceWithHasNameSource);
+
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("HasName"));
+    }
+
     // ─── ParseAlternateKeys ──────────────────────────────────────────────────────
 
     private const string SourceWithSingleAndCompositeAlternateKeys = """

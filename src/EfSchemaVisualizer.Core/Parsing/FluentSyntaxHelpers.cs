@@ -307,6 +307,18 @@ internal static class FluentSyntaxHelpers
                 : null;
     }
 
+    /// Returns the method name of the invocation `call` is chained onto — e.g. given the
+    /// `HasName` call in `entity.HasKey(e => e.Id).HasName("PK_Id")`, returns "HasKey". Returns
+    /// null when `call` is chained directly onto the entity/builder receiver (an identifier),
+    /// not onto another invocation.
+    internal static string? GetOwnerCallName(InvocationExpressionSyntax call)
+    {
+        return call.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner }
+            && inner.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var ownerName }
+            ? ownerName
+            : null;
+    }
+
     private static readonly string[] CollectionWrapperNames =
     {
         "ICollection", "IList", "List", "IEnumerable", "HashSet", "ISet",

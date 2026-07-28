@@ -22,7 +22,17 @@ public sealed class FluentConfigParser
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
-        "SplitToTable", "OwnsOne", "OwnsMany", "HasName", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
+        "SplitToTable", "OwnsOne", "OwnsMany", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
+    };
+
+    /// Method names whose recognition depends on what they're chained onto — unlike every
+    /// other entry in RecognizedCallNames, these collide with real, unrelated EF constructs
+    /// this parser doesn't read (e.g. `HasAlternateKey(...).HasName(...)`,
+    /// `HasSequence(...).HasName(...)`). Each key maps to the set of owner-call names it's
+    /// actually read under.
+    private static readonly Dictionary<string, HashSet<string>> ContextSensitiveCallNames = new()
+    {
+        ["HasName"] = new HashSet<string> { "HasKey", "HasIndex" },
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -44,7 +54,15 @@ public sealed class FluentConfigParser
                     continue;
                 }
 
-                if (RecognizedCallNames.Contains(methodName))
+                if (ContextSensitiveCallNames.TryGetValue(methodName, out var allowedOwners))
+                {
+                    var ownerName = FluentSyntaxHelpers.GetOwnerCallName(call);
+                    if (ownerName is not null && allowedOwners.Contains(ownerName))
+                    {
+                        continue;
+                    }
+                }
+                else if (RecognizedCallNames.Contains(methodName))
                 {
                     continue;
                 }
