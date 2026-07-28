@@ -53,6 +53,7 @@ public static class DiagramModelBuilder
         var shadowProperties = configParser.ParseShadowProperties(configSource);
         var ignoredEntityNames = configParser.ParseIgnoredEntities(configSource).ToHashSet();
         var ownedTypeCalls = configParser.ParseOwnedTypeCalls(configSource);
+        var complexPropertyCalls = configParser.ParseComplexPropertyCalls(configSource, entityResult.Value);
         var fluentRelationships = configParser.ParseRelationships(configSource, entityResult.Value);
         var annotationRelationships = entityParser.ParseRelationships(classSource, entityResult.Value);
         var unrecognizedCalls = configParser.ParseUnrecognizedCalls(configSource);
@@ -97,6 +98,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(sequences.Diagnostics);
         diagnostics.AddRange(useSequences.Diagnostics);
         diagnostics.AddRange(ownedTypeCalls.Diagnostics);
+        diagnostics.AddRange(complexPropertyCalls.Diagnostics);
 
         var fluentIndexKeys = indexes.Value.Select(IndexDedupeKey).ToHashSet();
         var mergedIndexConfigs = indexAttributes.Value
@@ -141,7 +143,8 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyShadowProperties(entity, shadowProperties.Value))
             .ToList();
 
-        var ownedTypeFold = OwnedTypeInference.Fold(mergedEntities, ownedTypeCalls.Value);
+        var complexTypeFold = ComplexTypeInference.Fold(mergedEntities, complexPropertyCalls.Value);
+        var ownedTypeFold = OwnedTypeInference.Fold(complexTypeFold.Entities, ownedTypeCalls.Value);
 
         IReadOnlyList<EntityModel> entities = ownedTypeFold.Entities
             .Select(ConventionInference.InferKey)
