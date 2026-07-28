@@ -57,7 +57,33 @@ public class FluentConfigParserOwnedTypeTests
     }
 
     [Fact]
-    public void ParseOwnedTypeCalls_BuilderLambdaWithNestedCalls_FiresOwnedNestedConfigIgnored()
+    public void ParseOwnedTypeCalls_BuilderLambdaWithToTable_FiresOwnedNestedConfigIgnored()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress, b =>
+                        {
+                            b.ToTable("Addresses");
+                        });
+                    });
+                }
+            }
+            """;
+
+        var result = Parser.ParseOwnedTypeCalls(source);
+
+        Assert.Single(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.OwnedNestedConfigIgnored, diagnostic.Code);
+    }
+
+    [Fact]
+    public void ParseOwnedTypeCalls_BuilderLambdaWithHasMaxLength_NoLongerFiresOwnedNestedConfigIgnored()
     {
         const string source = """
             public class AppDbContext : DbContext
@@ -77,9 +103,7 @@ public class FluentConfigParserOwnedTypeTests
 
         var result = Parser.ParseOwnedTypeCalls(source);
 
-        Assert.Single(result.Value);
-        var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal(DiagnosticCodes.OwnedNestedConfigIgnored, diagnostic.Code);
+        Assert.Empty(result.Diagnostics);
     }
 
     [Fact]

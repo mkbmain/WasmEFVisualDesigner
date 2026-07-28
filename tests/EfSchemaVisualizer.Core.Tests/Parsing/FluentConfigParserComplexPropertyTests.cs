@@ -97,4 +97,65 @@ public class FluentConfigParserComplexPropertyTests
     {
         Assert.Equal("ComplexNestedConfigIgnored", DiagnosticCodes.ComplexNestedConfigIgnored);
     }
+
+    [Fact]
+    public void ParseComplexPropertyCalls_BuilderLambdaWithWithOwner_FiresComplexNestedConfigIgnored()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.ComplexProperty(e => e.ShippingAddress, b =>
+                        {
+                            b.WithOwner();
+                        });
+                    });
+                }
+            }
+            """;
+
+        var entities = new[]
+        {
+            new EntityModel("Order", new[] { Property("ShippingAddress", "Address") }),
+            new EntityModel("Address", new[] { Property("Street", "string") }),
+        };
+
+        var result = Parser.ParseComplexPropertyCalls(source, entities);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.ComplexNestedConfigIgnored, diagnostic.Code);
+    }
+
+    [Fact]
+    public void ParseComplexPropertyCalls_BuilderLambdaWithHasColumnName_NoLongerFiresComplexNestedConfigIgnored()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.ComplexProperty(e => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasColumnName("street_name");
+                        });
+                    });
+                }
+            }
+            """;
+
+        var entities = new[]
+        {
+            new EntityModel("Order", new[] { Property("ShippingAddress", "Address") }),
+            new EntityModel("Address", new[] { Property("Street", "string") }),
+        };
+
+        var result = Parser.ParseComplexPropertyCalls(source, entities);
+
+        Assert.Empty(result.Diagnostics);
+    }
 }

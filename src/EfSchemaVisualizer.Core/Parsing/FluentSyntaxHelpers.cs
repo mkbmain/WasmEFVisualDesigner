@@ -76,7 +76,7 @@ internal static class FluentSyntaxHelpers
     /// If `invocation` is an `OwnsOne`/`OwnsMany`/`ComplexProperty` call with a second (builder)
     /// lambda argument, returns that lambda node; otherwise null. The first lambda argument is
     /// always the navigation-property selector, never the builder (same convention as
-    /// `ParseOwnedTypeCalls`'s `HasNestedConfigCalls`).
+    /// `FluentConfigParser`'s `HasIgnoredNestedConfigCalls`).
     private static AnonymousFunctionExpressionSyntax? TryGetFoldingBuilderLambda(InvocationExpressionSyntax invocation)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: var name }

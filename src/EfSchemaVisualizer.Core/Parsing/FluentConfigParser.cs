@@ -1068,9 +1068,10 @@ public sealed class FluentConfigParser
 
     /// Detects `OwnsOne`/`OwnsMany` calls per entity scope, recording which navigation property
     /// each targets so `OwnedTypeInference` can resolve the owned type and fold (`OwnsOne`) or
-    /// link (`OwnsMany`) it. The builder (second) lambda's body is intentionally not walked for
-    /// column-level configuration — only whether it contains any call at all is checked, to flag
-    /// `OwnedNestedConfigIgnored` rather than silently dropping it. This only recognizes the
+    /// link (`OwnsMany`) it. The builder (second) lambda's body is now genuinely parsed via its
+    /// own nested scope (`FluentSyntaxHelpers.FindConfigurationScopes`) — only `ToTable`/`WithOwner`
+    /// calls inside it are still unsupported, flagged via `OwnedNestedConfigIgnored` rather than
+    /// silently dropped. This only recognizes the
     /// two-lambda-argument shape (`OwnsOne(nav, builder)`); the single-argument fluently-chained
     /// overload (`OwnsOne(nav).Property(...)`) is not specifically detected for this diagnostic —
     /// same scope cut as `ToTable`/`SplitToTable`'s documented builder-lambda-only reads.
@@ -1118,7 +1119,7 @@ public sealed class FluentConfigParser
 
                     results.Add(new OwnedTypeConfig(entityName, navigationPropertyName, isMany));
 
-                    if (HasNestedConfigCalls(call))
+                    if (HasIgnoredNestedConfigCalls(call))
                     {
                         diagnostics.Add(new Diagnostic(
                             DiagnosticCodes.OwnedNestedConfigIgnored,
@@ -1134,9 +1135,14 @@ public sealed class FluentConfigParser
         return new ParseResult<IReadOnlyList<OwnedTypeConfig>>(results, diagnostics);
     }
 
-    /// True if `call`'s second lambda argument (the builder) has any invocation inside it.
-    /// The first lambda argument is always the navigation-property selector, never the builder.
-    private static bool HasNestedConfigCalls(InvocationExpressionSyntax call)
+    private static readonly string[] IgnoredNestedBuilderCallNames = { "ToTable", "WithOwner" };
+
+    /// True if `call`'s second lambda argument (the builder) contains any `ToTable`/`WithOwner`
+    /// call — the two builder-lambda calls this pass still doesn't apply (table splitting and owner
+    /// customization are explicit non-goals). Everything else inside the builder is now genuinely
+    /// parsed via the nested scope FluentSyntaxHelpers.FindConfigurationScopes yields for it, so it no
+    /// longer needs a "something was ignored" diagnostic.
+    private static bool HasIgnoredNestedConfigCalls(InvocationExpressionSyntax call)
     {
         var builderLambda = call.ArgumentList.Arguments
             .Select(a => a.Expression)
@@ -1144,7 +1150,15 @@ public sealed class FluentConfigParser
             .Skip(1)
             .FirstOrDefault();
 
-        return builderLambda is not null && builderLambda.DescendantNodes().OfType<InvocationExpressionSyntax>().Any();
+        if (builderLambda is null)
+        {
+            return false;
+        }
+
+        return builderLambda.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(nested => nested.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: var name }
+                && IgnoredNestedBuilderCallNames.Contains(name));
     }
 
     /// Detects `ComplexProperty` calls per entity scope, mirroring `ParseOwnedTypeCalls` but without
@@ -1197,7 +1211,7 @@ public sealed class FluentConfigParser
 
                 results.Add(new ComplexTypeConfig(entityName, navigationPropertyName));
 
-                if (HasNestedConfigCalls(call))
+                if (HasIgnoredNestedConfigCalls(call))
                 {
                     diagnostics.Add(new Diagnostic(
                         DiagnosticCodes.ComplexNestedConfigIgnored,

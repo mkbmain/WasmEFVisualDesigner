@@ -136,7 +136,7 @@ public class DiagramModelBuilderOwnedTypeTests
     }
 
     [Fact]
-    public void Build_OwnsOneWithNestedBuilderCalls_SurfacesOwnedNestedConfigIgnoredDiagnostic()
+    public void Build_OwnsOneWithToTableInBuilder_SurfacesOwnedNestedConfigIgnoredDiagnostic()
     {
         const string classSource = """
             public class Order
@@ -161,7 +161,7 @@ public class DiagramModelBuilderOwnedTypeTests
                     {
                         entity.OwnsOne(e => e.ShippingAddress, b =>
                         {
-                            b.Property(a => a.Street).HasMaxLength(100);
+                            b.ToTable("Addresses");
                         });
                     });
                 }
