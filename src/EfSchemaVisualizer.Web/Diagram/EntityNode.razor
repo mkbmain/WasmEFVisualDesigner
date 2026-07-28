@@ -105,6 +105,28 @@
     {
         <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_nameError</div>
     }
+    <div style="font-size: 0.8em; margin-top: 4px; padding: 0 8px;">
+        <div style="font-weight: bold;">Check constraints:</div>
+        @foreach (var constraint in Node.Entity.CheckConstraints)
+        {
+            <div style="display: flex; gap: 4px; align-items: center; margin: 2px 0;">
+                <input style="width: 80px;" value="@constraint.Name"
+                       @onchange="e => CommitCheckConstraintName(constraint, e.Value?.ToString())"
+                       @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true" />
+                <input style="width: 120px;" value="@constraint.Sql"
+                       @onchange="e => CommitCheckConstraintSql(constraint, e.Value?.ToString())"
+                       @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true" />
+                <button @onclick="() => RemoveCheckConstraint(constraint)"
+                        @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true">x</button>
+            </div>
+        }
+        <button @onclick="AddCheckConstraint"
+                @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true">+ Add check constraint</button>
+        @if (_checkConstraintError is not null)
+        {
+            <div style="color: red;">@_checkConstraintError</div>
+        }
+    </div>
     <ul style="list-style: none; margin: 0; padding: 0;">
         @{ string? _lastOwnerNav = null; }
         @foreach (var property in Node.Entity.Properties)
@@ -696,6 +718,75 @@
         else
         {
             _alternateKeyError = result.Error;
+        }
+    }
+
+    private string? _checkConstraintError;
+
+    private async Task AddCheckConstraint()
+    {
+        var name = $"CK_{Node.Entity.Name}_{Node.Entity.CheckConstraints.Count + 1}";
+        var result = SafeEdit(() => EditContext.Editor.AddCheckConstraint(Node.Entity.Name, name, "1 = 1"));
+        if (result.Success)
+        {
+            _checkConstraintError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _checkConstraintError = result.Error;
+        }
+    }
+
+    private async Task CommitCheckConstraintName(CheckConstraintModel constraint, string? newName)
+    {
+        if (newName is null)
+        {
+            return;
+        }
+
+        var result = SafeEdit(() => EditContext.Editor.SetCheckConstraint(Node.Entity.Name, constraint.Name, newName, constraint.Sql));
+        if (result.Success)
+        {
+            _checkConstraintError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _checkConstraintError = result.Error;
+        }
+    }
+
+    private async Task CommitCheckConstraintSql(CheckConstraintModel constraint, string? newSql)
+    {
+        if (newSql is null)
+        {
+            return;
+        }
+
+        var result = SafeEdit(() => EditContext.Editor.SetCheckConstraint(Node.Entity.Name, constraint.Name, constraint.Name, newSql));
+        if (result.Success)
+        {
+            _checkConstraintError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _checkConstraintError = result.Error;
+        }
+    }
+
+    private async Task RemoveCheckConstraint(CheckConstraintModel constraint)
+    {
+        var result = SafeEdit(() => EditContext.Editor.RemoveCheckConstraint(Node.Entity.Name, constraint.Name));
+        if (result.Success)
+        {
+            _checkConstraintError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _checkConstraintError = result.Error;
         }
     }
 

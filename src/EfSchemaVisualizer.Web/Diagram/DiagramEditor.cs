@@ -560,6 +560,75 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult AddCheckConstraint(string entityName, string name, string sql)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return DiagramEditResult.Fail("Check constraint name cannot be empty.");
+        }
+
+        if (entity.CheckConstraints.Any(c => c.Name == name))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' already has a check constraint named '{name}'.");
+        }
+
+        var newConfigSource = _configRewriter.AddCheckConstraint(ConfigSource, entityName, name, sql);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetCheckConstraint(string entityName, string oldName, string newName, string newSql)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (!entity.CheckConstraints.Any(c => c.Name == oldName))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' has no check constraint named '{oldName}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            return DiagramEditResult.Fail("Check constraint name cannot be empty.");
+        }
+
+        if (newName != oldName && entity.CheckConstraints.Any(c => c.Name == newName))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' already has a check constraint named '{newName}'.");
+        }
+
+        var newConfigSource = _configRewriter.SetCheckConstraint(ConfigSource, entityName, oldName, newName, newSql);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveCheckConstraint(string entityName, string name)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (!entity.CheckConstraints.Any(c => c.Name == name))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' has no check constraint named '{name}'.");
+        }
+
+        var newConfigSource = _configRewriter.RemoveCheckConstraint(ConfigSource, entityName, name);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     public DiagramEditResult SetTableMapping(string entityName, string? tableName, string? schema)
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);

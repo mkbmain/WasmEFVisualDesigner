@@ -594,4 +594,55 @@ public class DiagramEditorPropertyPanelTests
         Assert.Null(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").ComputedColumnSql);
         Assert.DoesNotContain("HasComputedColumnSql", editor.ConfigSource);
     }
+
+    [Fact]
+    public void AddCheckConstraint_NewName_AddsToEntity()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.AddCheckConstraint("Person", "CK_Person_Name", "LEN([Name]) > 0");
+
+        Assert.True(result.Success);
+        var constraint = editor.Current.Entities.Single().CheckConstraints.Single();
+        Assert.Equal("CK_Person_Name", constraint.Name);
+        Assert.Equal("LEN([Name]) > 0", constraint.Sql);
+    }
+
+    [Fact]
+    public void AddCheckConstraint_DuplicateName_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddCheckConstraint("Person", "CK_Person_Name", "LEN([Name]) > 0");
+
+        var result = editor.AddCheckConstraint("Person", "CK_Person_Name", "1 = 1");
+
+        Assert.False(result.Success);
+        Assert.Single(editor.Current.Entities.Single().CheckConstraints);
+    }
+
+    [Fact]
+    public void RemoveCheckConstraint_ExistingName_RemovesIt()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddCheckConstraint("Person", "CK_Person_Name", "LEN([Name]) > 0");
+
+        var result = editor.RemoveCheckConstraint("Person", "CK_Person_Name");
+
+        Assert.True(result.Success);
+        Assert.Empty(editor.Current.Entities.Single().CheckConstraints);
+    }
+
+    [Fact]
+    public void SetCheckConstraint_RenamesAndUpdatesSql()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.AddCheckConstraint("Person", "CK_Person_Name", "LEN([Name]) > 0");
+
+        var result = editor.SetCheckConstraint("Person", "CK_Person_Name", "CK_Person_NonEmptyName", "LEN([Name]) >= 1");
+
+        Assert.True(result.Success);
+        var constraint = editor.Current.Entities.Single().CheckConstraints.Single();
+        Assert.Equal("CK_Person_NonEmptyName", constraint.Name);
+        Assert.Equal("LEN([Name]) >= 1", constraint.Sql);
+    }
 }
