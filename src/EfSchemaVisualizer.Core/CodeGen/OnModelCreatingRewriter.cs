@@ -2548,12 +2548,19 @@ public sealed class OnModelCreatingRewriter
 
             ArgumentSyntax newArgument;
 
-            if (argumentExpression is SimpleLambdaExpressionSyntax { ExpressionBody: MemberAccessExpressionSyntax expressionBodyAccess } exprLambda)
+            // Both SimpleLambdaExpressionSyntax (`e => e.X`) and ParenthesizedLambdaExpressionSyntax
+            // (`(e) => e.X`) are valid, idiomatic shapes a real nav-selector lambda can take —
+            // TryReadSinglePropertyNameArgument above already resolves both when finding `call`, so
+            // the rewrite here must handle both too, or a parenthesized-lambda call would silently
+            // fall through to `continue` below and leave the config unchanged while the class
+            // declaration has already been renamed by the caller (DiagramEditor.RenameProperty),
+            // producing a Success=true result with mismatched, non-compiling sources.
+            if (argumentExpression is LambdaExpressionSyntax { ExpressionBody: MemberAccessExpressionSyntax expressionBodyAccess } exprLambda)
             {
                 var newLambda = exprLambda.WithExpressionBody(expressionBodyAccess.WithName(SyntaxFactory.IdentifierName(newNavName)));
                 newArgument = navArgument.WithExpression(newLambda);
             }
-            else if (argumentExpression is SimpleLambdaExpressionSyntax { Block: BlockSyntax block } blockLambda
+            else if (argumentExpression is LambdaExpressionSyntax { Block: BlockSyntax block } blockLambda
                 && block.Statements is [ReturnStatementSyntax { Expression: MemberAccessExpressionSyntax blockAccess } returnStatement])
             {
                 var newReturnStatement = returnStatement.WithExpression(blockAccess.WithName(SyntaxFactory.IdentifierName(newNavName)));
@@ -2570,7 +2577,12 @@ public sealed class OnModelCreatingRewriter
             }
             else
             {
-                continue;
+                // Should be unreachable: TryReadSinglePropertyNameArgument only matched `call` above
+                // because it recognized this same argument shape. Throwing here (rather than silently
+                // `continue`-ing past this call) avoids ever reporting Success with a stale nav
+                // reference left in the config — see the Important review finding this guards against.
+                throw new InvalidOperationException(
+                    $"Unsupported navigation-selector argument shape for '{oldNavName}' in '{callName}' call.");
             }
 
             var newCall = call.WithArgumentList(

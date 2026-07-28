@@ -300,6 +300,65 @@ public class DiagramEditorOwnedTypeTests
         Assert.Contains(order.Properties, p => p.Name == "Street" && p.OwnerNavigationProperty == "DeliveryAddress");
     }
 
+    // Regression for a review finding: the guard that lets an owner's own nav property (folded out of
+    // Properties entirely) through must stay precise — it must not also admit a genuinely unknown
+    // property name that never appears in the model at all, in either the plain-property or the
+    // OwnerNavigationProperty-stamped form.
+    [Fact]
+    public void RenameProperty_UnknownProperty_StillFails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.RenameProperty("Order", "DoesNotExist", "Whatever");
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Error);
+        Assert.Equal(ConfigSource, editor.ConfigSource);
+        Assert.Equal(ClassSource, editor.ClassSource);
+    }
+
+    // Regression for a review finding: an Ignore()d/[NotMapped] property is also removed from
+    // entity.Properties by ModelMerger.ApplyIgnoredProperties — the same symptom as a folded-away
+    // owner nav property, but for a different reason. Renaming through the class-declares-it fallback
+    // let this through incorrectly, leaving a dangling Ignore(e => e.OldName) reference in config
+    // after rename. An ignored property never stamps any OwnerNavigationProperty on another property
+    // (that's only stamped by OwnedTypeInference.Fold/ComplexTypeInference.Fold), so it must still be
+    // rejected.
+    [Fact]
+    public void RenameProperty_IgnoredProperty_FailsRatherThanLeavingDanglingIgnoreReference()
+    {
+        const string classSourceWithDiscount = """
+            public class Order
+            {
+                public int Id { get; set; }
+                public string Discount { get; set; }
+            }
+            """;
+        const string configSourceIgnoringDiscount = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.Ignore(e => e.Discount);
+                    });
+                }
+            }
+            """;
+        var editor = new DiagramEditor(classSourceWithDiscount, configSourceIgnoringDiscount);
+
+        var order = editor.Current.Entities.Single(e => e.Name == "Order");
+        Assert.DoesNotContain(order.Properties, p => p.Name == "Discount");
+
+        var result = editor.RenameProperty("Order", "Discount", "Rebate");
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Error);
+        Assert.Equal(classSourceWithDiscount, editor.ClassSource);
+        Assert.Equal(configSourceIgnoringDiscount, editor.ConfigSource);
+    }
+
     [Fact]
     public void SetColumnName_SingleLevelFoldedPropertyInMultiLevelFixture_StillSucceedsAndRoundTrips()
     {

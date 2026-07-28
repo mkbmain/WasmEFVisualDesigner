@@ -148,10 +148,17 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"A property cannot have the same name as its entity '{entityName}'.");
         }
 
-        // A folded-away owner nav property (e.g. Order.ShippingAddress once OwnedTypeInference.Fold
-        // splices Address's properties into Order) never appears in entity.Properties — it's replaced
-        // there, not merely hidden — so also check the raw class declaration directly before failing.
-        if (!entity.Properties.Any(p => p.Name == oldPropertyName) && !_classRewriter.HasProperty(ClassSource, entityName, oldPropertyName))
+        // A folded-away owner nav property (e.g. Order.ShippingAddress once OwnedTypeInference.Fold or
+        // ComplexTypeInference.Fold splices the target type's properties into Order) never appears in
+        // entity.Properties by name — it's replaced there, not merely hidden. But every property folded
+        // in that way is stamped with OwnerNavigationProperty = the nav property's own name (see
+        // OwnedTypeInference.Fold/ComplexTypeInference.Fold), so a folded-in property whose
+        // OwnerNavigationProperty matches oldPropertyName proves oldPropertyName is a real nav property
+        // that owns something, without re-parsing the class source. This deliberately does NOT admit an
+        // Ignore()d/[NotMapped] property — ModelMerger.ApplyIgnoredProperties also removes those from
+        // Properties, but they never stamp any OwnerNavigationProperty, so they still correctly fail
+        // here (renaming one would otherwise leave a dangling Ignore(e => e.OldName) reference).
+        if (!entity.Properties.Any(p => p.Name == oldPropertyName) && !entity.Properties.Any(p => p.OwnerNavigationProperty == oldPropertyName))
         {
             return DiagramEditResult.Fail($"Property '{oldPropertyName}' not found on '{entityName}'.");
         }

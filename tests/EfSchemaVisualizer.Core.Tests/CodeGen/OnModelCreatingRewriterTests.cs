@@ -3504,4 +3504,88 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(source, newSource);
     }
+
+    // Regression for a review finding: TryReadSinglePropertyNameArgument (used to find which call to
+    // rewrite) already accepts a parenthesized nav-selector lambda `(e) => e.X`, not just the simple
+    // `e => e.X` form, so the WRITE side must handle it too. Before the fix, this call shape fell into
+    // an unhandled branch and the method returned `source` completely unchanged for it — which,
+    // reached through DiagramEditor.RenameProperty (where the class declaration is already renamed by
+    // the time this runs), would silently report Success=true with a stale, non-compiling config.
+    [Fact]
+    public void RenameOwnedNavigationReference_ParenthesizedLambda_RenamesLambdaParameterReference()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne((e) => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasMaxLength(100);
+                        });
+                    });
+                }
+            }
+            """;
+
+        var rewriter = new OnModelCreatingRewriter();
+        var newSource = rewriter.RenameOwnedNavigationReference(source, "Order", "ShippingAddress", "DeliveryAddress");
+
+        Assert.Contains("OwnsOne((e) => e.DeliveryAddress, b =>", newSource);
+        Assert.DoesNotContain("ShippingAddress", newSource);
+    }
+
+    [Fact]
+    public void RenameOwnedNavigationReference_OwnsManyCall_RenamesLambdaParameterReference()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsMany(e => e.LineItems, b =>
+                        {
+                            b.Property(a => a.Sku).HasMaxLength(50);
+                        });
+                    });
+                }
+            }
+            """;
+
+        var rewriter = new OnModelCreatingRewriter();
+        var newSource = rewriter.RenameOwnedNavigationReference(source, "Order", "LineItems", "Items");
+
+        Assert.Contains("OwnsMany(e => e.Items, b =>", newSource);
+        Assert.DoesNotContain("LineItems", newSource);
+    }
+
+    [Fact]
+    public void RenameOwnedNavigationReference_ComplexPropertyCall_RenamesLambdaParameterReference()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.ComplexProperty(e => e.ShippingAddress, b =>
+                        {
+                            b.Property(a => a.Street).HasMaxLength(100);
+                        });
+                    });
+                }
+            }
+            """;
+
+        var rewriter = new OnModelCreatingRewriter();
+        var newSource = rewriter.RenameOwnedNavigationReference(source, "Order", "ShippingAddress", "DeliveryAddress");
+
+        Assert.Contains("ComplexProperty(e => e.DeliveryAddress, b =>", newSource);
+        Assert.DoesNotContain("ShippingAddress", newSource);
+    }
 }
