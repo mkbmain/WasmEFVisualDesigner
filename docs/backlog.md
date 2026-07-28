@@ -513,8 +513,40 @@
       `HasSequence(...)` now has a `default:` case that reports any chained
       call it doesn't recognize (including `.HasName(...)`) — added as part of
       this same fix.
-- [ ] **`[found]` Owned & complex types:** `OwnsOne`, `OwnsMany`,
+- [x] **`[found]` Owned & complex types:** `OwnsOne`, `OwnsMany`,
       `ComplexProperty`. See W3 — currently actively misleading, not just absent.
+      — Fixed 2026-07-28. See
+      `docs/superpowers/specs/2026-07-28-owned-and-complex-types-design.md`.
+      `ComplexProperty` is now parsed, folded, and rendered with a distinct
+      marker (`PropertyModel.FoldKind`: `None`/`Owned`/`Complex`), mirroring
+      the existing `OwnsOne` fold; a collection-typed `ComplexProperty` target
+      is flagged (`ComplexPropertyCollectionUnsupported`) rather than folded.
+      Config chained inside an `OwnsOne`/`OwnsMany`/`ComplexProperty` builder
+      lambda (`HasMaxLength`, `HasColumnName`, etc.) is now genuinely parsed
+      — the builder lambda is treated as its own configuration scope, so
+      every existing per-property extractor picks it up with no new
+      extractor code; `OwnedNestedConfigIgnored`/`ComplexNestedConfigIgnored`
+      now fire only for the still-unhandled `ToTable`/`WithOwner` calls.
+      Folded owned/complex properties are now fully editable
+      (rename/retype/remove/attribute edits) in the diagram, including a new
+      `OnModelCreatingRewriter.FindOrCreateOwnedConfigScope` rewriter
+      primitive and a `ValidateOwnedEditDepth` guard that cleanly rejects
+      edits on multi-level owned/complex chains (an explicit non-goal)
+      instead of corrupting data. Renaming the owner's own navigation
+      property now also patches the outer fluent call's lambda parameter.
+
+      **Not done — deferred, candidates for a future pass:** nested
+      owned-in-owned/complex-in-complex attribution remains unsupported and,
+      per final review, misrenders asymmetrically depending on fold order
+      (a spurious standalone card plus a stray class-typed row) rather than
+      just "doesn't matter for correctness" as originally assumed; table
+      splitting (`OwnsOne(...).ToTable(...)`) and `WithOwner(...)`
+      customization inside a builder lambda remain flagged-not-applied; an
+      expression-bodied builder lambda (`b => b.SomeCall()`, no braces) still
+      isn't parsed as a scope, though it now at least fires a diagnostic
+      instead of silently dropping its config; the Phase 3 editor test suite
+      has no dedicated `ComplexProperty` structural-edit case (verified
+      working manually, `OwnsOne` is well-covered).
 - [ ] **`[found]` Inheritance:** `HasDiscriminator` / `HasValue`, TPT
       (`UseTptMappingStrategy`), TPC. See W2.
 - [ ] **`[found]` Value converters and enums:** `HasConversion` (all overloads),
