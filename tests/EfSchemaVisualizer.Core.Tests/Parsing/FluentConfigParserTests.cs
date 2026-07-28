@@ -4110,4 +4110,46 @@ public class FluentConfigParserTests
         var diagnostic = Assert.Single(result.Diagnostics);
         Assert.Equal(DiagnosticCodes.UnreadableHasSequenceArgument, diagnostic.Code);
     }
+
+    private const string SequenceSourceIsCyclicFalse = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence("OrderNumbers")
+                    .IsCyclic(false);
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSequences_IsCyclicExplicitFalse_ReadsFalse()
+    {
+        var result = new FluentConfigParser().ParseSequences(SequenceSourceIsCyclicFalse);
+
+        Assert.Empty(result.Diagnostics);
+        var sequence = Assert.Single(result.Value);
+        Assert.False(sequence.IsCyclic);
+    }
+
+    private const string SequenceSourceIsCyclicNonLiteral = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.HasSequence("OrderNumbers")
+                    .IsCyclic(someIdentifier);
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseSequences_IsCyclicNonLiteralArgument_LeavesIsCyclicNull()
+    {
+        var result = new FluentConfigParser().ParseSequences(SequenceSourceIsCyclicNonLiteral);
+
+        Assert.Empty(result.Diagnostics);
+        var sequence = Assert.Single(result.Value);
+        Assert.Null(sequence.IsCyclic);
+    }
 }

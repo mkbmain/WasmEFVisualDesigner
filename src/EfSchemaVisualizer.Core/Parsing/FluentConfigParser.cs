@@ -227,8 +227,18 @@ public sealed class FluentConfigParser
                         }
                         break;
                     case "IsCyclic":
-                        isCyclic = arg is null
-                            || (arg.Expression is LiteralExpressionSyntax cyclicLiteral && cyclicLiteral.IsKind(SyntaxKind.TrueLiteralExpression));
+                        if (arg is null)
+                        {
+                            isCyclic = true;
+                        }
+                        else if (arg.Expression is LiteralExpressionSyntax cyclicLiteral && cyclicLiteral.IsKind(SyntaxKind.TrueLiteralExpression))
+                        {
+                            isCyclic = true;
+                        }
+                        else if (arg.Expression is LiteralExpressionSyntax cyclicFalseLiteral && cyclicFalseLiteral.IsKind(SyntaxKind.FalseLiteralExpression))
+                        {
+                            isCyclic = false;
+                        }
                         break;
                 }
             });
