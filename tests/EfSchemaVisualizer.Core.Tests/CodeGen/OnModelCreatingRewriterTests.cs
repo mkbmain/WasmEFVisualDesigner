@@ -2409,6 +2409,94 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Quantity)", result);
     }
 
+    private const string SourceWithNumberPropertyNoSequence = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Order>(entity =>
+                {
+                    entity.Property(e => e.Number);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetUseSequence_BarePropertyCall_AppendsUseSequenceWithSchema()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetUseSequence(SourceWithNumberPropertyNoSequence, entityName: "Order", propertyName: "Number", sequenceName: "OrderNumbers", schema: "shared");
+
+        Assert.Contains("entity.Property(e => e.Number).UseSequence(\"OrderNumbers\", \"shared\")", result);
+    }
+
+    [Fact]
+    public void SetUseSequence_NoSchema_AppendsUseSequenceWithOneArgument()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetUseSequence(SourceWithNumberPropertyNoSequence, entityName: "Order", propertyName: "Number", sequenceName: "OrderNumbers", schema: null);
+
+        Assert.Contains("entity.Property(e => e.Number).UseSequence(\"OrderNumbers\")", result);
+    }
+
+    [Fact]
+    public void SetUseSequence_ExistingCall_MutatesArguments()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetUseSequence(SourceWithNumberPropertyNoSequence, entityName: "Order", propertyName: "Number", sequenceName: "OrderNumbers", schema: "shared");
+
+        var result = new OnModelCreatingRewriter()
+            .SetUseSequence(source, entityName: "Order", propertyName: "Number", sequenceName: "OtherSequence", schema: null);
+
+        Assert.Contains("entity.Property(e => e.Number).UseSequence(\"OtherSequence\")", result);
+        Assert.DoesNotContain("OrderNumbers", result);
+        Assert.DoesNotContain("shared", result);
+    }
+
+    [Fact]
+    public void SetUseSequence_ExistingScopeNoPropertyCall_InsertsNewPropertyStatement()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetUseSequence(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Total", sequenceName: "OrderTotals", schema: null);
+
+        Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Quantity);", result);
+        Assert.Contains("entity.Property(e => e.Total).UseSequence(\"OrderTotals\")", result);
+    }
+
+    [Fact]
+    public void SetUseSequence_UnknownEntity_InsertsNewEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetUseSequence(SourceWithNoRelationshipConfig, entityName: "Order", propertyName: "Number", sequenceName: "OrderNumbers", schema: "shared");
+
+        Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
+        Assert.Contains("entity.Property(e => e.Number).UseSequence(\"OrderNumbers\", \"shared\")", result);
+    }
+
+    [Fact]
+    public void RemoveUseSequence_ExistingCall_RemovesCall()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetUseSequence(SourceWithNumberPropertyNoSequence, entityName: "Order", propertyName: "Number", sequenceName: "OrderNumbers", schema: "shared");
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveUseSequence(source, entityName: "Order", propertyName: "Number");
+
+        Assert.DoesNotContain("UseSequence", result);
+        Assert.Contains("entity.Property(e => e.Number)", result);
+    }
+
+    [Fact]
+    public void RemoveUseSequence_NoMatchingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemoveUseSequence(SourceWithNumberPropertyNoSequence, entityName: "Order", propertyName: "Number");
+
+        Assert.Equal(SourceWithNumberPropertyNoSequence, result);
+    }
+
     private const string SourceWithNoRelationshipConfig = """
         public class AppDbContext : DbContext
         {

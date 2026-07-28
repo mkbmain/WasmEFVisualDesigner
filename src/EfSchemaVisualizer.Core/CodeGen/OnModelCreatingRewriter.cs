@@ -1204,6 +1204,113 @@ public sealed class OnModelCreatingRewriter
         return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasComputedColumnSql");
     }
 
+    public string SetUseSequence(string sourceCode, string entityName, string propertyName, string sequenceName, string? schema)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "UseSequence"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is not null)
+        {
+            var newRoot = root.ReplaceNode(existingCall, BuildUseSequenceCall(((MemberAccessExpressionSyntax)existingCall.Expression).Expression, sequenceName, schema));
+            return newRoot.ToFullString();
+        }
+
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            var newRoot = root.ReplaceNode(existingPropertyCall, BuildUseSequenceCall(existingPropertyCall, sequenceName, schema));
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+        var propertyCall = BuildPropertyCallExpression(existingScope, propertyName, out var block, out var blockReceiverName);
+
+        var propertyStatement = SyntaxFactory.ExpressionStatement(BuildUseSequenceCall(propertyCall, sequenceName, schema));
+
+        if (existingScope is not null)
+        {
+            var newBlock = block!.AddStatements(propertyStatement);
+            var newRoot = root.ReplaceNode(block!, newBlock);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var method = FindOnModelCreatingMethod(root);
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(propertyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot2 = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot2.NormalizeWhitespace().ToFullString();
+    }
+
+    public string RemoveUseSequence(string sourceCode, string entityName, string propertyName)
+    {
+        return RemoveStringArgCall(sourceCode, entityName, propertyName, "UseSequence");
+    }
+
+    private static InvocationExpressionSyntax BuildUseSequenceCall(ExpressionSyntax propertyCallExpression, string sequenceName, string? schema)
+    {
+        var arguments = new List<ArgumentSyntax>
+        {
+            SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(sequenceName))),
+        };
+
+        if (schema is not null)
+        {
+            arguments.Add(SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(schema))));
+        }
+
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, propertyCallExpression, SyntaxFactory.IdentifierName("UseSequence")),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
+    }
+
+    private static InvocationExpressionSyntax BuildPropertyCallExpression(SyntaxNode? scope, string propertyName, out BlockSyntax? block, out string blockReceiverName)
+    {
+        if (scope is null)
+        {
+            block = null;
+            blockReceiverName = "entity";
+            return BuildBarePropertyCallExpression("entity", "e", propertyName);
+        }
+
+        var (scopeBlock, receiverName) = GetScopeBlockAndReceiver(scope);
+        var lambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
+        block = scopeBlock;
+        blockReceiverName = receiverName;
+        return BuildBarePropertyCallExpression(receiverName, lambdaParam, propertyName);
+    }
+
+    private static InvocationExpressionSyntax BuildBarePropertyCallExpression(string blockReceiverName, string propertyLambdaParam, string propertyName)
+    {
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("Property")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.SimpleLambdaExpression(
+                            SyntaxFactory.Parameter(SyntaxFactory.Identifier(propertyLambdaParam)),
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName(propertyLambdaParam),
+                                SyntaxFactory.IdentifierName(propertyName)))))));
+    }
+
     public string RemoveTable(string sourceCode, string entityName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
