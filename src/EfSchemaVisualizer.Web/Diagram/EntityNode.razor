@@ -140,19 +140,28 @@
         @foreach (var property in Node.Entity.Properties)
         {
             var isKey = Node.Entity.KeyPropertyNames.Contains(property.Name);
-            if (property.FoldKind == FoldKind.Owned && property.OwnerNavigationProperty != _lastOwnerNav)
+            if (property.FoldKind != FoldKind.None && property.OwnerNavigationProperty != _lastOwnerNav)
             {
                 _lastOwnerNav = property.OwnerNavigationProperty;
-                <li style="padding: 4px 8px 0; font-size: 0.7em; color: #888; border-top: 1px dashed #ccc;">@_lastOwnerNav (owned)</li>
+                var kindLabel = property.FoldKind == FoldKind.Complex ? "complex" : "owned";
+                <li style="padding: 4px 8px 0; font-size: 0.7em; color: #888; border-top: 1px dashed #ccc;">@_lastOwnerNav (@kindLabel)</li>
             }
-            else if (property.FoldKind != FoldKind.Owned)
+            else if (property.FoldKind == FoldKind.None)
             {
                 _lastOwnerNav = null;
             }
-            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "") @(property.FoldKind == FoldKind.Owned ? "opacity: 0.75;" : "")">
+            <li style="padding: 2px 8px; @(isKey ? "font-weight: bold;" : "") @(property.FoldKind != FoldKind.None ? "opacity: 0.75;" : "")">
                 @if (property.FoldKind == FoldKind.Owned)
                 {
-                    <span title="Folded in from the owned type via @property.OwnerNavigationProperty. Read-only.">@property.Name : @property.ClrType@(property.IsNullable ? "?" : "")</span>
+                    <span title="Folded in from the owned type via @property.OwnerNavigationProperty. Read-only.">
+                        <span style="opacity: 0.6; margin-right: 2px;">◆</span>@property.Name : @property.ClrType@(property.IsNullable ? "?" : "")
+                    </span>
+                }
+                else if (property.FoldKind == FoldKind.Complex)
+                {
+                    <span title="Folded in from the complex type via @property.OwnerNavigationProperty. Read-only.">
+                        <span style="opacity: 0.6; margin-right: 2px; color: #4a8a6a;">●</span>@property.Name : @property.ClrType@(property.IsNullable ? "?" : "")
+                    </span>
                 }
                 else if (property.IsShadow)
                 {
