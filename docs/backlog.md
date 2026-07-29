@@ -590,9 +590,33 @@
       inherited property may appear "missing") rather than a real problem with the
       source; narrow edge case (TPT + per-property config on a derived entity
       referencing an inherited non-key property), not fixed this pass.
-- [ ] **`[found]` Value converters and enums:** `HasConversion` (all overloads),
+- [x] **`[found]` Value converters and enums:** `HasConversion` (all overloads),
       `HasConversion<string>()` on enum properties. Enum properties currently
       render as their bare CLR type with no indication of how they're stored.
+      — Fixed 2026-07-29. See
+      `docs/superpowers/specs/2026-07-29-value-converters-and-enums-design.md`.
+      `HasConversion<TProvider>()` and `HasConversion(typeof(TProvider))` (type-only)
+      are now fully parsed, modeled, and editable. Lambda-pair conversions
+      `HasConversion(convertToProviderExpr, convertFromProviderExpr)` are recognized
+      and displayed but read-only. New `PropertyModel` fields: `ConversionProviderClrType`
+      (provider type from type-only calls), `ConversionIsCustomLambda` (true for
+      lambda-pair calls), `IsEnumType` (true when CLR type matches an enum in
+      parsed source), `EnumUnderlyingClrType` (the enum's underlying type, e.g.
+      `"int"` or `"byte"`). Parsing via `FluentConfigParser.ParseValueConversions`;
+      merging via `ModelMerger.ApplyValueConversions`; inference via `EnumStorageInference.Fold`;
+      editing via `DiagramEditor.SetValueConversion` / `RemoveValueConversion` (with
+      owned-property variants for folded owned/complex properties). UI adds a
+      "Stored as" text input (backed by a datalist of common provider types) per
+      property, bound through `SafeEdit` to the editor. When `IsEnumType` is true
+      and no explicit conversion is set, a muted hint shows the enum's default
+      storage type (e.g. `int (default)` or the actual `EnumUnderlyingClrType`).
+      Lambda-pair conversions render as read-only "custom conversion" labels. New
+      `UnreadableHasConversionArgument` diagnostic emitted for unrecognized call
+      shapes (e.g. `ValueConverter` instance arguments).
+
+      **Documented non-goals (out of scope):** `ValueConverter` instance overloads
+      (`new SomeValueConverter()`), `ConverterMappingHints`, inferring a lambda
+      conversion's provider type, and editing or removing a lambda-form conversion.
 - [ ] **`[found]` `HasPrincipalKey`.** Already noted as unsupported in the README;
       relevant now that alternate keys are parsed, since a relationship can
       legitimately target one.
