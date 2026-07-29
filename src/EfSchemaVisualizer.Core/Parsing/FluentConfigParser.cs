@@ -34,7 +34,7 @@ public sealed class FluentConfigParser
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
         "SplitToTable", "OwnsOne", "OwnsMany", "ComplexProperty", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
-        "UseTptMappingStrategy", "UseTpcMappingStrategy", "HasDiscriminator",
+        "UseTptMappingStrategy", "UseTpcMappingStrategy", "HasDiscriminator", "HasConversion",
     };
 
     /// Method names whose recognition depends on what they're chained onto — unlike every
@@ -1486,6 +1486,65 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<ComputedColumnSqlConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<ValueConversionConfig>> ParseValueConversions(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<ValueConversionConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasConversion"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+
+                if (propertyName is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnresolvablePropertyName,
+                        "Could not determine which property this HasConversion call configures.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                if (call.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArgNode] } })
+                {
+                    results.Add(new ValueConversionConfig(entityName, propertyName, typeArgNode.ToString(), IsCustomLambda: false));
+                    continue;
+                }
+
+                var arguments = call.ArgumentList.Arguments;
+
+                if (arguments.Count == 1 && arguments[0].Expression is TypeOfExpressionSyntax typeOfExpr)
+                {
+                    results.Add(new ValueConversionConfig(entityName, propertyName, typeOfExpr.Type.ToString(), IsCustomLambda: false));
+                    continue;
+                }
+
+                if (arguments.Count == 2
+                    && arguments[0].Expression is LambdaExpressionSyntax
+                    && arguments[1].Expression is LambdaExpressionSyntax)
+                {
+                    results.Add(new ValueConversionConfig(entityName, propertyName, ProviderClrType: null, IsCustomLambda: true));
+                    continue;
+                }
+
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticCodes.UnreadableHasConversionArgument,
+                    "HasConversion argument is not a recognized shape (expected a generic type argument, typeof(...), or two lambda expressions) and could not be read.",
+                    entityName,
+                    propertyName,
+                    (arguments.FirstOrDefault() ?? (SyntaxNode)call).Span));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<ValueConversionConfig>>(results, diagnostics);
     }
 
     public ParseResult<IReadOnlyList<IndexConfig>> ParseIndexes(string sourceCode)

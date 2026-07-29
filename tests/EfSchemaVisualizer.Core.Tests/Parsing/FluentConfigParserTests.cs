@@ -2064,6 +2064,133 @@ public class FluentConfigParserTests
         Assert.Equal("Total", diagnostic.PropertyName);
     }
 
+    // ─── ParseValueConversions ──────────────────────────────────────────────────
+
+    [Fact]
+    public void ParseValueConversions_GenericTypeArgument_ReadsProviderType()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Status).HasConversion<string>();
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueConversions(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Status", config.PropertyName);
+        Assert.Equal("string", config.ProviderClrType);
+        Assert.False(config.IsCustomLambda);
+    }
+
+    [Fact]
+    public void ParseValueConversions_TypeOfArgument_ReadsProviderType()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Status).HasConversion(typeof(string));
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueConversions(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("string", config.ProviderClrType);
+        Assert.False(config.IsCustomLambda);
+    }
+
+    [Fact]
+    public void ParseValueConversions_LambdaPair_MarksCustomLambda()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Status).HasConversion(v => v.ToString(), v => (Status)Enum.Parse(typeof(Status), v));
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueConversions(source);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("Status", config.PropertyName);
+        Assert.Null(config.ProviderClrType);
+        Assert.True(config.IsCustomLambda);
+    }
+
+    [Fact]
+    public void ParseValueConversions_ValueConverterInstanceArgument_FlagsUnreadable()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Status).HasConversion(new StatusConverter());
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueConversions(source);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasConversionArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Status", diagnostic.PropertyName);
+    }
+
+    [Fact]
+    public void ParseValueConversions_NotChainedOnPropertyCall_FlagsUnresolvablePropertyName()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasConversion(typeof(string));
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueConversions(source);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnresolvablePropertyName, diagnostic.Code);
+        Assert.Contains("HasConversion", diagnostic.Message);
+    }
+
     // ─── ParseRelationships ─────────────────────────────────────────────────────
 
     private static readonly IReadOnlyList<EntityModel> OrderCustomerEntities = new List<EntityModel>
@@ -2904,7 +3031,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.HasConversion(typeof(string));
+                        entity.HasAnnotation("Foo", "Bar");
                     });
                 }
             }
@@ -2915,9 +3042,13 @@ public class FluentConfigParserTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
-        Assert.Contains("HasConversion", diagnostic.Message);
+        Assert.Contains("HasAnnotation", diagnostic.Message);
     }
 
+    // HasConversion is now a recognized call name, so it's no longer usable as the "still unrecognized"
+    // example here; retargeted to HasAnnotation (a call chained after a recognized call, IsUnique(),
+    // that's still genuinely unread by any parser) to keep testing the same "chained after recognized
+    // call" scenario.
     [Fact]
     public void ParseUnrecognizedCalls_ChainedAfterRecognizedCall_IsFlagged()
     {
@@ -2928,7 +3059,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.HasIndex(e => e.Email).IsUnique().HasConversion(typeof(string));
+                        entity.HasIndex(e => e.Email).IsUnique().HasAnnotation("Foo", "Bar");
                     });
                 }
             }
@@ -2937,7 +3068,7 @@ public class FluentConfigParserTests
         var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
 
         var diagnostic = Assert.Single(diagnostics);
-        Assert.Contains("HasConversion", diagnostic.Message);
+        Assert.Contains("HasAnnotation", diagnostic.Message);
     }
 
     [Fact]
@@ -3027,7 +3158,7 @@ public class FluentConfigParserTests
 
                         modelBuilder.Entity<Address>(nested =>
                         {
-                            nested.HasConversion(typeof(string));
+                            nested.HasAnnotation("Foo", "Bar");
                         });
                     });
                 }
@@ -3048,7 +3179,7 @@ public class FluentConfigParserTests
             {
                 protected override void OnModelCreating(ModelBuilder modelBuilder)
                 {
-                    modelBuilder.Entity<Person>().HasConversion(e => e.ToString());
+                    modelBuilder.Entity<Person>().HasAnnotation("Foo", "Bar");
                 }
             }
             """;
@@ -3056,7 +3187,7 @@ public class FluentConfigParserTests
         var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
 
         var diagnostic = Assert.Single(diagnostics);
-        Assert.Contains("HasConversion", diagnostic.Message);
+        Assert.Contains("HasAnnotation", diagnostic.Message);
     }
 
     [Fact]
@@ -3085,7 +3216,7 @@ public class FluentConfigParserTests
             {
                 public void Configure(EntityTypeBuilder<Person> builder)
                 {
-                    builder.HasConversion(typeof(string));
+                    builder.HasAnnotation("Foo", "Bar");
                 }
             }
             """;
@@ -3094,7 +3225,7 @@ public class FluentConfigParserTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal("Person", diagnostic.EntityName);
-        Assert.Contains("HasConversion", diagnostic.Message);
+        Assert.Contains("HasAnnotation", diagnostic.Message);
     }
 
     // ─── ParseIgnoredProperties ────────────────────────────────────────────────────
