@@ -88,6 +88,63 @@
     {
         <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_keyNameError</div>
     }
+    @{
+        var isHierarchyRoot = Node.Entity.BaseEntityName is null
+            && EditContext.Editor.Current.Entities.Any(e => e.BaseEntityName == Node.Entity.Name);
+        var isInHierarchy = Node.Entity.BaseEntityName is not null || isHierarchyRoot;
+    }
+    @if (isInHierarchy)
+    {
+        <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
+            <span title="Inheritance mapping strategy (applies to the whole hierarchy).">Mapping:</span>
+            <select value="@Node.Entity.MappingStrategy" @onchange="e => CommitMappingStrategy(e.Value?.ToString())"
+                    @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true">
+                <option value="Tph">Table-per-hierarchy (TPH)</option>
+                <option value="Tpt">Table-per-type (TPT)</option>
+                <option value="Tpc">Table-per-concrete-type (TPC)</option>
+            </select>
+        </div>
+        @if (_mappingStrategyError is not null)
+        {
+            <div style="color: red; font-size: 0.8em; padding: 0 8px;">@_mappingStrategyError</div>
+        }
+    }
+    @if (isHierarchyRoot)
+    {
+        <div style="font-size: 0.8em; margin-top: 4px; padding: 0 8px;">
+            <div style="font-weight: bold;">Discriminator:</div>
+            <div style="display: flex; gap: 4px; align-items: center; margin: 2px 0;">
+                <input style="width: 90px;" value="@Node.Entity.DiscriminatorPropertyName" placeholder="(none)"
+                       @onchange="e => CommitDiscriminatorColumn(e.Value?.ToString())"
+                       @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true" />
+                <input style="width: 60px;" value="@Node.Entity.DiscriminatorClrType" placeholder="string"
+                       @onchange="e => CommitDiscriminatorClrType(e.Value?.ToString())"
+                       @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true" />
+                @if (Node.Entity.DiscriminatorPropertyName is not null)
+                {
+                    <button type="button" title="Remove discriminator" aria-label="Remove discriminator" style="border: none; background: transparent; cursor: pointer;"
+                            @onclick="RemoveDiscriminator"
+                            @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true">×</button>
+                }
+            </div>
+            @if (Node.Entity.DiscriminatorPropertyName is not null)
+            {
+                @foreach (var derived in EditContext.Editor.Current.Entities.Where(e => e.BaseEntityName == Node.Entity.Name))
+                {
+                    <div style="display: flex; gap: 4px; align-items: center; margin: 2px 0;">
+                        <span style="width: 90px; overflow: hidden;">@derived.Name</span>
+                        <input style="width: 80px;" value="@derived.DiscriminatorValue" placeholder="(none)"
+                               @onchange="e => CommitDiscriminatorValue(derived.Name, e.Value?.ToString())"
+                               @onpointerdown:stopPropagation="true" @onmousedown:stopPropagation="true" />
+                    </div>
+                }
+            }
+            @if (_discriminatorError is not null)
+            {
+                <div style="color: red; font-size: 0.8em;">@_discriminatorError</div>
+            }
+        </div>
+    }
     <div style="padding: 2px 8px; font-size: 0.75em; color: #555; display: flex; align-items: center; gap: 4px;">
         <span title="Raw SQL query source (.ToSqlQuery).">SQL query:</span>
         <input style="width: 200px;" value="@Node.Entity.SqlQuery" placeholder="(none)"
@@ -597,6 +654,89 @@
         else
         {
             _keyNameError = result.Error;
+        }
+    }
+
+    private string? _mappingStrategyError;
+    private string? _discriminatorError;
+
+    private async Task CommitMappingStrategy(string? newStrategy)
+    {
+        if (newStrategy is null || !Enum.TryParse<MappingStrategy>(newStrategy, out var strategy))
+        {
+            return;
+        }
+
+        var result = SafeEdit(() => EditContext.Editor.SetMappingStrategy(Node.Entity.Name, strategy));
+        if (result.Success)
+        {
+            _mappingStrategyError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _mappingStrategyError = result.Error;
+        }
+    }
+
+    private async Task CommitDiscriminatorColumn(string? columnName)
+    {
+        var result = SafeEdit(() => EditContext.Editor.SetDiscriminatorColumn(Node.Entity.Name, columnName ?? string.Empty, Node.Entity.DiscriminatorClrType));
+        if (result.Success)
+        {
+            _discriminatorError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _discriminatorError = result.Error;
+        }
+    }
+
+    private async Task CommitDiscriminatorClrType(string? clrType)
+    {
+        if (Node.Entity.DiscriminatorPropertyName is not { } columnName)
+        {
+            return;
+        }
+
+        var result = SafeEdit(() => EditContext.Editor.SetDiscriminatorColumn(Node.Entity.Name, columnName, clrType));
+        if (result.Success)
+        {
+            _discriminatorError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _discriminatorError = result.Error;
+        }
+    }
+
+    private async Task CommitDiscriminatorValue(string derivedEntityName, string? value)
+    {
+        var result = SafeEdit(() => EditContext.Editor.SetDiscriminatorValue(derivedEntityName, value));
+        if (result.Success)
+        {
+            _discriminatorError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _discriminatorError = result.Error;
+        }
+    }
+
+    private async Task RemoveDiscriminator()
+    {
+        var result = SafeEdit(() => EditContext.Editor.RemoveDiscriminatorColumn(Node.Entity.Name));
+        if (result.Success)
+        {
+            _discriminatorError = null;
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _discriminatorError = result.Error;
         }
     }
 

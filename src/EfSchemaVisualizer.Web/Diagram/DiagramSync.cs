@@ -65,6 +65,15 @@ public static class DiagramSync
                 continue;
             }
 
+            if (relationship.Kind == RelationshipKind.Inheritance)
+            {
+                var dependentEntity = result.Entities.FirstOrDefault(e => e.Name == relationship.DependentEntity);
+                if (dependentEntity?.MappingStrategy == MappingStrategy.Tpc)
+                {
+                    continue;
+                }
+            }
+
             var link = new LinkModel(dependentNode, principalNode);
             if (relationship.Kind == RelationshipKind.Inheritance)
             {
