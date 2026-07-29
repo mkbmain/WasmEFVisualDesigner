@@ -964,4 +964,45 @@ public class ModelMergerTests
         var total = result.Properties.Single(p => p.Name == "Total");
         Assert.Null(total.SequenceName);
     }
+
+    // ─── ApplyMappingStrategies ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyMappingStrategies_SetsMappingStrategyOnMatchingEntity_DefaultsToTphOtherwise()
+    {
+        var person = new EntityModel("Person", new List<PropertyModel>());
+        var order = new EntityModel("Order", new List<PropertyModel>());
+
+        var configs = new List<MappingStrategyConfig> { new("Person", MappingStrategy.Tpt) };
+
+        Assert.Equal(MappingStrategy.Tpt, ModelMerger.ApplyMappingStrategies(person, configs).MappingStrategy);
+        Assert.Equal(MappingStrategy.Tph, ModelMerger.ApplyMappingStrategies(order, configs).MappingStrategy);
+    }
+
+    [Fact]
+    public void ApplyDiscriminatorColumn_SetsPropertyNameAndClrType_LeavesNonMatchingEntityUntouched()
+    {
+        var person = new EntityModel("Person", new List<PropertyModel>());
+        var order = new EntityModel("Order", new List<PropertyModel>());
+
+        var configs = new List<DiscriminatorColumnConfig> { new("Person", "Discriminator", "string") };
+
+        var merged = ModelMerger.ApplyDiscriminatorColumn(person, configs);
+        Assert.Equal("Discriminator", merged.DiscriminatorPropertyName);
+        Assert.Equal("string", merged.DiscriminatorClrType);
+
+        Assert.Null(ModelMerger.ApplyDiscriminatorColumn(order, configs).DiscriminatorPropertyName);
+    }
+
+    [Fact]
+    public void ApplyDiscriminatorValue_SetsValueOnMatchingEntity_LeavesNonMatchingEntityUntouched()
+    {
+        var student = new EntityModel("Student", new List<PropertyModel>());
+        var teacher = new EntityModel("Teacher", new List<PropertyModel>());
+
+        var configs = new List<DiscriminatorValueConfig> { new("Student", "\"S\"") };
+
+        Assert.Equal("\"S\"", ModelMerger.ApplyDiscriminatorValue(student, configs).DiscriminatorValue);
+        Assert.Null(ModelMerger.ApplyDiscriminatorValue(teacher, configs).DiscriminatorValue);
+    }
 }

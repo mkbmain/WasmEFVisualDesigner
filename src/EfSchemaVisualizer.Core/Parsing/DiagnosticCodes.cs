@@ -36,6 +36,8 @@ public static class DiagnosticCodes
     public const string UnreadableOnDeleteArgument = nameof(UnreadableOnDeleteArgument);
     public const string UnreadableHasConstraintNameArgument = nameof(UnreadableHasConstraintNameArgument);
     public const string UnreadableHasCheckConstraintArgument = nameof(UnreadableHasCheckConstraintArgument);
+    public const string UnreadableHasDiscriminatorArgument = nameof(UnreadableHasDiscriminatorArgument);
+    public const string UnreadableHasValueArgument = nameof(UnreadableHasValueArgument);
     public const string UnrecognizedConfigCall = nameof(UnrecognizedConfigCall);
     public const string ArchiveNoContentFound = nameof(ArchiveNoContentFound);
     public const string UnreadableHasCommentArgument = nameof(UnreadableHasCommentArgument);
@@ -56,4 +58,5 @@ public static class DiagnosticCodes
     public const string PrecisionOrScaleOnUnsupportedType = nameof(PrecisionOrScaleOnUnsupportedType);
     public const string IndexReferencesMissingProperty = nameof(IndexReferencesMissingProperty);
     public const string ForeignKeyTargetsKeylessPrincipal = nameof(ForeignKeyTargetsKeylessPrincipal);
+    public const string InconsistentMappingStrategyInHierarchy = nameof(InconsistentMappingStrategyInHierarchy);
 }

@@ -23,7 +23,11 @@ public sealed record EntityModel(
     string? BaseEntityName = null,
     bool IsOwned = false,
     string? KeyName = null,
-    IReadOnlyList<CheckConstraintModel>? CheckConstraints = null)
+    IReadOnlyList<CheckConstraintModel>? CheckConstraints = null,
+    MappingStrategy MappingStrategy = MappingStrategy.Tph,
+    string? DiscriminatorPropertyName = null,
+    string? DiscriminatorClrType = null,
+    string? DiscriminatorValue = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();

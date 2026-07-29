@@ -386,6 +386,26 @@ public static class ModelMerger
         return constraints.Count == 0 ? entity : entity with { CheckConstraints = constraints };
     }
 
+    public static EntityModel ApplyMappingStrategies(EntityModel entity, IReadOnlyList<MappingStrategyConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+        return config is null ? entity : entity with { MappingStrategy = config.Strategy };
+    }
+
+    public static EntityModel ApplyDiscriminatorColumn(EntityModel entity, IReadOnlyList<DiscriminatorColumnConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+        return config is null
+            ? entity
+            : entity with { DiscriminatorPropertyName = config.ColumnName, DiscriminatorClrType = config.ClrType };
+    }
+
+    public static EntityModel ApplyDiscriminatorValue(EntityModel entity, IReadOnlyList<DiscriminatorValueConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+        return config is null ? entity : entity with { DiscriminatorValue = config.Value };
+    }
+
     public static EntityModel ApplyUseSequences(EntityModel entity, IReadOnlyList<UseSequenceConfig> configs)
     {
         var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
