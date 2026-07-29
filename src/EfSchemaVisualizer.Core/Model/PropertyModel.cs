@@ -34,4 +34,8 @@ public sealed record PropertyModel(
     string? ComputedColumnSql = null,
     bool? ComputedColumnSqlIsStored = null,
     string? SequenceName = null,
-    string? SequenceSchema = null);
+    string? SequenceSchema = null,
+    string? ConversionProviderClrType = null,
+    bool? ConversionIsCustomLambda = null,
+    bool IsEnumType = false,
+    string? EnumUnderlyingClrType = null);
