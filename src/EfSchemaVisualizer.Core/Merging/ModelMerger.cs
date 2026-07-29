@@ -266,6 +266,19 @@ public static class ModelMerger
         return entity with { Properties = updatedProperties };
     }
 
+    public static EntityModel ApplyValueConversions(EntityModel entity, IReadOnlyList<ValueConversionConfig> configs)
+    {
+        var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var config)
+                ? property with { ConversionProviderClrType = config.ProviderClrType, ConversionIsCustomLambda = config.IsCustomLambda }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     public static EntityModel ApplyIgnoredProperties(EntityModel entity, IReadOnlyList<IgnoreConfig> configs)
     {
         var ignoredNames = configs

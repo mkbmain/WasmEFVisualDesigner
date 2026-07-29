@@ -1025,4 +1025,40 @@ public class DiagramModelBuilderTests
         Assert.Equal("\"S\"", result.Entities.Single(e => e.Name == "Student").DiscriminatorValue);
         Assert.Equal("\"T\"", result.Entities.Single(e => e.Name == "Teacher").DiscriminatorValue);
     }
+
+    [Fact]
+    public void Build_HasConversionOnStatusProperty_SetsConversionProviderClrType()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public Status Status { get; set; }
+            }
+
+            public enum Status
+            {
+                Active,
+                Inactive,
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Status).HasConversion<string>();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var status = result.Entities.Single().Properties.Single(p => p.Name == "Status");
+        Assert.Equal("string", status.ConversionProviderClrType);
+    }
 }

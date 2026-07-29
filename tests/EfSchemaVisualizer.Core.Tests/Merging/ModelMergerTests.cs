@@ -503,6 +503,33 @@ public class ModelMergerTests
         Assert.Null(quantity.ComputedColumnSql);
     }
 
+    // ─── ApplyValueConversions ──────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyValueConversions_SetsProviderTypeAndLambdaFlagOnMatchingProperty_LeavesOthersUntouched()
+    {
+        var entity = new EntityModel("Person", new List<PropertyModel>
+        {
+            new("Status", "Status", IsNullable: false, MaxLength: null),
+            new("Name", "string", IsNullable: false, MaxLength: null),
+        });
+
+        var configs = new List<ValueConversionConfig>
+        {
+            new("Person", "Status", "string", IsCustomLambda: false),
+        };
+
+        var result = ModelMerger.ApplyValueConversions(entity, configs);
+
+        var status = result.Properties.Single(p => p.Name == "Status");
+        Assert.Equal("string", status.ConversionProviderClrType);
+        Assert.False(status.ConversionIsCustomLambda);
+
+        var name = result.Properties.Single(p => p.Name == "Name");
+        Assert.Null(name.ConversionProviderClrType);
+        Assert.Null(name.ConversionIsCustomLambda);
+    }
+
     // ─── ApplyRelationships ─────────────────────────────────────────────────────
 
     [Fact]
