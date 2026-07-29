@@ -750,6 +750,89 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetDiscriminator(
+        string sourceCode, string rootEntityName, string columnName, string clrType,
+        IReadOnlyList<(string DerivedEntityName, string Value)> values)
+    {
+        var withoutExisting = RemoveDiscriminator(sourceCode, rootEntityName);
+
+        var tree = CSharpSyntaxTree.ParseText(withoutExisting);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, rootEntityName);
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            var (block, blockReceiverName) = GetScopeBlockAndReceiver(existingScope);
+            var statement = SyntaxFactory.ExpressionStatement(BuildDiscriminatorExpression(blockReceiverName, columnName, clrType, values));
+            var newBlock = block.AddStatements(statement);
+
+            var newRoot = root.ReplaceNode(block, newBlock);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var method = FindOnModelCreatingMethod(root);
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+        var entityStatement = SyntaxFactory.ExpressionStatement(BuildDiscriminatorExpression("entity", columnName, clrType, values));
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, rootEntityName, SyntaxFactory.Block(entityStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot2 = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot2.NormalizeWhitespace().ToFullString();
+    }
+
+    public string RemoveDiscriminator(string sourceCode, string rootEntityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, rootEntityName);
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasDiscriminator"))
+            .FirstOrDefault();
+
+        if (existingCall is null)
+        {
+            return sourceCode;
+        }
+
+        var outermostChainedCall = FindOutermostChainedCall(existingCall);
+        var statement = outermostChainedCall.Ancestors().OfType<ExpressionStatementSyntax>().First();
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionSyntax BuildDiscriminatorExpression(
+        string receiverName, string columnName, string clrType,
+        IReadOnlyList<(string DerivedEntityName, string Value)> values)
+    {
+        SimpleNameSyntax hasDiscriminatorName = SyntaxFactory.GenericName(SyntaxFactory.Identifier("HasDiscriminator"))
+            .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.ParseTypeName(clrType))));
+
+        ExpressionSyntax expression = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(receiverName), hasDiscriminatorName),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+                SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(columnName))))));
+
+        foreach (var (derivedEntityName, value) in values)
+        {
+            var hasValueName = SyntaxFactory.GenericName(SyntaxFactory.Identifier("HasValue"))
+                .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.ParseTypeName(derivedEntityName))));
+
+            expression = SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, expression, hasValueName),
+                SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(SyntaxFactory.ParseExpression(value)))));
+        }
+
+        return expression;
+    }
+
     private static ExpressionStatementSyntax BuildBareEntityCallStatement(string blockReceiverName, string methodName)
     {
         return SyntaxFactory.ExpressionStatement(

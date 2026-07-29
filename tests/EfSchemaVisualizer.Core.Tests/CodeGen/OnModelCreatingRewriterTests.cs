@@ -3650,4 +3650,58 @@ public class OnModelCreatingRewriterTests
 
         Assert.Equal(InheritanceSource, result);
     }
+
+    [Fact]
+    public void SetDiscriminator_NoExistingCall_InsertsFullChain()
+    {
+        var result = new OnModelCreatingRewriter().SetDiscriminator(
+            InheritanceSource, "Person", "Type", "string",
+            new[] { ("Student", "\"S\""), ("Teacher", "\"T\"") });
+
+        Assert.Contains("entity.HasDiscriminator<string>(\"Type\").HasValue<Student>(\"S\").HasValue<Teacher>(\"T\");", result);
+    }
+
+    [Fact]
+    public void SetDiscriminator_ExistingChain_IsFullyReplaced()
+    {
+        var withOneValue = new OnModelCreatingRewriter().SetDiscriminator(
+            InheritanceSource, "Person", "Type", "string", new[] { ("Student", "\"S\"") });
+
+        var result = new OnModelCreatingRewriter().SetDiscriminator(
+            withOneValue, "Person", "Type", "string",
+            new[] { ("Student", "\"S\""), ("Teacher", "\"T\"") });
+
+        Assert.Contains("entity.HasDiscriminator<string>(\"Type\").HasValue<Student>(\"S\").HasValue<Teacher>(\"T\");", result);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(result, "HasDiscriminator"));
+    }
+
+    [Fact]
+    public void SetDiscriminator_EmptyValueList_WritesColumnOnlyWithNoHasValueChain()
+    {
+        var result = new OnModelCreatingRewriter().SetDiscriminator(
+            InheritanceSource, "Person", "Type", "string", System.Array.Empty<(string, string)>());
+
+        Assert.Contains("entity.HasDiscriminator<string>(\"Type\");", result);
+    }
+
+    [Fact]
+    public void RemoveDiscriminator_RemovesEntireChain()
+    {
+        var withDiscriminator = new OnModelCreatingRewriter().SetDiscriminator(
+            InheritanceSource, "Person", "Type", "string",
+            new[] { ("Student", "\"S\"") });
+
+        var result = new OnModelCreatingRewriter().RemoveDiscriminator(withDiscriminator, "Person");
+
+        Assert.DoesNotContain("HasDiscriminator", result);
+        Assert.DoesNotContain("HasValue", result);
+    }
+
+    [Fact]
+    public void RemoveDiscriminator_NoExistingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter().RemoveDiscriminator(InheritanceSource, "Person");
+
+        Assert.Equal(InheritanceSource, result);
+    }
 }
