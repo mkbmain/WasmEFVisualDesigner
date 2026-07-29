@@ -2191,6 +2191,31 @@ public class FluentConfigParserTests
         Assert.Contains("HasConversion", diagnostic.Message);
     }
 
+    [Fact]
+    public void ParseValueConversions_GenericTypeArgumentWithComparerArgument_FlagsUnreadable()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.Property(e => e.Status).HasConversion<string>(new SomeComparer());
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseValueConversions(source);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasConversionArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+        Assert.Equal("Status", diagnostic.PropertyName);
+    }
+
     // ─── ParseRelationships ─────────────────────────────────────────────────────
 
     private static readonly IReadOnlyList<EntityModel> OrderCustomerEntities = new List<EntityModel>

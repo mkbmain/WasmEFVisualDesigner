@@ -143,6 +143,22 @@ public class DiagramEditorOwnedTypeTests
     }
 
     [Fact]
+    public void SetValueConversion_FoldedOwnedProperty_WritesIntoOwnsOneBuilderLambda()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetValueConversion("Order", "Street", "string");
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain("Entity<Address>", editor.ConfigSource);
+        Assert.Contains("OwnsOne(e => e.ShippingAddress, b =>", editor.ConfigSource);
+        Assert.Contains("HasConversion<string>()", editor.ConfigSource);
+
+        var street = editor.Current.Entities.Single(e => e.Name == "Order").Properties.Single(p => p.Name == "Street");
+        Assert.Equal("string", street.ConversionProviderClrType);
+    }
+
+    [Fact]
     public void SetRowVersion_FoldedOwnedProperty_WritesIntoOwnsOneBuilderLambda()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);

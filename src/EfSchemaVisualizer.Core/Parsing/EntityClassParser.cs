@@ -455,12 +455,26 @@ public sealed class EntityClassParser
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
+        var typeDeclarationNames = root.DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(t => t is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax)
+            .Select(t => t.Identifier.Text)
+            .ToHashSet();
+
         var result = new Dictionary<string, string>();
 
         foreach (var enumDeclaration in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
         {
+            var name = enumDeclaration.Identifier.Text;
+            if (typeDeclarationNames.Contains(name))
+            {
+                // Ambiguous: a class/struct/record shares this name with the enum in the
+                // same source. Better to annotate nothing than annotate a non-enum property.
+                continue;
+            }
+
             var underlyingType = enumDeclaration.BaseList?.Types.FirstOrDefault()?.Type.ToString() ?? "int";
-            result[enumDeclaration.Identifier.Text] = underlyingType;
+            result[name] = underlyingType;
         }
 
         return result;

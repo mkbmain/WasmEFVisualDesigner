@@ -1513,7 +1513,8 @@ public sealed class FluentConfigParser
                     continue;
                 }
 
-                if (call.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArgNode] } })
+                if (call.ArgumentList.Arguments.Count == 0
+                    && call.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArgNode] } })
                 {
                     results.Add(new ValueConversionConfig(entityName, propertyName, typeArgNode.ToString(), IsCustomLambda: false));
                     continue;

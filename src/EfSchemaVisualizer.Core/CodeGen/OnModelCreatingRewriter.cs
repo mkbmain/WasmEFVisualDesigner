@@ -1114,9 +1114,9 @@ public sealed class OnModelCreatingRewriter
             SyntaxFactory.ArgumentList(BuildStringArgArguments(value, secondArg)));
     }
 
-    private static InvocationExpressionSyntax BuildTypeArgCall(ExpressionSyntax receiverExpression, string methodName, string typeArgText)
+    private static InvocationExpressionSyntax BuildTypeArgCall(ExpressionSyntax receiverExpression, string typeArgText)
     {
-        SimpleNameSyntax name = SyntaxFactory.GenericName(SyntaxFactory.Identifier(methodName))
+        SimpleNameSyntax name = SyntaxFactory.GenericName(SyntaxFactory.Identifier("HasConversion"))
             .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.ParseTypeName(typeArgText))));
 
         return SyntaxFactory.InvocationExpression(
@@ -1127,7 +1127,7 @@ public sealed class OnModelCreatingRewriter
     private static string MutateExistingTypeArgCall(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string typeArgText)
     {
         var receiverExpression = ((MemberAccessExpressionSyntax)targetCall.Expression).Expression;
-        var newCall = BuildTypeArgCall(receiverExpression, "HasConversion", typeArgText);
+        var newCall = BuildTypeArgCall(receiverExpression, typeArgText);
 
         var newRoot = root.ReplaceNode(targetCall, newCall);
         return newRoot.NormalizeWhitespace().ToFullString();
@@ -1135,7 +1135,7 @@ public sealed class OnModelCreatingRewriter
 
     private static string AppendTypeArgCallToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, string typeArgText)
     {
-        var newCall = BuildTypeArgCall(propertyCall, "HasConversion", typeArgText);
+        var newCall = BuildTypeArgCall(propertyCall, typeArgText);
 
         var newRoot = root.ReplaceNode(propertyCall, newCall);
         return newRoot.NormalizeWhitespace().ToFullString();
@@ -1187,7 +1187,7 @@ public sealed class OnModelCreatingRewriter
                                 SyntaxFactory.IdentifierName(propertyLambdaParam),
                                 SyntaxFactory.IdentifierName(propertyName)))))));
 
-        return SyntaxFactory.ExpressionStatement(BuildTypeArgCall(propertyCall, "HasConversion", typeArgText));
+        return SyntaxFactory.ExpressionStatement(BuildTypeArgCall(propertyCall, typeArgText));
     }
 
     private static string RemoveStringArgCall(string sourceCode, string entityName, string propertyName, string methodName)
@@ -2432,7 +2432,7 @@ public sealed class OnModelCreatingRewriter
     public string SetValueConversionOnOwnedProperty(
         string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string providerClrType) =>
         SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasConversion",
-            expr => BuildTypeArgCall(expr, "HasConversion", providerClrType));
+            expr => BuildTypeArgCall(expr, providerClrType));
 
     public string RemoveValueConversionOnOwnedProperty(
         string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>

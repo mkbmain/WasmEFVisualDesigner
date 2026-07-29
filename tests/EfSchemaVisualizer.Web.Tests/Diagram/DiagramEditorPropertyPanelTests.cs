@@ -651,6 +651,46 @@ public class DiagramEditorPropertyPanelTests
         Assert.Equal(configBefore, editor.ConfigSource);
     }
 
+    private const string EnumClassSource = """
+        public enum Status { Active, Inactive }
+
+        public class Person
+        {
+            public int Id { get; set; }
+            public Status Status { get; set; }
+        }
+        """;
+
+    private const string LambdaConversionConfigSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                    entity.Property(e => e.Status).HasConversion(v => v.ToString(), v => (Status)Enum.Parse(typeof(Status), v));
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetValueConversion_ExistingLambdaPairConversion_FailsAndLeavesSourceUnchanged()
+    {
+        var editor = new DiagramEditor(EnumClassSource, LambdaConversionConfigSource);
+        var propertyBefore = editor.Current.Entities.Single().Properties.Single(p => p.Name == "Status");
+        Assert.True(propertyBefore.ConversionIsCustomLambda);
+        var configBefore = editor.ConfigSource;
+
+        var result = editor.SetValueConversion("Person", "Status", "string");
+
+        Assert.False(result.Success);
+        Assert.Equal(configBefore, editor.ConfigSource);
+        var propertyAfter = editor.Current.Entities.Single().Properties.Single(p => p.Name == "Status");
+        Assert.True(propertyAfter.ConversionIsCustomLambda);
+    }
+
     [Fact]
     public void AddCheckConstraint_NewName_AddsToEntity()
     {

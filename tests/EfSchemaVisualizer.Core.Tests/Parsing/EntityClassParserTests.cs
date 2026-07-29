@@ -1181,4 +1181,25 @@ public class EntityClassParserTests
 
         Assert.Empty(result);
     }
+
+    [Fact]
+    public void ParseEnumUnderlyingTypes_NameCollisionWithClass_ExcludesAmbiguousName()
+    {
+        const string source = """
+            public enum Status
+            {
+                Active,
+                Inactive,
+            }
+
+            public class Status
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseEnumUnderlyingTypes(source);
+
+        Assert.False(result.ContainsKey("Status"));
+    }
 }

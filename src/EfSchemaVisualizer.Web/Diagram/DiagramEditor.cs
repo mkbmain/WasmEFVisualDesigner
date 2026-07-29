@@ -1274,6 +1274,11 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
         }
 
+        if (property.ConversionIsCustomLambda == true)
+        {
+            return DiagramEditResult.Fail("Cannot edit a custom (lambda-based) value conversion from the diagram; edit it in source.");
+        }
+
         var normalizedType = string.IsNullOrWhiteSpace(providerClrType) ? null : providerClrType.Trim();
 
         if (normalizedType is not null && !IsValidTypeToken(normalizedType))

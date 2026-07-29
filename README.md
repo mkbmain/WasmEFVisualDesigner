@@ -93,9 +93,7 @@ eye before trusting a regenerated file:
   read/written, but calls chained inside its `UsingEntity(j => ...)` builder
   are not).
 - Owned types (`OwnsOne`/`OwnsMany`) and complex types (`ComplexProperty`).
-- Value converters (`HasConversion`).
 - Inheritance mapping (TPH/TPT/TPC, `HasDiscriminator`).
-- Enum properties (read as their CLR type, not as an EF enum column).
 - Non-literal argument values in general — e.g. `HasMaxLength(SomeConstant)`,
   `HasMaxLength(50 * 2)`. A handful of these *do* get a diagnostic today
   (`UnreadableMaxLengthArgument`, `UnreadableHasPrecisionArgument`,
