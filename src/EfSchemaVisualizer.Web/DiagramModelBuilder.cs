@@ -61,6 +61,8 @@ public static class DiagramModelBuilder
         var defaultSchema = configParser.ParseDefaultSchema(configSource);
         var sequences = configParser.ParseSequences(configSource);
         var useSequences = configParser.ParseUseSequences(configSource);
+        var mappingStrategies = configParser.ParseMappingStrategies(configSource);
+        var discriminators = configParser.ParseDiscriminators(configSource);
 
         diagnostics.AddRange(maxLengths.Diagnostics);
         diagnostics.AddRange(precisions.Diagnostics);
@@ -97,6 +99,7 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(defaultSchema.Diagnostics);
         diagnostics.AddRange(sequences.Diagnostics);
         diagnostics.AddRange(useSequences.Diagnostics);
+        diagnostics.AddRange(discriminators.Diagnostics);
         diagnostics.AddRange(ownedTypeCalls.Diagnostics);
         diagnostics.AddRange(complexPropertyCalls.Diagnostics);
 
@@ -136,6 +139,9 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyComputedColumnSqls(entity, computedColumnSqls.Value))
             .Select(entity => ModelMerger.ApplyCheckConstraints(entity, checkConstraints.Value))
             .Select(entity => ModelMerger.ApplyUseSequences(entity, useSequences.Value))
+            .Select(entity => ModelMerger.ApplyMappingStrategies(entity, mappingStrategies.Value))
+            .Select(entity => ModelMerger.ApplyDiscriminatorColumn(entity, discriminators.Value.Columns))
+            .Select(entity => ModelMerger.ApplyDiscriminatorValue(entity, discriminators.Value.Values))
             .Select(entity => ModelMerger.ApplyIndexes(entity, mergedIndexConfigs))
             .Select(entity => ModelMerger.ApplyValueGeneration(entity, valueGeneration.Value))
             .Select(entity => ModelMerger.ApplyConcurrencyTokens(entity, concurrencyTokens.Value))
@@ -151,6 +157,7 @@ public static class DiagramModelBuilder
             .ToList();
 
         var inheritanceFold = InheritanceInference.Fold(entities);
+        diagnostics.AddRange(inheritanceFold.Diagnostics);
         entities = inheritanceFold.Entities;
 
         var fluentRelationshipKeys = fluentRelationships.Value

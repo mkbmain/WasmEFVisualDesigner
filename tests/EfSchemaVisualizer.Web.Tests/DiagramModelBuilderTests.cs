@@ -906,4 +906,123 @@ public class DiagramModelBuilderTests
         Assert.Contains(result.Diagnostics, d =>
             d.Code == DiagnosticCodes.UnrecognizedConfigCall && d.Message.Contains("ApplyConfigurationsFromAssembly"));
     }
+
+    [Fact]
+    public void Build_TptHierarchy_DerivedEntityShowsOnlyOwnAndKeyColumns_EdgeStillPresent()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Name { get; set; } = null!;
+            }
+
+            public class Student : Person
+            {
+                public string Course { get; set; } = null!;
+            }
+            """;
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                        entity.UseTptMappingStrategy();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var student = result.Entities.Single(e => e.Name == "Student");
+        Assert.Equal(new[] { "Id", "Course" }, student.Properties.Select(p => p.Name));
+        Assert.Equal(MappingStrategy.Tpt, student.MappingStrategy);
+        Assert.Equal(MappingStrategy.Tpt, result.Entities.Single(e => e.Name == "Person").MappingStrategy);
+
+        Assert.Contains(result.Relationships, r => r.Kind == RelationshipKind.Inheritance && r.DependentEntity == "Student");
+    }
+
+    [Fact]
+    public void Build_TpcHierarchy_DerivedEntityFullyFolded_NoInheritanceDiagnosticNoise()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Name { get; set; } = null!;
+            }
+
+            public class Student : Person
+            {
+                public string Course { get; set; } = null!;
+            }
+            """;
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                        entity.UseTpcMappingStrategy();
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var student = result.Entities.Single(e => e.Name == "Student");
+        Assert.Equal(new[] { "Id", "Name", "Course" }, student.Properties.Select(p => p.Name));
+        Assert.Equal(MappingStrategy.Tpc, student.MappingStrategy);
+    }
+
+    [Fact]
+    public void Build_TphHierarchyWithDiscriminator_ParsesColumnAndValuesOntoEntities()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+
+            public class Student : Person
+            {
+                public string Course { get; set; } = null!;
+            }
+
+            public class Teacher : Person
+            {
+                public string Salary { get; set; } = null!;
+            }
+            """;
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                        entity.HasDiscriminator<string>("Type").HasValue<Student>("S").HasValue<Teacher>("T");
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var person = result.Entities.Single(e => e.Name == "Person");
+        Assert.Equal("Type", person.DiscriminatorPropertyName);
+        Assert.Equal("string", person.DiscriminatorClrType);
+        Assert.Equal(MappingStrategy.Tph, person.MappingStrategy);
+
+        Assert.Equal("\"S\"", result.Entities.Single(e => e.Name == "Student").DiscriminatorValue);
+        Assert.Equal("\"T\"", result.Entities.Single(e => e.Name == "Teacher").DiscriminatorValue);
+    }
 }
