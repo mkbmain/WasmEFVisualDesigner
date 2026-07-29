@@ -691,6 +691,76 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetMappingStrategy(string sourceCode, string entityName, MappingStrategy strategy)
+    {
+        var withoutExisting = RemoveMappingStrategy(sourceCode, entityName);
+
+        if (strategy == MappingStrategy.Tph)
+        {
+            return withoutExisting;
+        }
+
+        var tree = CSharpSyntaxTree.ParseText(withoutExisting);
+        var root = tree.GetCompilationUnitRoot();
+        var methodName = strategy == MappingStrategy.Tpt ? "UseTptMappingStrategy" : "UseTpcMappingStrategy";
+
+        var scopes = FindConfigScopes(root, entityName);
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            var (block, blockReceiverName) = GetScopeBlockAndReceiver(existingScope);
+            var newStatement = BuildBareEntityCallStatement(blockReceiverName, methodName);
+            var newBlock = block.AddStatements(newStatement);
+
+            var newRoot = root.ReplaceNode(block, newBlock);
+            return newRoot.NormalizeWhitespace().ToFullString();
+        }
+
+        var method = FindOnModelCreatingMethod(root);
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+        var statement = BuildBareEntityCallStatement("entity", methodName);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(statement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot2 = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot2.NormalizeWhitespace().ToFullString();
+    }
+
+    public string RemoveMappingStrategy(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "UseTptMappingStrategy")
+                .Concat(FluentSyntaxHelpers.FindCallsNamed(scope, "UseTpcMappingStrategy")))
+            .FirstOrDefault();
+
+        if (existingCall is null || existingCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildBareEntityCallStatement(string blockReceiverName, string methodName)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName(methodName)),
+                SyntaxFactory.ArgumentList()));
+    }
+
     public string SetTable(string sourceCode, string entityName, string tableName, string? schema)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

@@ -3588,4 +3588,66 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("ComplexProperty(e => e.DeliveryAddress, b =>", newSource);
         Assert.DoesNotContain("ShippingAddress", newSource);
     }
+
+    private const string InheritanceSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetMappingStrategy_Tpt_InsertsUseTptMappingStrategyCall()
+    {
+        var result = new OnModelCreatingRewriter().SetMappingStrategy(InheritanceSource, "Person", MappingStrategy.Tpt);
+
+        Assert.Contains("entity.UseTptMappingStrategy();", result);
+    }
+
+    [Fact]
+    public void SetMappingStrategy_SwitchingFromTptToTpc_ReplacesTheCall()
+    {
+        var withTpt = new OnModelCreatingRewriter().SetMappingStrategy(InheritanceSource, "Person", MappingStrategy.Tpt);
+
+        var result = new OnModelCreatingRewriter().SetMappingStrategy(withTpt, "Person", MappingStrategy.Tpc);
+
+        Assert.DoesNotContain("UseTptMappingStrategy", result);
+        Assert.Contains("entity.UseTpcMappingStrategy();", result);
+    }
+
+    [Fact]
+    public void SetMappingStrategy_Tph_RemovesAnyExistingStrategyCall()
+    {
+        var withTpc = new OnModelCreatingRewriter().SetMappingStrategy(InheritanceSource, "Person", MappingStrategy.Tpc);
+
+        var result = new OnModelCreatingRewriter().SetMappingStrategy(withTpc, "Person", MappingStrategy.Tph);
+
+        Assert.DoesNotContain("MappingStrategy", result);
+    }
+
+    [Fact]
+    public void SetMappingStrategy_NoExistingScope_SynthesizesEntityBlock()
+    {
+        var result = new OnModelCreatingRewriter().SetMappingStrategy(Source, "Order", MappingStrategy.Tpc);
+
+        Assert.Contains("modelBuilder.Entity<Order>(entity =>", result);
+        Assert.Contains("entity.UseTpcMappingStrategy();", result);
+
+        // Untouched: Person's existing config.
+        Assert.Contains("entity.Property(e => e.Name).HasMaxLength(100);", result);
+    }
+
+    [Fact]
+    public void RemoveMappingStrategy_NoExistingCall_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter().RemoveMappingStrategy(InheritanceSource, "Person");
+
+        Assert.Equal(InheritanceSource, result);
+    }
 }
