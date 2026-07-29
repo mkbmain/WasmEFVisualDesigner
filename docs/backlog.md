@@ -547,8 +547,39 @@
       instead of silently dropping its config; the Phase 3 editor test suite
       has no dedicated `ComplexProperty` structural-edit case (verified
       working manually, `OwnsOne` is well-covered).
-- [ ] **`[found]` Inheritance:** `HasDiscriminator` / `HasValue`, TPT
+- [x] **`[found]` Inheritance:** `HasDiscriminator` / `HasValue`, TPT
       (`UseTptMappingStrategy`), TPC. See W2.
+      — Fixed 2026-07-29. See
+      `docs/superpowers/specs/2026-07-29-inheritance-mapping-strategy-design.md`.
+      `HasDiscriminator<T>("Name")` / `HasDiscriminator("Name")` (implicit-string)
+      and chained `HasValue<TDerived>(value)` calls are now parsed, yielding new
+      `EntityModel.DiscriminatorPropertyName` / `DiscriminatorClrType` (on hierarchy
+      root) and `EntityModel.DiscriminatorValue` (per derived entity), via new
+      `FluentConfigParser.ParseDiscriminators` extractor. Similarly, `UseTptMappingStrategy()`
+      and `UseTpcMappingStrategy()` are now recognized and yielded into a new
+      `MappingStrategy` enum (`Tph` / `Tpt` / `Tpc`), resolved per-hierarchy by
+      `InheritanceInference.Fold` with root-priority and reported via a new
+      `InconsistentMappingStrategyInHierarchy` diagnostic on conflicts. Strategy
+      folding now branches: TPT folds only the inherited primary-key property(ies)
+      (rest visible only on ancestor), while TPH/TPC fold all ancestor properties
+      (unchanged from before). Editing wired end-to-end: `DiagramEditor.SetMappingStrategy`
+      / `SetDiscriminatorColumn` / `SetDiscriminatorValue` / `RemoveDiscriminatorColumn`
+      / `RemoveDiscriminatorValue` guard mutually against discriminator ↔ strategy
+      conflicts with inline errors (no silent deletion in either direction). Rendering
+      shows a mapping-strategy dropdown on every hierarchy member, a discriminator
+      summary panel (column name + per-derived-type value mappings, all editable) on
+      the root only, and — for TPC — suppresses the inheritance edge in `DiagramSync`
+      since TPC has no shared physical table or FK.
+
+      **Documented non-goals (out of scope):** switching strategy never synthesizes
+      explicit `ToTable("...")` calls — names follow existing convention-or-explicit-mapping
+      logic; only the generic `HasDiscriminator<T>("Name")` and implicit-string
+      `HasDiscriminator("Name")` overloads are parsed, not the `Type`-first or
+      zero-arg variants; auto-clearing conflicting discriminator or strategy config
+      in either direction remains explicitly blocked with an error (not silent deletion),
+      per design; combining owned/complex-type folding with mapping-strategy switching
+      is untested; diamond/multi-base inheritance chains beyond a linear single-chain
+      remain out of scope (see design doc for full list).
 - [ ] **`[found]` Value converters and enums:** `HasConversion` (all overloads),
       `HasConversion<string>()` on enum properties. Enum properties currently
       render as their bare CLR type with no indication of how they're stored.
