@@ -4323,4 +4323,152 @@ public class FluentConfigParserTests
         Assert.Equal("Order", diagnostic.EntityName);
         Assert.Equal("Number", diagnostic.PropertyName);
     }
+
+    // ─── ParseMappingStrategies ──────────────────────────────────────────────────
+
+    private const string MappingStrategySource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.UseTptMappingStrategy();
+                });
+
+                modelBuilder.Entity<Student>(entity => { });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMappingStrategies_ReadsUseTptMappingStrategy()
+    {
+        var result = new FluentConfigParser().ParseMappingStrategies(MappingStrategySource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal(MappingStrategy.Tpt, config.Strategy);
+    }
+
+    private const string TpcMappingStrategySource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.UseTpcMappingStrategy();
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseMappingStrategies_ReadsUseTpcMappingStrategy()
+    {
+        var result = new FluentConfigParser().ParseMappingStrategies(TpcMappingStrategySource);
+
+        var config = Assert.Single(result.Value);
+        Assert.Equal(MappingStrategy.Tpc, config.Strategy);
+    }
+
+    // ─── ParseDiscriminators ─────────────────────────────────────────────────────
+
+    private const string DiscriminatorSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasDiscriminator<string>("Type").HasValue<Student>("S").HasValue<Teacher>("T");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseDiscriminators_ReadsColumnAndEveryChainedHasValue()
+    {
+        var result = new FluentConfigParser().ParseDiscriminators(DiscriminatorSource);
+
+        Assert.Empty(result.Diagnostics);
+        var column = Assert.Single(result.Value.Columns);
+        Assert.Equal("Person", column.EntityName);
+        Assert.Equal("Type", column.ColumnName);
+        Assert.Equal("string", column.ClrType);
+
+        Assert.Equal(2, result.Value.Values.Count);
+        Assert.Contains(result.Value.Values, v => v.EntityName == "Student" && v.Value == "\"S\"");
+        Assert.Contains(result.Value.Values, v => v.EntityName == "Teacher" && v.Value == "\"T\"");
+    }
+
+    private const string ImplicitStringDiscriminatorSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasDiscriminator("Type");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseDiscriminators_NonGenericOverload_DefaultsClrTypeToString()
+    {
+        var result = new FluentConfigParser().ParseDiscriminators(ImplicitStringDiscriminatorSource);
+
+        var column = Assert.Single(result.Value.Columns);
+        Assert.Equal("string", column.ClrType);
+        Assert.Empty(result.Value.Values);
+    }
+
+    private const string UnreadableDiscriminatorSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasDiscriminator<string>(SomeMethod());
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseDiscriminators_UnreadableColumnArgument_ProducesDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseDiscriminators(UnreadableDiscriminatorSource);
+
+        Assert.Empty(result.Value.Columns);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasDiscriminatorArgument, diagnostic.Code);
+    }
+
+    [Fact]
+    public void ParseUnrecognizedCalls_HasValueChainedOntoSomethingElse_StillFlagsUnrecognized()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasAlternateKey(e => e.Ssn).HasValue<Student>("S");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseUnrecognizedCalls(source);
+
+        Assert.Contains(result, d => d.Message.Contains("'HasValue'"));
+    }
 }

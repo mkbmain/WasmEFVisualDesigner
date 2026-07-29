@@ -34,6 +34,7 @@ public sealed class FluentConfigParser
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
         "SplitToTable", "OwnsOne", "OwnsMany", "ComplexProperty", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
+        "UseTptMappingStrategy", "UseTpcMappingStrategy", "HasDiscriminator",
     };
 
     /// Method names whose recognition depends on what they're chained onto — unlike every
@@ -44,6 +45,7 @@ public sealed class FluentConfigParser
     private static readonly Dictionary<string, HashSet<string>> ContextSensitiveCallNames = new()
     {
         ["HasName"] = new HashSet<string> { "HasKey", "HasIndex" },
+        ["HasValue"] = new HashSet<string> { "HasDiscriminator" },
     };
 
     /// Flags every fluent config call within an entity's scope whose method name isn't recognized by
@@ -2238,5 +2240,88 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<UseSequenceConfig>>(results, diagnostics);
+    }
+
+    public ParseResult<IReadOnlyList<MappingStrategyConfig>> ParseMappingStrategies(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<MappingStrategyConfig>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
+        {
+            if (FluentSyntaxHelpers.FindCallsNamed(scope, "UseTptMappingStrategy").Any())
+            {
+                results.Add(new MappingStrategyConfig(entityName, MappingStrategy.Tpt));
+            }
+            else if (FluentSyntaxHelpers.FindCallsNamed(scope, "UseTpcMappingStrategy").Any())
+            {
+                results.Add(new MappingStrategyConfig(entityName, MappingStrategy.Tpc));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<MappingStrategyConfig>>(results, Array.Empty<Diagnostic>());
+    }
+
+    public ParseResult<(IReadOnlyList<DiscriminatorColumnConfig> Columns, IReadOnlyList<DiscriminatorValueConfig> Values)> ParseDiscriminators(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var columns = new List<DiscriminatorColumnConfig>();
+        var values = new List<DiscriminatorValueConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasDiscriminator"))
+            {
+                var nameArg = call.ArgumentList.Arguments.FirstOrDefault();
+                if (nameArg?.Expression is not LiteralExpressionSyntax nameLiteral || !nameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasDiscriminatorArgument,
+                        "HasDiscriminator column-name argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                var clrType = call.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments.Count: 1 } generic }
+                    ? generic.TypeArgumentList.Arguments[0].ToString()
+                    : "string";
+
+                columns.Add(new DiscriminatorColumnConfig(entityName, nameLiteral.Token.ValueText, clrType));
+
+                FluentSyntaxHelpers.WalkChainedTail(call, chained =>
+                {
+                    if (chained.Expression is not MemberAccessExpressionSyntax
+                        {
+                            Name: GenericNameSyntax { Identifier.Text: "HasValue", TypeArgumentList.Arguments: [var derivedTypeArg] },
+                        })
+                    {
+                        return;
+                    }
+
+                    var valueArg = chained.ArgumentList.Arguments.FirstOrDefault();
+                    if (valueArg?.Expression is not LiteralExpressionSyntax)
+                    {
+                        diagnostics.Add(new Diagnostic(
+                            DiagnosticCodes.UnreadableHasValueArgument,
+                            "HasValue argument is not a literal and could not be read.",
+                            entityName,
+                            PropertyName: null,
+                            chained.Span));
+                        return;
+                    }
+
+                    values.Add(new DiscriminatorValueConfig(derivedTypeArg.ToString(), valueArg.Expression.ToString()));
+                });
+            }
+        }
+
+        return new ParseResult<(IReadOnlyList<DiscriminatorColumnConfig>, IReadOnlyList<DiscriminatorValueConfig>)>((columns, values), diagnostics);
     }
 }
