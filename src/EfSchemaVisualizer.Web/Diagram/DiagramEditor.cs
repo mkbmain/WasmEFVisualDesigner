@@ -1260,6 +1260,55 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetValueConversion(string entityName, string propertyName, string? providerClrType)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var property = entity.Properties.FirstOrDefault(p => p.Name == propertyName);
+        if (property is null)
+        {
+            return DiagramEditResult.Fail($"Property '{propertyName}' not found on '{entityName}'.");
+        }
+
+        var normalizedType = string.IsNullOrWhiteSpace(providerClrType) ? null : providerClrType.Trim();
+
+        if (normalizedType is not null && !IsValidTypeToken(normalizedType))
+        {
+            return DiagramEditResult.Fail($"'{normalizedType}' is not a valid type.");
+        }
+
+        if (normalizedType == property.ConversionProviderClrType)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        string newConfigSource;
+        if (property.FoldKind != FoldKind.None && property.OwnerNavigationProperty is { } conversionNav)
+        {
+            if (ValidateOwnedEditDepth(entityName, property, conversionNav) is { } foldFailure)
+            {
+                return foldFailure;
+            }
+
+            newConfigSource = normalizedType is null
+                ? _configRewriter.RemoveValueConversionOnOwnedProperty(ConfigSource, entityName, conversionNav, propertyName)
+                : _configRewriter.SetValueConversionOnOwnedProperty(ConfigSource, entityName, conversionNav, propertyName, normalizedType);
+        }
+        else
+        {
+            newConfigSource = normalizedType is null
+                ? _configRewriter.RemoveValueConversion(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName)
+                : _configRewriter.SetValueConversion(ConfigSource, ResolveDeclaringEntity(entityName, propertyName), propertyName, normalizedType);
+        }
+
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     private static readonly HashSet<string> QuotedDefaultValueClrTypes = new(StringComparer.Ordinal)
     {
         "string", "Guid", "DateTime", "DateTimeOffset", "DateOnly", "TimeOnly",

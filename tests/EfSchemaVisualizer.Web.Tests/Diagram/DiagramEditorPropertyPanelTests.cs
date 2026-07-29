@@ -602,6 +602,56 @@ public class DiagramEditorPropertyPanelTests
     }
 
     [Fact]
+    public void SetValueConversion_NoExistingConfig_InsertsHasConversion()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetValueConversion("Person", "Name", "string");
+
+        Assert.True(result.Success);
+        var property = editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal("string", property.ConversionProviderClrType);
+        Assert.Contains("HasConversion<string>()", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetValueConversion_ClearingExistingConfig_RemovesHasConversion()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetValueConversion("Person", "Name", "string");
+
+        var result = editor.SetValueConversion("Person", "Name", null);
+
+        Assert.True(result.Success);
+        Assert.Null(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").ConversionProviderClrType);
+        Assert.DoesNotContain("HasConversion", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetValueConversion_InvalidTypeToken_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetValueConversion("Person", "Name", "not a type!!");
+
+        Assert.False(result.Success);
+        Assert.Null(editor.Current.Entities.Single().Properties.Single(p => p.Name == "Name").ConversionProviderClrType);
+    }
+
+    [Fact]
+    public void SetValueConversion_UnchangedValue_IsNoOp()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetValueConversion("Person", "Name", "string");
+        var configBefore = editor.ConfigSource;
+
+        var result = editor.SetValueConversion("Person", "Name", "string");
+
+        Assert.True(result.Success);
+        Assert.Equal(configBefore, editor.ConfigSource);
+    }
+
+    [Fact]
     public void AddCheckConstraint_NewName_AddsToEntity()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);
