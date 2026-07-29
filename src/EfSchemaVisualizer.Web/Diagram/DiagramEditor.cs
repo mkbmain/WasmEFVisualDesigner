@@ -1396,6 +1396,157 @@ public sealed class DiagramEditor
         return property?.DeclaringEntityName ?? entityName;
     }
 
+    private string ResolveHierarchyRoot(string entityName)
+    {
+        var byName = Current.Entities.ToDictionary(e => e.Name);
+        var visited = new HashSet<string> { entityName };
+        var current = entityName;
+
+        while (byName.TryGetValue(current, out var entity)
+            && entity.BaseEntityName is not null
+            && byName.ContainsKey(entity.BaseEntityName))
+        {
+            if (!visited.Add(entity.BaseEntityName))
+            {
+                break;
+            }
+
+            current = entity.BaseEntityName;
+        }
+
+        return current;
+    }
+
+    public DiagramEditResult SetMappingStrategy(string entityName, MappingStrategy strategy)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        if (strategy == entity.MappingStrategy)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        var rootName = ResolveHierarchyRoot(entityName);
+
+        if (strategy != MappingStrategy.Tph)
+        {
+            var conflicting = Current.Entities
+                .Where(e => ResolveHierarchyRoot(e.Name) == rootName)
+                .FirstOrDefault(e => e.DiscriminatorPropertyName is not null || e.DiscriminatorValue is not null);
+
+            if (conflicting is not null)
+            {
+                return DiagramEditResult.Fail(
+                    $"Cannot switch '{rootName}' to {strategy} while discriminator configuration exists on '{conflicting.Name}'. Remove the discriminator configuration first.");
+            }
+        }
+
+        var newConfigSource = _configRewriter.SetMappingStrategy(ConfigSource, rootName, strategy);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetDiscriminatorColumn(string rootEntityName, string columnName, string? clrTypeName)
+    {
+        var root = Current.Entities.FirstOrDefault(e => e.Name == rootEntityName);
+        if (root is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{rootEntityName}' not found.");
+        }
+
+        if (string.IsNullOrWhiteSpace(columnName))
+        {
+            return DiagramEditResult.Fail("Discriminator column name cannot be empty.");
+        }
+
+        if (root.MappingStrategy != MappingStrategy.Tph)
+        {
+            return DiagramEditResult.Fail($"Cannot configure a discriminator on '{rootEntityName}' while its mapping strategy is {root.MappingStrategy}.");
+        }
+
+        var clrType = string.IsNullOrWhiteSpace(clrTypeName) ? "string" : clrTypeName.Trim();
+
+        var existingValues = Current.Entities
+            .Where(e => e.BaseEntityName is not null && ResolveHierarchyRoot(e.Name) == rootEntityName && e.DiscriminatorValue is not null)
+            .Select(e => (e.Name, e.DiscriminatorValue!))
+            .ToList();
+
+        var newConfigSource = _configRewriter.SetDiscriminator(ConfigSource, rootEntityName, columnName.Trim(), clrType, existingValues);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveDiscriminatorColumn(string rootEntityName)
+    {
+        var root = Current.Entities.FirstOrDefault(e => e.Name == rootEntityName);
+        if (root is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{rootEntityName}' not found.");
+        }
+
+        var newConfigSource = _configRewriter.RemoveDiscriminator(ConfigSource, rootEntityName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetDiscriminatorValue(string derivedEntityName, string? value)
+    {
+        var derived = Current.Entities.FirstOrDefault(e => e.Name == derivedEntityName);
+        if (derived is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{derivedEntityName}' not found.");
+        }
+
+        var rootName = ResolveHierarchyRoot(derivedEntityName);
+        var root = Current.Entities.FirstOrDefault(e => e.Name == rootName);
+
+        if (root?.DiscriminatorPropertyName is null)
+        {
+            return DiagramEditResult.Fail($"'{rootName}' has no discriminator column configured yet.");
+        }
+
+        if (root.MappingStrategy != MappingStrategy.Tph)
+        {
+            return DiagramEditResult.Fail($"Cannot configure a discriminator value while '{rootName}'s mapping strategy is {root.MappingStrategy}.");
+        }
+
+        var trimmedInput = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        string? normalizedValue = null;
+        if (trimmedInput is not null)
+        {
+            normalizedValue = FormatDefaultValueLiteral(trimmedInput, root.DiscriminatorClrType ?? "string");
+            if (normalizedValue is null)
+            {
+                return DiagramEditResult.Fail($"'{trimmedInput}' is not a valid discriminator value for '{derivedEntityName}'.");
+            }
+        }
+
+        var values = Current.Entities
+            .Where(e => e.BaseEntityName is not null && ResolveHierarchyRoot(e.Name) == rootName && e.DiscriminatorValue is not null)
+            .ToDictionary(e => e.Name, e => e.DiscriminatorValue!);
+
+        if (normalizedValue is null)
+        {
+            values.Remove(derivedEntityName);
+        }
+        else
+        {
+            values[derivedEntityName] = normalizedValue;
+        }
+
+        var newConfigSource = _configRewriter.SetDiscriminator(
+            ConfigSource, rootName, root.DiscriminatorPropertyName, root.DiscriminatorClrType ?? "string",
+            values.Select(kv => (kv.Key, kv.Value)).ToList());
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult RemoveDiscriminatorValue(string derivedEntityName) => SetDiscriminatorValue(derivedEntityName, null);
+
     /// Guards against writing a fluent-attribute edit into the WRONG owner's builder lambda for a
     /// property folded through a multi-level owned/complex chain (e.g. Order owns Address owns
     /// Country: Country.Code gets re-stamped with OwnerNavigationProperty = "ShippingAddress" — the

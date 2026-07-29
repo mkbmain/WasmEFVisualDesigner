@@ -1,3 +1,4 @@
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Web.Diagram;
 using Xunit;
 
@@ -122,5 +123,143 @@ public class DiagramEditorInheritanceTests
         Assert.True(result.Success);
         Assert.Contains("modelBuilder.Entity<Student>", editor.ConfigSource);
         Assert.Contains("class_name", editor.ConfigSource);
+    }
+
+    private const string TptClassSource = """
+        public class Person
+        {
+            public int Id { get; set; }
+            public string Name { get; set; } = null!;
+        }
+
+        public class Student : Person
+        {
+            public string Course { get; set; } = null!;
+        }
+        """;
+    private const string TptConfigSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetMappingStrategy_Tpt_UpdatesEveryEntityInHierarchy()
+    {
+        var editor = new DiagramEditor(TptClassSource, TptConfigSource);
+
+        var result = editor.SetMappingStrategy("Student", MappingStrategy.Tpt);
+
+        Assert.True(result.Success);
+        Assert.Equal(MappingStrategy.Tpt, editor.Current.Entities.Single(e => e.Name == "Person").MappingStrategy);
+        Assert.Equal(MappingStrategy.Tpt, editor.Current.Entities.Single(e => e.Name == "Student").MappingStrategy);
+    }
+
+    [Fact]
+    public void SetMappingStrategy_BlockedWhenDiscriminatorConfigured()
+    {
+        const string configWithDiscriminator = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                        entity.HasDiscriminator<string>("Type").HasValue<Student>("S");
+                    });
+                }
+            }
+            """;
+        var editor = new DiagramEditor(TptClassSource, configWithDiscriminator);
+
+        var result = editor.SetMappingStrategy("Person", MappingStrategy.Tpt);
+
+        Assert.False(result.Success);
+        Assert.Equal(MappingStrategy.Tph, editor.Current.Entities.Single(e => e.Name == "Person").MappingStrategy);
+    }
+
+    [Fact]
+    public void SetDiscriminatorColumn_ThenSetDiscriminatorValue_RoundTrips()
+    {
+        var editor = new DiagramEditor(TptClassSource, TptConfigSource);
+
+        var columnResult = editor.SetDiscriminatorColumn("Person", "Type", null);
+        Assert.True(columnResult.Success);
+        Assert.Equal("Type", editor.Current.Entities.Single(e => e.Name == "Person").DiscriminatorPropertyName);
+        Assert.Equal("string", editor.Current.Entities.Single(e => e.Name == "Person").DiscriminatorClrType);
+
+        var valueResult = editor.SetDiscriminatorValue("Student", "S");
+        Assert.True(valueResult.Success);
+        Assert.Equal("\"S\"", editor.Current.Entities.Single(e => e.Name == "Student").DiscriminatorValue);
+    }
+
+    [Fact]
+    public void SetDiscriminatorColumn_BlockedWhenStrategyIsNotTph()
+    {
+        var editor = new DiagramEditor(TptClassSource, TptConfigSource);
+        editor.SetMappingStrategy("Person", MappingStrategy.Tpt);
+
+        var result = editor.SetDiscriminatorColumn("Person", "Type", null);
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void SetDiscriminatorValue_NoColumnConfiguredYet_Fails()
+    {
+        var editor = new DiagramEditor(TptClassSource, TptConfigSource);
+
+        var result = editor.SetDiscriminatorValue("Student", "S");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void RemoveDiscriminatorValue_ClearsJustThatEntity_LeavesOthersIntact()
+    {
+        const string configWithTwoValues = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                        entity.HasDiscriminator<string>("Type").HasValue<Student>("S").HasValue<Teacher>("T");
+                    });
+                }
+            }
+            """;
+        const string threeLevelClassSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+
+            public class Student : Person
+            {
+                public string Course { get; set; } = null!;
+            }
+
+            public class Teacher : Person
+            {
+                public string Salary { get; set; } = null!;
+            }
+            """;
+        var editor = new DiagramEditor(threeLevelClassSource, configWithTwoValues);
+
+        var result = editor.RemoveDiscriminatorValue("Student");
+
+        Assert.True(result.Success);
+        Assert.Null(editor.Current.Entities.Single(e => e.Name == "Student").DiscriminatorValue);
+        Assert.Equal("\"T\"", editor.Current.Entities.Single(e => e.Name == "Teacher").DiscriminatorValue);
     }
 }
