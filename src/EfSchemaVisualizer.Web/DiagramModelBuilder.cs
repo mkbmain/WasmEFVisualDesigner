@@ -20,6 +20,7 @@ public static class DiagramModelBuilder
         var entityParser = new EntityClassParser();
 
         var entityResult = entityParser.Parse(classSource);
+        var enumUnderlyingTypes = entityParser.ParseEnumUnderlyingTypes(classSource);
         var configParser = new FluentConfigParser(entityResult.Value);
         var diagnostics = new List<Diagnostic>(entityResult.Diagnostics);
 
@@ -162,6 +163,7 @@ public static class DiagramModelBuilder
         var inheritanceFold = InheritanceInference.Fold(entities);
         diagnostics.AddRange(inheritanceFold.Diagnostics);
         entities = inheritanceFold.Entities;
+        entities = EnumStorageInference.Fold(entities, enumUnderlyingTypes);
 
         var fluentRelationshipKeys = fluentRelationships.Value
             .Select(RelationshipDedupeKey)

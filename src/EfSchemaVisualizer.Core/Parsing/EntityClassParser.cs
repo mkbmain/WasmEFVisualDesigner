@@ -450,6 +450,22 @@ public sealed class EntityClassParser
         return new ParseResult<IReadOnlyList<RelationshipConfig>>(deduplicated, new List<Diagnostic>());
     }
 
+    public IReadOnlyDictionary<string, string> ParseEnumUnderlyingTypes(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var result = new Dictionary<string, string>();
+
+        foreach (var enumDeclaration in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
+        {
+            var underlyingType = enumDeclaration.BaseList?.Types.FirstOrDefault()?.Type.ToString() ?? "int";
+            result[enumDeclaration.Identifier.Text] = underlyingType;
+        }
+
+        return result;
+    }
+
     private static RelationshipConfig? TryResolveForeignKeyRelationship(
         string dependentEntityName,
         PropertyDeclarationSyntax annotatedProperty,

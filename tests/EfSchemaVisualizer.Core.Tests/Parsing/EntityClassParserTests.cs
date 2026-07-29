@@ -1134,4 +1134,51 @@ public class EntityClassParserTests
 
         Assert.Null(result.Value.Single().BaseEntityName);
     }
+
+    [Fact]
+    public void ParseEnumUnderlyingTypes_PlainEnum_DefaultsToInt()
+    {
+        const string source = """
+            public enum Status
+            {
+                Active,
+                Inactive,
+            }
+            """;
+
+        var result = new EntityClassParser().ParseEnumUnderlyingTypes(source);
+
+        Assert.Equal("int", result["Status"]);
+    }
+
+    [Fact]
+    public void ParseEnumUnderlyingTypes_ExplicitBaseType_ReadsUnderlyingType()
+    {
+        const string source = """
+            public enum Status : byte
+            {
+                Active,
+                Inactive,
+            }
+            """;
+
+        var result = new EntityClassParser().ParseEnumUnderlyingTypes(source);
+
+        Assert.Equal("byte", result["Status"]);
+    }
+
+    [Fact]
+    public void ParseEnumUnderlyingTypes_NoEnums_ReturnsEmpty()
+    {
+        const string source = """
+            public class Person
+            {
+                public int Id { get; set; }
+            }
+            """;
+
+        var result = new EntityClassParser().ParseEnumUnderlyingTypes(source);
+
+        Assert.Empty(result);
+    }
 }
