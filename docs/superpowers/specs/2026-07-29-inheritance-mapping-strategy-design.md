@@ -49,6 +49,20 @@ regardless of what's actually configured:
 - Diamond/multi-base edge cases beyond a single linear chain — same
   restriction as the original W2 pass.
 
+**Known limitation:** TPT folds only the inherited KEY property into a
+derived entity's own folded property list (by design — see the Folding
+section below); it does not fold in other, non-key ancestor properties. If a
+derived entity's own fluent config scope references an inherited non-key
+property directly (e.g. `entity.HasIndex(x => x.Name)` where `Name` is
+declared on the base class), that property is not present in the derived
+entity's folded property list, so the reference is not correctly resolved
+against the folded model. This can surface as a false model-validity
+diagnostic (e.g. a `HasIndex` reference to an inherited property may read as
+"missing") rather than as a real problem with the source. No code fix is
+planned for this pass — it would require either re-folding non-key ancestor
+properties for validation purposes only, or making the validity checker
+hierarchy-aware, both larger changes than this narrow edge case warrants.
+
 ## Model changes
 
 - New **`MappingStrategy` enum**: `Tph` (default) / `Tpt` / `Tpc`.

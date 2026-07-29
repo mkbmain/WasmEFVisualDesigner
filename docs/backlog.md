@@ -580,6 +580,16 @@
       per design; combining owned/complex-type folding with mapping-strategy switching
       is untested; diamond/multi-base inheritance chains beyond a linear single-chain
       remain out of scope (see design doc for full list).
+
+      **Known low-harm side effect:** TPT folds only the inherited key property(ies)
+      into a derived entity, not other ancestor properties. If a derived entity's own
+      fluent config scope references an inherited non-key property directly (e.g.
+      `entity.HasIndex(x => x.Name)` where `Name` is declared on the base class), that
+      property isn't present in the derived entity's folded property list, so the
+      reference can read as a false model-validity diagnostic (e.g. `HasIndex` on an
+      inherited property may appear "missing") rather than a real problem with the
+      source; narrow edge case (TPT + per-property config on a derived entity
+      referencing an inherited non-key property), not fixed this pass.
 - [ ] **`[found]` Value converters and enums:** `HasConversion` (all overloads),
       `HasConversion<string>()` on enum properties. Enum properties currently
       render as their bare CLR type with no indication of how they're stored.
