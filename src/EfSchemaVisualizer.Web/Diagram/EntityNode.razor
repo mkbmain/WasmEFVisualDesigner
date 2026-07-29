@@ -13,6 +13,14 @@
     }
 </datalist>
 
+<datalist id="conversion-provider-types">
+    <option value="string" />
+    <option value="int" />
+    <option value="long" />
+    <option value="short" />
+    <option value="byte" />
+</datalist>
+
 <div class="card" style="width: 260px; border: 1px solid #444; position: relative;">
     <PortRenderer Port="@(Node.GetPort(PortAlignment.Left))" Class="entity-port"
                   Style="position: absolute; left: -6px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: #666; cursor: crosshair;">
@@ -263,6 +271,18 @@
                         <span class="value-generated-badge" title="EF value generation: @property.ValueGenerated"
                               style="font-size: 0.7em; background: #ddf; border-radius: 3px; padding: 1px 4px; margin-left: 4px;">@property.ValueGenerated</span>
                     }
+                    @if (property.ConversionProviderClrType is not null)
+                    {
+                        <span style="font-size: 0.7em; color: #888; margin-left: 4px;" title="Explicit HasConversion in source.">→ @property.ConversionProviderClrType</span>
+                    }
+                    else if (property.ConversionIsCustomLambda == true)
+                    {
+                        <span style="font-size: 0.7em; color: #888; margin-left: 4px; font-style: italic;" title="Custom two-lambda HasConversion in source.">→ custom</span>
+                    }
+                    else if (property.IsEnumType)
+                    {
+                        <span style="font-size: 0.7em; color: #888; margin-left: 4px; opacity: 0.6;" title="EF's convention default: no explicit HasConversion, so this enum is stored as its underlying type.">→ @property.EnumUnderlyingClrType (default)</span>
+                    }
                     <label style="font-size: 0.8em; margin-left: 4px;">
                         <input type="checkbox" checked="@property.IsNullable"
                                @onchange="e => ToggleNullable(property, (bool)(e.Value ?? false))"
@@ -386,6 +406,24 @@
                                            @onpointerdown:stopPropagation="true"
                                            @onmousedown:stopPropagation="true" />
                                 </label>
+                                @if (property.ConversionIsCustomLambda == true)
+                                {
+                                    <div style="font-size: 0.8em; color: #888; font-style: italic;" title="A custom two-lambda HasConversion is configured in source; this is read-only here.">
+                                        Stored as: custom conversion
+                                    </div>
+                                }
+                                else
+                                {
+                                    <label style="display: block;">
+                                        Stored as:
+                                        <input list="conversion-provider-types" style="width: 100px;"
+                                               value="@property.ConversionProviderClrType"
+                                               placeholder="@(property.IsEnumType ? $"({property.EnumUnderlyingClrType} default)" : "(none)")"
+                                               @onchange="e => CommitValueConversion(property, e.Value?.ToString())"
+                                               @onpointerdown:stopPropagation="true"
+                                               @onmousedown:stopPropagation="true" />
+                                    </label>
+                                }
                             </div>
                             <div style="font-size: 0.8em; margin-top: 4px;">
                                 <div>Indexes:</div>
@@ -1229,6 +1267,20 @@
     private async Task CommitComputedColumnSqlIsStored(PropertyModel property, bool isStored)
     {
         var result = SafeEdit(() => EditContext.Editor.SetComputedColumnSql(Node.Entity.Name, property.Name, property.ComputedColumnSql, isStored));
+        if (result.Success)
+        {
+            _propertyErrors.Remove(property.Name);
+            await EditContext.NotifyChangedAsync();
+        }
+        else
+        {
+            _propertyErrors[property.Name] = result.Error!;
+        }
+    }
+
+    private async Task CommitValueConversion(PropertyModel property, string? newProviderType)
+    {
+        var result = SafeEdit(() => EditContext.Editor.SetValueConversion(Node.Entity.Name, property.Name, newProviderType));
         if (result.Success)
         {
             _propertyErrors.Remove(property.Name);
