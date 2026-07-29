@@ -120,4 +120,49 @@ public class OnModelCreatingRewriterOwnedConfigScopeTests
         Assert.Contains("HasMaxLength(100)", newSource);
         Assert.Contains("HasColumnName(\"shipping_street\")", newSource);
     }
+
+    [Fact]
+    public void SetValueConversionOnOwnedProperty_BareOwnsOneCall_SynthesizesBuilderLambdaWithGenericHasConversion()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress);
+                    });
+                }
+            }
+            """;
+
+        var newSource = _rewriter.SetValueConversionOnOwnedProperty(source, "Order", "ShippingAddress", "Street", "string");
+
+        Assert.Contains("OwnsOne(e => e.ShippingAddress, b =>", newSource);
+        Assert.Contains("HasConversion<string>()", newSource);
+    }
+
+    [Fact]
+    public void RemoveValueConversionOnOwnedProperty_ExistingCall_RemovesCall()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.OwnsOne(e => e.ShippingAddress);
+                    });
+                }
+            }
+            """;
+
+        var withConversion = _rewriter.SetValueConversionOnOwnedProperty(source, "Order", "ShippingAddress", "Street", "string");
+
+        var result = _rewriter.RemoveValueConversionOnOwnedProperty(withConversion, "Order", "ShippingAddress", "Street");
+
+        Assert.DoesNotContain("HasConversion", result);
+    }
 }

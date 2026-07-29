@@ -2409,6 +2409,63 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.Property(e => e.Quantity)", result);
     }
 
+    [Fact]
+    public void SetValueConversion_BarePropertyCall_AppendsGenericHasConversion()
+    {
+        var result = new OnModelCreatingRewriter()
+            .SetValueConversion(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", providerClrType: "string");
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasConversion<string>()", result);
+    }
+
+    [Fact]
+    public void SetValueConversion_ExistingCall_MutatesToNewProviderType()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetValueConversion(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", providerClrType: "string");
+
+        var result = new OnModelCreatingRewriter()
+            .SetValueConversion(source, entityName: "Order", propertyName: "Quantity", providerClrType: "int");
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasConversion<int>()", result);
+        Assert.DoesNotContain("HasConversion<string>", result);
+    }
+
+    [Fact]
+    public void RemoveValueConversion_ExistingCall_RemovesCall_LeavesBarePropertyCall()
+    {
+        var source = new OnModelCreatingRewriter()
+            .SetValueConversion(SourceWithPropertyButNoDefaultValue, entityName: "Order", propertyName: "Quantity", providerClrType: "string");
+
+        var result = new OnModelCreatingRewriter()
+            .RemoveValueConversion(source, entityName: "Order", propertyName: "Quantity");
+
+        Assert.DoesNotContain("HasConversion", result);
+        Assert.Contains("entity.Property(e => e.Quantity)", result);
+    }
+
+    [Fact]
+    public void SetValueConversion_NoExistingPropertyCall_InsertsNewStatement()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasKey(e => e.Id);
+                    });
+                }
+            }
+            """;
+
+        var result = new OnModelCreatingRewriter()
+            .SetValueConversion(source, entityName: "Order", propertyName: "Quantity", providerClrType: "string");
+
+        Assert.Contains("entity.Property(e => e.Quantity).HasConversion<string>()", result);
+    }
+
     private const string SourceWithNumberPropertyNoSequence = """
         public class AppDbContext : DbContext
         {

@@ -1114,6 +1114,82 @@ public sealed class OnModelCreatingRewriter
             SyntaxFactory.ArgumentList(BuildStringArgArguments(value, secondArg)));
     }
 
+    private static InvocationExpressionSyntax BuildTypeArgCall(ExpressionSyntax receiverExpression, string methodName, string typeArgText)
+    {
+        SimpleNameSyntax name = SyntaxFactory.GenericName(SyntaxFactory.Identifier(methodName))
+            .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.ParseTypeName(typeArgText))));
+
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, receiverExpression, name),
+            SyntaxFactory.ArgumentList());
+    }
+
+    private static string MutateExistingTypeArgCall(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string typeArgText)
+    {
+        var receiverExpression = ((MemberAccessExpressionSyntax)targetCall.Expression).Expression;
+        var newCall = BuildTypeArgCall(receiverExpression, "HasConversion", typeArgText);
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string AppendTypeArgCallToPropertyCall(CompilationUnitSyntax root, InvocationExpressionSyntax propertyCall, string typeArgText)
+    {
+        var newCall = BuildTypeArgCall(propertyCall, "HasConversion", typeArgText);
+
+        var newRoot = root.ReplaceNode(propertyCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertTypeArgPropertyStatement(CompilationUnitSyntax root, SyntaxNode scope, string propertyName, string typeArgText)
+    {
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+        var propertyLambdaParam = FluentSyntaxHelpers.GetPropertyLambdaParameterName(scope);
+
+        var newStatement = BuildTypeArgPropertyStatement(blockReceiverName, propertyLambdaParam, propertyName, typeArgText);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertTypeArgEntityBlock(CompilationUnitSyntax root, string entityName, string propertyName, string typeArgText)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var propertyStatement = BuildTypeArgPropertyStatement("entity", "e", propertyName, typeArgText);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(propertyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildTypeArgPropertyStatement(string blockReceiverName, string propertyLambdaParam, string propertyName, string typeArgText)
+    {
+        var propertyCall = SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(blockReceiverName),
+                SyntaxFactory.IdentifierName("Property")),
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.SimpleLambdaExpression(
+                            SyntaxFactory.Parameter(SyntaxFactory.Identifier(propertyLambdaParam)),
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                SyntaxFactory.IdentifierName(propertyLambdaParam),
+                                SyntaxFactory.IdentifierName(propertyName)))))));
+
+        return SyntaxFactory.ExpressionStatement(BuildTypeArgCall(propertyCall, "HasConversion", typeArgText));
+    }
+
     private static string RemoveStringArgCall(string sourceCode, string entityName, string propertyName, string methodName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
@@ -1355,6 +1431,46 @@ public sealed class OnModelCreatingRewriter
     public string RemoveComputedColumnSql(string sourceCode, string entityName, string propertyName)
     {
         return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasComputedColumnSql");
+    }
+
+    public string SetValueConversion(string sourceCode, string entityName, string propertyName, string providerClrType)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasConversion"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameFor(call) == propertyName);
+
+        if (existingCall is not null)
+        {
+            return MutateExistingTypeArgCall(root, existingCall, providerClrType);
+        }
+
+        var existingPropertyCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "Property"))
+            .FirstOrDefault(call => FluentSyntaxHelpers.GetPropertyNameForPropertyCall(call) == propertyName);
+
+        if (existingPropertyCall is not null)
+        {
+            return AppendTypeArgCallToPropertyCall(root, existingPropertyCall, providerClrType);
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertTypeArgPropertyStatement(root, existingScope, propertyName, providerClrType);
+        }
+
+        return InsertTypeArgEntityBlock(root, entityName, propertyName, providerClrType);
+    }
+
+    public string RemoveValueConversion(string sourceCode, string entityName, string propertyName)
+    {
+        return RemoveStringArgCall(sourceCode, entityName, propertyName, "HasConversion");
     }
 
     public string SetUseSequence(string sourceCode, string entityName, string propertyName, string sequenceName, string? schema)
@@ -2312,6 +2428,15 @@ public sealed class OnModelCreatingRewriter
     public string RemoveComputedColumnSqlOnOwnedProperty(
         string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
         RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasComputedColumnSql");
+
+    public string SetValueConversionOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string providerClrType) =>
+        SetOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasConversion",
+            expr => BuildTypeArgCall(expr, "HasConversion", providerClrType));
+
+    public string RemoveValueConversionOnOwnedProperty(
+        string sourceCode, string ownerEntityName, string navPropertyName, string propertyName) =>
+        RemoveOnOwnedProperty(sourceCode, ownerEntityName, navPropertyName, propertyName, "HasConversion");
 
     public string SetUseSequenceOnOwnedProperty(
         string sourceCode, string ownerEntityName, string navPropertyName, string propertyName, string sequenceName, string? schema) =>
