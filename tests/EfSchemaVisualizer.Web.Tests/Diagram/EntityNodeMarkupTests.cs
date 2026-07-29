@@ -59,6 +59,21 @@ public class EntityNodeMarkupTests
         Assert.Contains("inferred-key", markup);
     }
 
+    [Fact]
+    public void DiscriminatorValueRows_WalkWholeHierarchy_NotJustDirectChildren()
+    {
+        var markup = ReadEntityNodeRazorSource();
+
+        // The old condition only matched entities whose IMMEDIATE base was the hierarchy root
+        // (e.BaseEntityName == Node.Entity.Name), which hid a grandchild's DiscriminatorValue row in
+        // a 3+ level chain (e.g. Person <- Student <- GradStudent). It must instead walk the whole
+        // hierarchy via ResolveHierarchyRoot.
+        Assert.Contains(
+            "EditContext.Editor.Current.Entities.Where(e => e.BaseEntityName is not null && EditContext.Editor.ResolveHierarchyRoot(e.Name) == Node.Entity.Name)",
+            markup);
+        Assert.DoesNotContain("Where(e => e.BaseEntityName == Node.Entity.Name)", markup);
+    }
+
     private static string ReadEntityNodeRazorSource()
     {
         var path = Path.Combine(FindRepoRoot(), "src", "EfSchemaVisualizer.Web", "Diagram", "EntityNode.razor");

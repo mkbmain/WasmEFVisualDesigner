@@ -13,6 +13,11 @@ public class GestureHandlerSafeEditTests
     private const string ReadOnlyEditorMarker = "EditContext.Editor.Current.";
     private const string SafeEditMarker = "SafeEdit(";
 
+    // Read-only query methods on DiagramEditor that don't return a DiagramEditResult and don't
+    // mutate state, so they're legitimately called directly from markup without a SafeEdit(...)
+    // wrapper -- analogous to the "EditContext.Editor.Current." property-access exception above.
+    private static readonly string[] ReadOnlyEditorMethodMarkers = { "EditContext.Editor.ResolveHierarchyRoot(" };
+
     [Theory]
     [InlineData("EntityNode.razor")]
     [InlineData("RelationshipLinkLabel.razor")]
@@ -56,6 +61,14 @@ public class GestureHandlerSafeEditTests
             var isReadOnlyAccess = idx + ReadOnlyEditorMarker.Length <= normalized.Length
                 && normalized.Substring(idx, ReadOnlyEditorMarker.Length) == ReadOnlyEditorMarker;
             if (isReadOnlyAccess)
+            {
+                continue;
+            }
+
+            var isReadOnlyMethodCall = ReadOnlyEditorMethodMarkers.Any(marker =>
+                idx + marker.Length <= normalized.Length
+                && normalized.Substring(idx, marker.Length) == marker);
+            if (isReadOnlyMethodCall)
             {
                 continue;
             }

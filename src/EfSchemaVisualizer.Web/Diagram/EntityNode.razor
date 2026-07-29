@@ -129,7 +129,7 @@
             </div>
             @if (Node.Entity.DiscriminatorPropertyName is not null)
             {
-                @foreach (var derived in EditContext.Editor.Current.Entities.Where(e => e.BaseEntityName == Node.Entity.Name))
+                @foreach (var derived in EditContext.Editor.Current.Entities.Where(e => e.BaseEntityName is not null && EditContext.Editor.ResolveHierarchyRoot(e.Name) == Node.Entity.Name))
                 {
                     <div style="display: flex; gap: 4px; align-items: center; margin: 2px 0;">
                         <span style="width: 90px; overflow: hidden;">@derived.Name</span>
