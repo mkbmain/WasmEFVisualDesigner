@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using EfSchemaVisualizer.Core.Inference;
 using EfSchemaVisualizer.Core.Model;
+using EfSchemaVisualizer.Core.Parsing;
 using Xunit;
 
 namespace EfSchemaVisualizer.Core.Tests.Inference;
@@ -175,5 +176,89 @@ public class InheritanceInferenceTests
         Assert.Equal(2, result.Relationships.Count);
         Assert.Contains(result.Relationships, r => r.DependentEntity == "Student" && r.PrincipalEntity == "Person");
         Assert.Contains(result.Relationships, r => r.DependentEntity == "Teacher" && r.PrincipalEntity == "Person");
+    }
+
+    [Fact]
+    public void Fold_Tpt_FoldsOnlyInheritedKey_NotOtherAncestorProperties()
+    {
+        var person = new EntityModel(
+            "Person",
+            new[] { Property("Id", "int"), Property("Name", "string") },
+            KeyPropertyNames: new[] { "Id" },
+            MappingStrategy: MappingStrategy.Tpt);
+        var student = new EntityModel("Student", new[] { Property("Course", "string") }, BaseEntityName: "Person");
+
+        var result = InheritanceInference.Fold(new[] { person, student });
+
+        var foldedStudent = result.Entities.Single(e => e.Name == "Student");
+        Assert.Equal(new[] { "Id", "Course" }, foldedStudent.Properties.Select(p => p.Name));
+        Assert.Equal("Person", foldedStudent.Properties.Single(p => p.Name == "Id").DeclaringEntityName);
+        Assert.Equal(MappingStrategy.Tpt, foldedStudent.MappingStrategy);
+        Assert.Equal(MappingStrategy.Tpt, result.Entities.Single(e => e.Name == "Person").MappingStrategy);
+    }
+
+    [Fact]
+    public void Fold_Tpc_FoldsAllAncestorProperties_SameAsTph()
+    {
+        var person = new EntityModel(
+            "Person",
+            new[] { Property("Id", "int"), Property("Name", "string") },
+            KeyPropertyNames: new[] { "Id" },
+            MappingStrategy: MappingStrategy.Tpc);
+        var student = new EntityModel("Student", new[] { Property("Course", "string") }, BaseEntityName: "Person");
+
+        var result = InheritanceInference.Fold(new[] { person, student });
+
+        var foldedStudent = result.Entities.Single(e => e.Name == "Student");
+        Assert.Equal(new[] { "Id", "Name", "Course" }, foldedStudent.Properties.Select(p => p.Name));
+        Assert.Equal(MappingStrategy.Tpc, foldedStudent.MappingStrategy);
+    }
+
+    [Fact]
+    public void Fold_StrategyDeclaredOnDerivedEntityOnly_AppliesToWholeHierarchy()
+    {
+        var person = new EntityModel("Person", new[] { Property("Id", "int") }, KeyPropertyNames: new[] { "Id" });
+        var student = new EntityModel(
+            "Student",
+            new[] { Property("Course", "string") },
+            BaseEntityName: "Person",
+            MappingStrategy: MappingStrategy.Tpt);
+
+        var result = InheritanceInference.Fold(new[] { person, student });
+
+        Assert.Equal(MappingStrategy.Tpt, result.Entities.Single(e => e.Name == "Person").MappingStrategy);
+        Assert.Equal(MappingStrategy.Tpt, result.Entities.Single(e => e.Name == "Student").MappingStrategy);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void Fold_InconsistentStrategyAcrossHierarchy_ResolvesRootPriorityAndEmitsDiagnostic()
+    {
+        var person = new EntityModel("Person", new[] { Property("Id", "int") }, KeyPropertyNames: new[] { "Id" }, MappingStrategy: MappingStrategy.Tpt);
+        var student = new EntityModel(
+            "Student",
+            new[] { Property("Course", "string") },
+            BaseEntityName: "Person",
+            MappingStrategy: MappingStrategy.Tpc);
+
+        var result = InheritanceInference.Fold(new[] { person, student });
+
+        Assert.Equal(MappingStrategy.Tpt, result.Entities.Single(e => e.Name == "Person").MappingStrategy);
+        Assert.Equal(MappingStrategy.Tpt, result.Entities.Single(e => e.Name == "Student").MappingStrategy);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.InconsistentMappingStrategyInHierarchy, diagnostic.Code);
+    }
+
+    [Fact]
+    public void Fold_NoEntityHasBaseEntityName_StillReturnsSameReference()
+    {
+        // Regression guard: a standalone entity (already Tph, the default) must not be copied via
+        // `with { }` just because it passed through the strategy-resolution pass.
+        var person = new EntityModel("Person", new[] { Property("Id", "int") }, KeyPropertyNames: new[] { "Id" });
+
+        var result = InheritanceInference.Fold(new[] { person });
+
+        Assert.Same(person, Assert.Single(result.Entities));
     }
 }
