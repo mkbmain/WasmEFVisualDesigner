@@ -1396,7 +1396,7 @@ public sealed class DiagramEditor
         return property?.DeclaringEntityName ?? entityName;
     }
 
-    private string ResolveHierarchyRoot(string entityName)
+    public string ResolveHierarchyRoot(string entityName)
     {
         var byName = Current.Entities.ToDictionary(e => e.Name);
         var visited = new HashSet<string> { entityName };
@@ -1445,7 +1445,25 @@ public sealed class DiagramEditor
             }
         }
 
-        var newConfigSource = _configRewriter.SetMappingStrategy(ConfigSource, rootName, strategy);
+        // An existing UseTptMappingStrategy()/UseTpcMappingStrategy() call is allowed by EF (and by
+        // InheritanceInference.Fold, which scans the whole hierarchy for it) to live on ANY entity in
+        // the hierarchy, not just the root. _configRewriter.SetMappingStrategy only ever reads/writes
+        // rootName's own scope, so if the call actually lives on a derived entity it would otherwise be
+        // left behind — either silently surviving a switch to Tph, or coexisting with a freshly-written
+        // root-level call after a switch to Tpt/Tpc (which would then fail re-parse as an inconsistent
+        // strategy). Strip it from every member of the hierarchy first so only the fresh call (if any)
+        // remains, wherever it ends up.
+        var hierarchyMemberNames = Current.Entities
+            .Where(e => ResolveHierarchyRoot(e.Name) == rootName)
+            .Select(e => e.Name);
+
+        var normalizedConfigSource = ConfigSource;
+        foreach (var memberName in hierarchyMemberNames)
+        {
+            normalizedConfigSource = _configRewriter.RemoveMappingStrategy(normalizedConfigSource, memberName);
+        }
+
+        var newConfigSource = _configRewriter.SetMappingStrategy(normalizedConfigSource, rootName, strategy);
         Apply(ClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }

@@ -222,6 +222,55 @@ public class DiagramEditorInheritanceTests
         Assert.False(result.Success);
     }
 
+    // A UseTptMappingStrategy() call declared on a DERIVED entity's own Entity<Student>(...) scope is
+    // technically valid EF configuration today (InheritanceInference.Fold tolerates it, resolving the
+    // strategy from wherever it's found in the hierarchy). SetMappingStrategy must still normalize it
+    // away from every hierarchy member -- not just the root -- when switching strategies, or it either
+    // silently no-ops (switching to Tph) or leaves both an old and a new call present across the
+    // hierarchy (switching to Tpc), which would trip InconsistentMappingStrategyInHierarchy on reparse.
+    private const string TptConfigSourceStrategyOnDerivedEntity = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasKey(e => e.Id);
+                });
+                modelBuilder.Entity<Student>(entity =>
+                {
+                    entity.UseTptMappingStrategy();
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void SetMappingStrategy_ToTpc_RemovesStaleStrategyCallDeclaredOnDerivedEntity()
+    {
+        var editor = new DiagramEditor(TptClassSource, TptConfigSourceStrategyOnDerivedEntity);
+
+        var result = editor.SetMappingStrategy("Person", MappingStrategy.Tpc);
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain("UseTptMappingStrategy", editor.ConfigSource);
+        Assert.Equal(MappingStrategy.Tpc, editor.Current.Entities.Single(e => e.Name == "Person").MappingStrategy);
+        Assert.Equal(MappingStrategy.Tpc, editor.Current.Entities.Single(e => e.Name == "Student").MappingStrategy);
+    }
+
+    [Fact]
+    public void SetMappingStrategy_ToTph_RemovesStaleStrategyCallDeclaredOnDerivedEntity()
+    {
+        var editor = new DiagramEditor(TptClassSource, TptConfigSourceStrategyOnDerivedEntity);
+
+        var result = editor.SetMappingStrategy("Person", MappingStrategy.Tph);
+
+        Assert.True(result.Success);
+        Assert.DoesNotContain("UseTptMappingStrategy", editor.ConfigSource);
+        Assert.Equal(MappingStrategy.Tph, editor.Current.Entities.Single(e => e.Name == "Person").MappingStrategy);
+        Assert.Equal(MappingStrategy.Tph, editor.Current.Entities.Single(e => e.Name == "Student").MappingStrategy);
+    }
+
     [Fact]
     public void RemoveDiscriminatorValue_ClearsJustThatEntity_LeavesOthersIntact()
     {
