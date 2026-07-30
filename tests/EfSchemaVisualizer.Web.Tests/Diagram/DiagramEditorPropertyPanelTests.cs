@@ -358,6 +358,75 @@ public class DiagramEditorPropertyPanelTests
         Assert.Contains("HasConstraintName(\"FK_Post_Blog\")", editor.ConfigSource);
     }
 
+    private const string PrincipalKeyClassSource = """
+        public class Blog
+        {
+            public int Id { get; set; }
+            public string Code { get; set; } = "";
+            public ICollection<Post> Posts { get; set; } = new List<Post>();
+        }
+
+        public class Post
+        {
+            public int Id { get; set; }
+            public string BlogCode { get; set; } = "";
+            public Blog Blog { get; set; } = null!;
+        }
+        """;
+
+    private const string PrincipalKeyConfigSource = """
+        modelBuilder.Entity<Post>(entity =>
+        {
+            entity.HasOne(p => p.Blog)
+                .WithMany(b => b.Posts)
+                .HasForeignKey(p => p.BlogCode);
+        });
+        """;
+
+    [Fact]
+    public void SetRelationshipShape_SettingPrincipalKeyProperties_WritesHasPrincipalKeyCall()
+    {
+        var editor = new DiagramEditor(PrincipalKeyClassSource, PrincipalKeyConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+
+        var result = editor.SetRelationshipShape(
+            relationship, relationship.Kind, relationship.ForeignKeyProperties, relationship.OnDeleteBehavior,
+            newConstraintName: null, newPrincipalKeyProperties: new List<string> { "Code" });
+
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "Code" }, editor.Current.Relationships.Single().PrincipalKeyProperties);
+        Assert.Contains("HasPrincipalKey(p => p.Code)", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetRelationshipShape_SamePrincipalKeyProperties_IsNoOp()
+    {
+        var editor = new DiagramEditor(PrincipalKeyClassSource, PrincipalKeyConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+        var configSourceBefore = editor.ConfigSource;
+
+        var result = editor.SetRelationshipShape(
+            relationship, relationship.Kind, relationship.ForeignKeyProperties, relationship.OnDeleteBehavior,
+            relationship.ConstraintName, relationship.PrincipalKeyProperties);
+
+        Assert.True(result.Success);
+        Assert.Equal(configSourceBefore, editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetRelationshipShape_UnknownPrincipalKeyProperty_Fails()
+    {
+        var editor = new DiagramEditor(PrincipalKeyClassSource, PrincipalKeyConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+
+        var result = editor.SetRelationshipShape(
+            relationship, relationship.Kind, relationship.ForeignKeyProperties, relationship.OnDeleteBehavior,
+            newConstraintName: null, newPrincipalKeyProperties: new List<string> { "DoesNotExist" });
+
+        Assert.False(result.Success);
+        Assert.Empty(editor.Current.Relationships.Single().PrincipalKeyProperties);
+    }
+
     [Fact]
     public void SetRelationshipShape_SameConstraintName_IsNoOp()
     {

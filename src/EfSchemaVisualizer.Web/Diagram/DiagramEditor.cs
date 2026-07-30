@@ -1368,8 +1368,11 @@ public sealed class DiagramEditor
         RelationshipKind newKind,
         IReadOnlyList<string> newForeignKeyProperties,
         string? newOnDeleteBehavior,
-        string? newConstraintName = null)
+        string? newConstraintName = null,
+        IReadOnlyList<string>? newPrincipalKeyProperties = null)
     {
+        var principalKeyProperties = newPrincipalKeyProperties ?? Array.Empty<string>();
+
         if (!Current.Relationships.Contains(relationship))
         {
             return DiagramEditResult.Fail("Relationship no longer exists.");
@@ -1378,12 +1381,13 @@ public sealed class DiagramEditor
         if (newKind == relationship.Kind
             && newForeignKeyProperties.SequenceEqual(relationship.ForeignKeyProperties)
             && newOnDeleteBehavior == relationship.OnDeleteBehavior
-            && newConstraintName == relationship.ConstraintName)
+            && newConstraintName == relationship.ConstraintName
+            && principalKeyProperties.SequenceEqual(relationship.PrincipalKeyProperties))
         {
             return DiagramEditResult.Ok();
         }
 
-        if (newKind == RelationshipKind.ManyToMany && newForeignKeyProperties.Count > 0)
+        if (newKind == RelationshipKind.ManyToMany && (newForeignKeyProperties.Count > 0 || principalKeyProperties.Count > 0))
         {
             return DiagramEditResult.Fail("Many-to-many relationships cannot have a foreign key.");
         }
@@ -1395,12 +1399,20 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail($"'{missingProperty}' is not a property of '{relationship.DependentEntity}'.");
         }
 
+        var principal = Current.Entities.First(e => e.Name == relationship.PrincipalEntity);
+        var missingPrincipalProperty = principalKeyProperties.FirstOrDefault(name => !principal.Properties.Any(p => p.Name == name));
+        if (missingPrincipalProperty is not null)
+        {
+            return DiagramEditResult.Fail($"'{missingPrincipalProperty}' is not a property of '{relationship.PrincipalEntity}'.");
+        }
+
         var updated = relationship with
         {
             Kind = newKind,
             ForeignKeyProperties = newForeignKeyProperties,
             OnDeleteBehavior = newOnDeleteBehavior,
             ConstraintName = newConstraintName,
+            PrincipalKeyProperties = principalKeyProperties,
         };
 
         var withoutOld = relationship.IsInferred
