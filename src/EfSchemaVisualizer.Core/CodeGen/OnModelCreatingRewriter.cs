@@ -1926,6 +1926,7 @@ public sealed class OnModelCreatingRewriter
             chain = BuildRelationshipCall(chain, "HasOne", relationship.PrincipalEntity, relationship.DependentNavigation);
             chain = BuildRelationshipCall(chain, "WithOne", targetEntityName: null, relationship.PrincipalNavigation);
             chain = AppendHasForeignKey(chain, relationship.ForeignKeyProperties, relationship.DependentEntity);
+            chain = AppendHasPrincipalKey(chain, relationship.PrincipalKeyProperties, relationship.PrincipalEntity);
             chain = AppendOnDelete(chain, relationship.OnDeleteBehavior);
             chain = AppendHasConstraintName(chain, relationship.ConstraintName);
             return SyntaxFactory.ExpressionStatement(chain);
@@ -1935,6 +1936,7 @@ public sealed class OnModelCreatingRewriter
         chain = BuildRelationshipCall(chain, "HasOne", relationship.PrincipalEntity, relationship.DependentNavigation);
         chain = BuildRelationshipCall(chain, "WithMany", targetEntityName: null, relationship.PrincipalNavigation);
         chain = AppendHasForeignKey(chain, relationship.ForeignKeyProperties, dependentGeneric: null);
+        chain = AppendHasPrincipalKey(chain, relationship.PrincipalKeyProperties, principalGeneric: null);
         chain = AppendOnDelete(chain, relationship.OnDeleteBehavior);
         chain = AppendHasConstraintName(chain, relationship.ConstraintName);
         return SyntaxFactory.ExpressionStatement(chain);
@@ -1985,6 +1987,42 @@ public sealed class OnModelCreatingRewriter
                 SyntaxFactory.IdentifierName(foreignKeyProperties[0]))
             : SyntaxFactory.AnonymousObjectCreationExpression(
                 SyntaxFactory.SeparatedList(foreignKeyProperties.Select(name =>
+                    SyntaxFactory.AnonymousObjectMemberDeclarator(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.IdentifierName(lambdaParam),
+                            SyntaxFactory.IdentifierName(name))))));
+
+        var argumentList = SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+            SyntaxFactory.Argument(
+                SyntaxFactory.SimpleLambdaExpression(SyntaxFactory.Parameter(SyntaxFactory.Identifier(lambdaParam)), body))));
+
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, chain, methodIdentifier),
+            argumentList);
+    }
+
+    private static ExpressionSyntax AppendHasPrincipalKey(ExpressionSyntax chain, IReadOnlyList<string> principalKeyProperties, string? principalGeneric)
+    {
+        if (principalKeyProperties.Count == 0)
+        {
+            return chain;
+        }
+
+        SimpleNameSyntax methodIdentifier = principalGeneric is null
+            ? SyntaxFactory.IdentifierName("HasPrincipalKey")
+            : SyntaxFactory.GenericName(SyntaxFactory.Identifier("HasPrincipalKey"))
+                .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(
+                    SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.IdentifierName(principalGeneric))));
+
+        const string lambdaParam = "p";
+        ExpressionSyntax body = principalKeyProperties.Count == 1
+            ? SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                SyntaxFactory.IdentifierName(lambdaParam),
+                SyntaxFactory.IdentifierName(principalKeyProperties[0]))
+            : SyntaxFactory.AnonymousObjectCreationExpression(
+                SyntaxFactory.SeparatedList(principalKeyProperties.Select(name =>
                     SyntaxFactory.AnonymousObjectMemberDeclarator(
                         SyntaxFactory.MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,

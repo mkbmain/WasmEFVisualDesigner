@@ -2614,6 +2614,61 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void SetRelationship_OneToMany_WithPrincipalKey_EmitsHasPrincipalKey()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogCode" },
+            PrincipalKeyProperties: new List<string> { "Code" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithMany().HasForeignKey(d => d.BlogCode).HasPrincipalKey(p => p.Code)", result);
+    }
+
+    [Fact]
+    public void SetRelationship_NoPrincipalKey_OmitsHasPrincipalKeyCall()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogId" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.DoesNotContain("HasPrincipalKey", result);
+    }
+
+    [Fact]
+    public void SetRelationship_OneToMany_WithCompositePrincipalKey_EmitsAnonymousObject()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogCode", "BlogTenant" },
+            PrincipalKeyProperties: new List<string> { "Code", "Tenant" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("HasPrincipalKey(p => new { p.Code, p.Tenant })", result);
+    }
+
+    [Fact]
+    public void SetRelationship_OneToOne_EmitsGenericHasPrincipalKey()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToOne, null, null,
+            ForeignKeyProperties: new List<string> { "BlogCode" },
+            PrincipalKeyProperties: new List<string> { "Code" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasOne<Blog>().WithOne().HasForeignKey<Post>(d => d.BlogCode).HasPrincipalKey<Blog>(p => p.Code)", result);
+    }
+
+    [Fact]
     public void SetRelationship_WithConstraintName_AppendsHasConstraintNameCall()
     {
         var relationship = new RelationshipModel(
