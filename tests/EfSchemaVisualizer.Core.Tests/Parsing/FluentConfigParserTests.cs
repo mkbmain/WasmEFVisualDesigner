@@ -2573,6 +2573,111 @@ public class FluentConfigParserTests
     }
 
     [Fact]
+    public void ParseRelationships_HasPrincipalKey_Present_IsRead()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .HasForeignKey(d => d.CustomerCode)
+                              .HasPrincipalKey(p => p.Code);
+                    });
+                }
+            }
+            """;
+
+        var entities = new List<EntityModel>
+        {
+            new("Customer", new List<PropertyModel>
+            {
+                new("Id", "int", IsNullable: false, MaxLength: null),
+                new("Code", "string", IsNullable: false, MaxLength: null),
+                new("Orders", "ICollection<Order>", IsNullable: false, MaxLength: null),
+            }),
+            new("Order", new List<PropertyModel>
+            {
+                new("Id", "int", IsNullable: false, MaxLength: null),
+                new("CustomerCode", "string", IsNullable: false, MaxLength: null),
+                new("Customer", "Customer", IsNullable: false, MaxLength: null),
+            }),
+        };
+
+        var result = new FluentConfigParser().ParseRelationships(source, entities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(new[] { "CustomerCode" }, relationship.ForeignKeyProperties);
+        Assert.Equal(new[] { "Code" }, relationship.PrincipalKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_NoHasPrincipalKeyCall_PrincipalKeyPropertiesEmpty_NoDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseRelationships(SourceWithHasOneWithManyBlockNested, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Empty(relationship.PrincipalKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_HasPrincipalKeyBeforeHasForeignKey_BothStillRead()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .HasPrincipalKey(p => p.Code)
+                              .HasForeignKey(d => d.CustomerId);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
+        Assert.Equal(new[] { "Code" }, relationship.PrincipalKeyProperties);
+    }
+
+    [Fact]
+    public void ParseRelationships_UnreadableHasPrincipalKeyArgument_EmitsDiagnostic_RelationshipStillRecorded()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer).WithMany(p => p.Orders).HasPrincipalKey(GetPkExpression());
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, OrderCustomerEntities);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasPrincipalKeyArgument, diagnostic.Code);
+        Assert.Equal("Order", diagnostic.EntityName);
+        var relationship = Assert.Single(result.Value);
+        Assert.Empty(relationship.PrincipalKeyProperties);
+    }
+
+    [Fact]
     public void ParseRelationships_HasConstraintName_IsRead()
     {
         const string source = """

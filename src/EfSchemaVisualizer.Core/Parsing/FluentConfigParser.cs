@@ -29,7 +29,7 @@ public sealed class FluentConfigParser
         "Property", "HasMaxLength", "HasPrecision", "IsRequired", "IsUnicode", "IsFixedLength", "HasKey", "HasAlternateKey", "ToTable",
         "HasColumnName", "HasColumnType", "HasDefaultValue", "HasDefaultValueSql", "HasComputedColumnSql", "HasIndex", "IsUnique",
         "HasFilter", "IsDescending", "IncludeProperties",
-        "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "OnDelete", "UsingEntity",
+        "HasOne", "HasMany", "WithOne", "WithMany", "HasForeignKey", "HasPrincipalKey", "OnDelete", "UsingEntity",
         "Ignore", "ValueGeneratedOnAdd", "ValueGeneratedOnUpdate", "ValueGeneratedOnAddOrUpdate",
         "ValueGeneratedNever", "UseIdentityColumn", "ToView", "ToSqlQuery", "HasNoKey",
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
@@ -1854,6 +1854,7 @@ public sealed class FluentConfigParser
         };
 
         InvocationExpressionSyntax? hasForeignKeyCall = null;
+        InvocationExpressionSyntax? hasPrincipalKeyCall = null;
         InvocationExpressionSyntax? onDeleteCall = null;
         InvocationExpressionSyntax? usingEntityCall = null;
         InvocationExpressionSyntax? hasConstraintNameCall = null;
@@ -1863,6 +1864,7 @@ public sealed class FluentConfigParser
             switch (GetInvokedMethodName(invocation))
             {
                 case "HasForeignKey": hasForeignKeyCall = invocation; break;
+                case "HasPrincipalKey": hasPrincipalKeyCall = invocation; break;
                 case "OnDelete": onDeleteCall = invocation; break;
                 case "UsingEntity": usingEntityCall = invocation; break;
                 case "HasConstraintName": hasConstraintNameCall = invocation; break;
@@ -1949,6 +1951,26 @@ public sealed class FluentConfigParser
             }
         }
 
+        IReadOnlyList<string> principalKeyProperties = Array.Empty<string>();
+        if (hasPrincipalKeyCall is not null)
+        {
+            var props = FluentSyntaxHelpers.TryReadPropertyNameList(hasPrincipalKeyCall);
+
+            if (props is null)
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticCodes.UnreadableHasPrincipalKeyArgument,
+                    "HasPrincipalKey argument(s) could not be read as property name(s).",
+                    dependentEntity,
+                    PropertyName: null,
+                    hasPrincipalKeyCall.Span));
+            }
+            else
+            {
+                principalKeyProperties = props;
+            }
+        }
+
         string? onDeleteBehavior = null;
         if (onDeleteCall is not null)
         {
@@ -2000,7 +2022,8 @@ public sealed class FluentConfigParser
             foreignKeyProperties,
             onDeleteBehavior,
             joinEntityName,
-            constraintName));
+            constraintName,
+            principalKeyProperties));
     }
 
     private static (string? EntityName, bool Resolved) ResolveRelatedEntity(
