@@ -1067,6 +1067,45 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("new Customer { Id = 2, Name = \"Bob\" }", result);
     }
 
+    [Fact]
+    public void RenamePropertyInHasDataSeeds_RenamesMemberInitializer()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyInHasDataSeeds(SourceWithHasDataSeed, entityName: "Person", oldPropertyName: "Name", newPropertyName: "FullName");
+
+        Assert.Contains("new Person { Id = 1, FullName = \"Alice\" }", result);
+        Assert.Contains("new Person { Id = 2, FullName = \"Bob\" }", result);
+    }
+
+    [Fact]
+    public void RenamePropertyInHasDataSeeds_NoMatchingSeeds_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RenamePropertyInHasDataSeeds(SourceWithHasDataSeed, entityName: "Person", oldPropertyName: "NoSuchProperty", newPropertyName: "FullName");
+
+        Assert.Equal(SourceWithHasDataSeed, result);
+    }
+
+    [Fact]
+    public void RemovePropertyFromHasDataSeeds_StripsMemberInitializer()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemovePropertyFromHasDataSeeds(SourceWithHasDataSeed, entityName: "Person", propertyName: "Name");
+
+        Assert.Contains("new Person { Id = 1 }", result);
+        Assert.Contains("new Person { Id = 2 }", result);
+        Assert.DoesNotContain("Name = ", result);
+    }
+
+    [Fact]
+    public void RemovePropertyFromHasDataSeeds_NoMatchingSeeds_ReturnsSourceUnchanged()
+    {
+        var result = new OnModelCreatingRewriter()
+            .RemovePropertyFromHasDataSeeds(SourceWithHasDataSeed, entityName: "Person", propertyName: "NoSuchProperty");
+
+        Assert.Equal(SourceWithHasDataSeed, result);
+    }
+
     private const string SourceUsingEntityTypeConfigurationForRename = """
         public class BlogConfiguration : IEntityTypeConfiguration<Blog>
         {

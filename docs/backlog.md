@@ -636,10 +636,18 @@
       the alternate key itself when they don't.
 - [ ] **`[found]` `UsingEntity`'s nested join-entity configuration.** The join
       entity is read/written; calls chained inside `UsingEntity(j => ...)` are not.
-- [ ] **`[found]` `HasData` seed rows.** Flagged and preserved; entity rename now
-      patches seed object-creation expressions, but property rename/remove still
-      leaves stale member initializers behind (carried over from Round 3 as
-      explicitly out of scope there).
+- [x] **`[found]` `HasData` seed rows.** — Fixed 2026-07-30.
+      Entity rename already patched seed object-creation expressions
+      (`OnModelCreatingRewriter.RenameEntityReferences`); property rename/remove
+      previously left stale member initializers behind. New
+      `OnModelCreatingRewriter.RenamePropertyInHasDataSeeds` /
+      `RemovePropertyFromHasDataSeeds` (sharing a `FindHasDataMemberAssignments`
+      lookup) now rename or strip the matching `propertyName = value` member
+      initializer in every `HasData(new Entity { ... })` seed row for the
+      entity, wired into `DiagramEditor.RenameProperty` / `RemoveProperty`.
+      Verified with new rewriter-level tests plus `DiagramEditor`-level tests
+      exercising the same `ConfigSourceWithHasDataSeed` fixture the existing
+      entity-rename `HasData` test uses.
 - [ ] **`[found]` `ToFunction`, `HasAnnotation`, `HasPartitionKey`,
       provider-specific extensions.** Long tail; the generic diagnostic covers
       them until any earns a parser.

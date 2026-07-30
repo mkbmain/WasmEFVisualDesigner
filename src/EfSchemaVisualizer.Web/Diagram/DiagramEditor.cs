@@ -194,6 +194,7 @@ public sealed class DiagramEditor
         else
         {
             newConfigSource = _configRewriter.RenamePropertyReferences(ConfigSource, owningEntityName, oldPropertyName, newPropertyName);
+            newConfigSource = _configRewriter.RenamePropertyInHasDataSeeds(newConfigSource, owningEntityName, oldPropertyName, newPropertyName);
         }
 
         // If oldPropertyName is itself an owner-side nav property with an OwnsOne/OwnsMany/ComplexProperty
@@ -317,7 +318,8 @@ public sealed class DiagramEditor
 
         var owningEntityName = ResolveDeclaringEntity(entityName, propertyName);
         var newClassSource = _classRewriter.RemoveProperty(ClassSource, owningEntityName, propertyName);
-        Apply(newClassSource, ConfigSource);
+        var newConfigSource = _configRewriter.RemovePropertyFromHasDataSeeds(ConfigSource, owningEntityName, propertyName);
+        Apply(newClassSource, newConfigSource);
         return DiagramEditResult.Ok();
     }
 

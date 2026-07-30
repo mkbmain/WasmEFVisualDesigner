@@ -126,6 +126,29 @@ public class DiagramEditorTests
     }
 
     [Fact]
+    public void RenameProperty_WithHasDataSeedRows_RenamesMemberInitializer()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSourceWithHasDataSeed);
+
+        var result = editor.RenameProperty("Blog", "Title", "Name");
+
+        Assert.True(result.Success);
+        Assert.Contains("new Blog { Id = 1, Name = \"First\" }", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void RemoveProperty_WithHasDataSeedRows_RemovesMemberInitializer()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSourceWithHasDataSeed);
+
+        var result = editor.RemoveProperty("Blog", "Title");
+
+        Assert.True(result.Success);
+        Assert.Contains("new Blog { Id = 1 }", editor.ConfigSource);
+        Assert.DoesNotContain("Title", editor.ConfigSource);
+    }
+
+    [Fact]
     public void Redo_AfterUndo_ReappliesTheEdit()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);

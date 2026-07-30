@@ -2835,6 +2835,88 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    /// Mirrors the `HasData` sweep in `RenameEntityReferences`, but for a property rename: finds every
+    /// `new {entityName} { ... }` seed row's `oldPropertyName = value` member initializer and renames
+    /// the initializer's target identifier. No-ops (returns `sourceCode` unchanged) if `entityName` has
+    /// no `HasData` seed rows, or none of them set `oldPropertyName`.
+    public string RenamePropertyInHasDataSeeds(string sourceCode, string entityName, string oldPropertyName, string newPropertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targets = new List<IdentifierNameSyntax>();
+
+        foreach (var assignment in FindHasDataMemberAssignments(root, entityName, oldPropertyName))
+        {
+            targets.Add((IdentifierNameSyntax)assignment.Left);
+        }
+
+        if (targets.Count == 0)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.ReplaceNodes(targets, (_, _) => SyntaxFactory.IdentifierName(newPropertyName));
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    /// Mirrors `RenamePropertyInHasDataSeeds`, but for property removal: strips every
+    /// `propertyName = value` member initializer from `entityName`'s `HasData` seed rows entirely,
+    /// so a removed property doesn't leave a stale initializer referencing a member that no longer
+    /// exists on the class. No-ops (returns `sourceCode` unchanged) if there's nothing to remove.
+    public string RemovePropertyFromHasDataSeeds(string sourceCode, string entityName, string propertyName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var targets = FindHasDataMemberAssignments(root, entityName, propertyName).ToList();
+
+        if (targets.Count == 0)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNodes(targets, SyntaxRemoveOptions.KeepNoTrivia);
+        return newRoot!.NormalizeWhitespace().ToFullString();
+    }
+
+    /// Shared lookup for the two `HasData` seed-row helpers above: every `memberName = value`
+    /// assignment inside an object-initializer of a `new {entityName} { ... }` seed row passed to any
+    /// `HasData(...)` call in the source.
+    private static IEnumerable<AssignmentExpressionSyntax> FindHasDataMemberAssignments(
+        CompilationUnitSyntax root, string entityName, string memberName)
+    {
+        foreach (var hasDataCall in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (hasDataCall.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "HasData" })
+            {
+                continue;
+            }
+
+            foreach (var objectCreation in hasDataCall.ArgumentList.DescendantNodes().OfType<ObjectCreationExpressionSyntax>())
+            {
+                if (objectCreation.Type is not IdentifierNameSyntax { Identifier.Text: var seedTypeName }
+                    || seedTypeName != entityName
+                    || objectCreation.Initializer is null)
+                {
+                    continue;
+                }
+
+                foreach (var initializerExpression in objectCreation.Initializer.Expressions)
+                {
+                    if (initializerExpression is AssignmentExpressionSyntax
+                        {
+                            Left: IdentifierNameSyntax { Identifier.Text: var initializedMemberName }
+                        } assignment
+                        && initializedMemberName == memberName)
+                    {
+                        yield return assignment;
+                    }
+                }
+            }
+        }
+    }
+
     /// Renaming an owner's navigation property (e.g. `Order.ShippingAddress` -> `Order.DeliveryAddress`)
     /// must also patch the outer `OwnsOne(e => e.ShippingAddress, ...)` call's lambda parameter, not
     /// just the property declaration on Order's class — `RenamePropertyReferences` only rewrites
