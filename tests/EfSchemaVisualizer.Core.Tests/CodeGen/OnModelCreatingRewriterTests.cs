@@ -2655,6 +2655,24 @@ public class OnModelCreatingRewriterTests
     }
 
     [Fact]
+    public void SetRelationship_WithPrincipalKeyOnDeleteAndConstraintName_EmitsFullChainInOrder()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, null, null,
+            ForeignKeyProperties: new List<string> { "BlogCode" },
+            OnDeleteBehavior: "Cascade",
+            ConstraintName: "FK_Post_Blog",
+            PrincipalKeyProperties: new List<string> { "Code" });
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains(
+            "entity.HasOne<Blog>().WithMany().HasForeignKey(d => d.BlogCode).HasPrincipalKey(p => p.Code).OnDelete(DeleteBehavior.Cascade).HasConstraintName(\"FK_Post_Blog\")",
+            result);
+    }
+
+    [Fact]
     public void SetRelationship_OneToOne_EmitsGenericHasPrincipalKey()
     {
         var relationship = new RelationshipModel(

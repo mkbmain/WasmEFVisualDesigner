@@ -1,4 +1,5 @@
 using System.Linq;
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Web.Diagram;
 
 namespace EfSchemaVisualizer.Web.Tests.Diagram;
@@ -425,6 +426,40 @@ public class DiagramEditorPropertyPanelTests
 
         Assert.False(result.Success);
         Assert.Empty(editor.Current.Relationships.Single().PrincipalKeyProperties);
+    }
+
+    [Fact]
+    public void SetRelationshipShape_ManyToManyWithPrincipalKeyProperties_Fails()
+    {
+        var editor = new DiagramEditor(PrincipalKeyClassSource, PrincipalKeyConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+
+        var result = editor.SetRelationshipShape(
+            relationship, RelationshipKind.ManyToMany, newForeignKeyProperties: new List<string>(),
+            relationship.OnDeleteBehavior, newConstraintName: null,
+            newPrincipalKeyProperties: new List<string> { "Code" });
+
+        Assert.False(result.Success);
+        Assert.Equal("Many-to-many relationships cannot have a foreign key.", result.Error);
+    }
+
+    [Fact]
+    public void SetRelationshipShape_ClearingPrincipalKeyProperties_RemovesHasPrincipalKeyCall()
+    {
+        var editor = new DiagramEditor(PrincipalKeyClassSource, PrincipalKeyConfigSource);
+        var relationship = editor.Current.Relationships.Single();
+        editor.SetRelationshipShape(
+            relationship, relationship.Kind, relationship.ForeignKeyProperties, relationship.OnDeleteBehavior,
+            newConstraintName: null, newPrincipalKeyProperties: new List<string> { "Code" });
+        var updated = editor.Current.Relationships.Single();
+
+        var result = editor.SetRelationshipShape(
+            updated, updated.Kind, updated.ForeignKeyProperties, updated.OnDeleteBehavior,
+            newConstraintName: null, newPrincipalKeyProperties: new List<string>());
+
+        Assert.True(result.Success);
+        Assert.Empty(editor.Current.Relationships.Single().PrincipalKeyProperties);
+        Assert.DoesNotContain(".HasPrincipalKey(", editor.ConfigSource);
     }
 
     [Fact]

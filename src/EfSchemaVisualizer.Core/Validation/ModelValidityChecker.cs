@@ -173,9 +173,11 @@ public static class ModelValidityChecker
     }
 
     /// A foreign key can't target a keyless principal (`HasNoKey()`/`[Keyless]`) — it has no PK or
-    /// alternate key for the FK to reference. (Without `HasPrincipalKey` parsing (see backlog), a
-    /// relationship's implicit target is always the principal's own key, so this is the only
-    /// "targets a non-key property" case detectable from the current model shape.)
+    /// alternate key for the FK to reference. This is checked separately from
+    /// `CheckPrincipalKeyReferencesMissingProperty` because that check only validates that the
+    /// named `HasPrincipalKey` properties exist on the principal entity; it doesn't (and can't)
+    /// catch the case where the principal has no key at all to target, which is exactly the
+    /// failure mode this check exists to catch.
     private static void CheckForeignKeyTargetsKeylessPrincipal(
         RelationshipModel relationship,
         Dictionary<string, EntityModel> entitiesByName,

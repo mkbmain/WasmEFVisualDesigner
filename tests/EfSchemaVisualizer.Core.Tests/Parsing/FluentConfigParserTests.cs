@@ -2616,6 +2616,50 @@ public class FluentConfigParserTests
     }
 
     [Fact]
+    public void ParseRelationships_HasPrincipalKeyWithCompositeAnonymousObject_IsRead()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(d => d.Customer)
+                              .WithMany(p => p.Orders)
+                              .HasForeignKey(d => d.CustomerCode)
+                              .HasPrincipalKey(p => new { p.Code, p.Region });
+                    });
+                }
+            }
+            """;
+
+        var entities = new List<EntityModel>
+        {
+            new("Customer", new List<PropertyModel>
+            {
+                new("Id", "int", IsNullable: false, MaxLength: null),
+                new("Code", "string", IsNullable: false, MaxLength: null),
+                new("Region", "string", IsNullable: false, MaxLength: null),
+                new("Orders", "ICollection<Order>", IsNullable: false, MaxLength: null),
+            }),
+            new("Order", new List<PropertyModel>
+            {
+                new("Id", "int", IsNullable: false, MaxLength: null),
+                new("CustomerCode", "string", IsNullable: false, MaxLength: null),
+                new("Customer", "Customer", IsNullable: false, MaxLength: null),
+            }),
+        };
+
+        var result = new FluentConfigParser().ParseRelationships(source, entities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(new[] { "CustomerCode" }, relationship.ForeignKeyProperties);
+        Assert.Equal(new[] { "Code", "Region" }, relationship.PrincipalKeyProperties);
+    }
+
+    [Fact]
     public void ParseRelationships_NoHasPrincipalKeyCall_PrincipalKeyPropertiesEmpty_NoDiagnostic()
     {
         var result = new FluentConfigParser().ParseRelationships(SourceWithHasOneWithManyBlockNested, OrderCustomerEntities);
