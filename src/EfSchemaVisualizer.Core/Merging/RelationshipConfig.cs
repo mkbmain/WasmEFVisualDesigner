@@ -12,7 +12,9 @@ public sealed record RelationshipConfig(
     IReadOnlyList<string>? ForeignKeyProperties = null,
     string? OnDeleteBehavior = null,
     string? JoinEntityName = null,
-    string? ConstraintName = null)
+    string? ConstraintName = null,
+    IReadOnlyList<string>? PrincipalKeyProperties = null)
 {
     public IReadOnlyList<string> ForeignKeyProperties { get; init; } = ForeignKeyProperties ?? new List<string>();
+    public IReadOnlyList<string> PrincipalKeyProperties { get; init; } = PrincipalKeyProperties ?? new List<string>();
 }
