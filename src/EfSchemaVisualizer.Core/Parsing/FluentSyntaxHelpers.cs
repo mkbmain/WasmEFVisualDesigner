@@ -30,16 +30,16 @@ internal static class FluentSyntaxHelpers
         Walk(scope);
         return results;
 
-        void Walk(SyntaxNode node, SyntaxNode? excludeSubtree = null)
+        void Walk(SyntaxNode node, IReadOnlyList<SyntaxNode>? excludeSubtrees = null)
         {
             foreach (var child in node.ChildNodes())
             {
-                if (child == excludeSubtree)
+                if (excludeSubtrees is not null && excludeSubtrees.Contains(child))
                 {
-                    // Opaque boundary for a builder-lambda subtree specifically: `excludeSubtree` may be
-                    // nested several levels below `node` (inside the invocation's ArgumentList), not a
-                    // direct child, so this check must apply at every depth of the recursive walk below,
-                    // not just immediate children.
+                    // Opaque boundary for an owned/complex builder lambda or a UsingEntity lambda
+                    // argument: `excludeSubtrees` entries may be nested several levels below `node`
+                    // (inside the invocation's ArgumentList), not a direct child, so this check must
+                    // apply at every depth of the recursive walk below, not just immediate children.
                     continue;
                 }
 
@@ -55,22 +55,43 @@ internal static class FluentSyntaxHelpers
                 {
                     results.Add(invocation);
 
-                    if (TryGetFoldingBuilderLambda(invocation) is { } builderLambda)
+                    var opaqueLambdas = GetOpaqueLambdaArguments(invocation);
+                    if (opaqueLambdas.Count > 0)
                     {
-                        // Opaque boundary for the builder-lambda subtree only: the OwnsOne/OwnsMany/
-                        // ComplexProperty invocation itself IS added to results above (so
-                        // FindCallsNamed(scope, "OwnsOne") still matches it directly), but its builder
-                        // lambda's body is skipped here — once FindConfigurationScopes(root, entities)
-                        // yields that builder lambda as its own scope (see below), walking into it here
-                        // too would double-count every call inside it against the outer entity's scope.
-                        Walk(child, builderLambda);
+                        // Opaque boundary for the lambda argument subtree(s) only: the invocation
+                        // itself IS added to results above (so e.g. FindCallsNamed(scope, "OwnsOne")
+                        // or FindCallsNamed(scope, "UsingEntity") still matches it directly), but the
+                        // lambda bodies are skipped here — either because FindConfigurationScopes
+                        // yields them as their own scope elsewhere (double-counting risk), or because
+                        // (UsingEntity's per-side FK lambdas specifically) their nested
+                        // HasOne(...).WithMany(...) chain must never be misattributed to the outer
+                        // entity's own relationship scan.
+                        Walk(child, opaqueLambdas);
                         continue;
                     }
                 }
 
-                Walk(child, excludeSubtree);
+                Walk(child, excludeSubtrees);
             }
         }
+    }
+
+    /// Returns the lambda argument(s) of an invocation whose bodies must not be walked as part of the
+    /// enclosing scope: the single builder lambda for `OwnsOne`/`OwnsMany`/`ComplexProperty`, or all of
+    /// a `UsingEntity(...)` call's lambda arguments (however many — 0 to 3). Empty for everything else.
+    private static IReadOnlyList<AnonymousFunctionExpressionSyntax> GetOpaqueLambdaArguments(InvocationExpressionSyntax invocation)
+    {
+        if (TryGetFoldingBuilderLambda(invocation) is { } foldingLambda)
+        {
+            return new[] { foldingLambda };
+        }
+
+        if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "UsingEntity" })
+        {
+            return GetUsingEntityLambdaArguments(invocation);
+        }
+
+        return Array.Empty<AnonymousFunctionExpressionSyntax>();
     }
 
     /// If `invocation` is an `OwnsOne`/`OwnsMany`/`ComplexProperty` call with a second (builder)
@@ -414,6 +435,39 @@ internal static class FluentSyntaxHelpers
             : null;
     }
 
+    internal static string? TryGetGenericTypeArgument(InvocationExpressionSyntax? invocation)
+    {
+        return invocation?.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArg] } }
+            ? typeArg.ToString()
+            : null;
+    }
+
+    /// Reads the string-literal join-entity name from a shared-type `UsingEntity("Name", ...)` call's
+    /// first argument. Returns null for the generic `UsingEntity<T>(...)` form (whose identity is a
+    /// type argument on the method name, not a call argument at all) or when no `UsingEntity` call is
+    /// present.
+    internal static string? TryReadUsingEntityStringName(InvocationExpressionSyntax? usingEntityCall)
+    {
+        return usingEntityCall?.ArgumentList.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax
+            { RawKind: (int)SyntaxKind.StringLiteralExpression } literal
+            ? literal.Token.ValueText
+            : null;
+    }
+
+    /// Returns every lambda-typed argument of a `UsingEntity(...)` call, in argument order — 0 (bare),
+    /// 1 (join-entity-wide config), 2 (per-side FK), or 3 (per-side FK + join-entity-wide config).
+    /// `OfType&lt;AnonymousFunctionExpressionSyntax&gt;` already skips a leading string-literal
+    /// join-entity-name argument (the shared-type overloads), so no separate "skip argument 0" logic is
+    /// needed here — unlike `TryGetFoldingBuilderLambda`, whose nav-selector argument can itself be a
+    /// lambda and must be skipped by position instead.
+    internal static IReadOnlyList<AnonymousFunctionExpressionSyntax> GetUsingEntityLambdaArguments(InvocationExpressionSyntax usingEntityCall)
+    {
+        return usingEntityCall.ArgumentList.Arguments
+            .Select(a => a.Expression)
+            .OfType<AnonymousFunctionExpressionSyntax>()
+            .ToList();
+    }
+
     /// Finds every name the source uses for its `ModelBuilder` — from the parameter of an
     /// `OnModelCreating(ModelBuilder ...)` override (covers a file with model-level calls only, e.g.
     /// just `modelBuilder.HasDefaultSchema(...)`, no `Entity&lt;T&gt;()` calls at all) and from every
@@ -498,11 +552,58 @@ internal static class FluentSyntaxHelpers
             yield return scope;
         }
 
+        foreach (var nested in FindUsingEntityNestedScopes(root))
+        {
+            yield return nested;
+        }
+
         if (entities is not null)
         {
             foreach (var nested in FindOwnedAndComplexNestedScopes(root, entities))
             {
                 yield return nested;
+            }
+        }
+    }
+
+    /// For every `UsingEntity(...)` call found anywhere in the file, resolves its join entity's name
+    /// (generic type argument, or shared-type string literal) and — when the call has exactly one
+    /// lambda argument (join-entity-wide config) or exactly three (per-side FK + join-entity-wide
+    /// config, where the third is the join-entity one) — yields that lambda itself as a configuration
+    /// scope keyed by the join entity's name. Every existing per-property `Parse*` method then reads
+    /// from it via `FindCallsNamed(scope, ...)` with zero extractor changes, the same reuse this
+    /// project already uses for `OwnsOne`/`OwnsMany`/`ComplexProperty` builder lambdas.
+    ///
+    /// Unlike that owned/complex-type precedent, the lambda is yielded whether it's block-bodied
+    /// (`j => { ... }`) or expression-bodied (`j => j.HasKey(...)`) — `FindCallsNamed`'s underlying
+    /// walk only needs some `SyntaxNode` to recurse into, and a single-call expression body is the
+    /// common real-world shape for this particular call.
+    internal static IEnumerable<(string EntityName, SyntaxNode Scope)> FindUsingEntityNestedScopes(CompilationUnitSyntax root)
+    {
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (call.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "UsingEntity" })
+            {
+                continue;
+            }
+
+            var joinEntityName = TryGetGenericTypeArgument(call) ?? TryReadUsingEntityStringName(call);
+            if (joinEntityName is null)
+            {
+                continue;
+            }
+
+            var lambdas = GetUsingEntityLambdaArguments(call);
+            AnonymousFunctionExpressionSyntax? joinConfigLambda = lambdas.Count switch
+            {
+                1 => lambdas[0],
+                3 => lambdas[2],
+                _ => null,
+            };
+
+            if (joinConfigLambda is not null)
+            {
+                yield return (joinEntityName, joinConfigLambda);
             }
         }
     }

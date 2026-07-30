@@ -2963,6 +2963,58 @@ public class FluentConfigParserTests
         Assert.Null(relationship.JoinEntityName);
     }
 
+    private const string SourceUsingEntityTwoLambdaForeignKeys = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                        right => right.HasOne<Tag>().WithMany().HasForeignKey("TagId"),
+                        left => left.HasOne<Post>().WithMany().HasForeignKey("PostId"));
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseRelationships_UsingEntityTwoLambdaForeignKeys_DoesNotProduceAPhantomRelationship()
+    {
+        var result = new FluentConfigParser().ParseRelationships(SourceUsingEntityTwoLambdaForeignKeys, PostTagEntities);
+
+        // Exactly one relationship: Post<->Tag many-to-many. The HasOne<Tag>()/HasOne<Post>() calls
+        // nested inside UsingEntity's per-side FK lambdas must NOT be read as separate relationships.
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.ManyToMany, relationship.Kind);
+        Assert.Equal("Post", relationship.PrincipalEntity);
+        Assert.Equal("Tag", relationship.DependentEntity);
+    }
+
+    private const string SourceUsingEntitySingleConfigLambda = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                        j => j.HasKey("PostId", "TagId"));
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_UsingEntitySingleConfigLambda_ReadsJoinEntityHasKey()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceUsingEntitySingleConfigLambda);
+
+        Assert.Empty(result.Diagnostics);
+        var key = Assert.Single(result.Value, k => k.EntityName == "PostTag");
+        Assert.Equal(new List<string> { "PostId", "TagId" }, key.PropertyNames);
+    }
+
     [Fact]
     public void ParseRelationships_EntityTypeConfigurationStyle_ResolvesOneToMany()
     {

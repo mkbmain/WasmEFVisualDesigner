@@ -1876,7 +1876,7 @@ public sealed class FluentConfigParser
 
         if (kind == RelationshipKind.OneToOne)
         {
-            var explicitDependent = TryGetGenericTypeArgument(hasForeignKeyCall);
+            var explicitDependent = FluentSyntaxHelpers.TryGetGenericTypeArgument(hasForeignKeyCall);
             dependentEntity = explicitDependent ?? configuringEntityName;
             principalEntity = dependentEntity == configuringEntityName ? targetEntityName! : configuringEntityName;
         }
@@ -2011,7 +2011,7 @@ public sealed class FluentConfigParser
             }
         }
 
-        var joinEntityName = kind == RelationshipKind.ManyToMany ? TryGetGenericTypeArgument(usingEntityCall) : null;
+        var joinEntityName = kind == RelationshipKind.ManyToMany ? FluentSyntaxHelpers.TryGetGenericTypeArgument(usingEntityCall) : null;
 
         results.Add(new RelationshipConfig(
             principalEntity,
@@ -2029,7 +2029,7 @@ public sealed class FluentConfigParser
     private static (string? EntityName, bool Resolved) ResolveRelatedEntity(
         InvocationExpressionSyntax call, string configuringEntityName, IReadOnlyList<EntityModel> entities)
     {
-        var explicitTarget = TryGetGenericTypeArgument(call);
+        var explicitTarget = FluentSyntaxHelpers.TryGetGenericTypeArgument(call);
         if (explicitTarget is not null)
         {
             return (explicitTarget, true);
@@ -2072,13 +2072,6 @@ public sealed class FluentConfigParser
     {
         return invocation.Expression is MemberAccessExpressionSyntax { Name: SimpleNameSyntax simpleName }
             ? simpleName.Identifier.Text
-            : null;
-    }
-
-    private static string? TryGetGenericTypeArgument(InvocationExpressionSyntax? invocation)
-    {
-        return invocation?.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax { TypeArgumentList.Arguments: [var typeArg] } }
-            ? typeArg.ToString()
             : null;
     }
 
