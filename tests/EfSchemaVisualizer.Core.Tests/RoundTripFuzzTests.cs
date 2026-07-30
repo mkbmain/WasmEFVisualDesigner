@@ -473,6 +473,12 @@ public class RoundTripFuzzTests
             public int Id { get; set; }
             public ICollection<Post> Posts { get; set; }
         }
+
+        public class PostTag
+        {
+            public int PostId { get; set; }
+            public int TagId { get; set; }
+        }
         """;
 
     private const string ManyToManyWithUsingEntityConfigSource = """
@@ -483,8 +489,7 @@ public class RoundTripFuzzTests
                 modelBuilder.Entity<Post>(entity =>
                 {
                     entity.Property(e => e.Title).HasMaxLength(200);
-                    entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
-                        j => j.HasKey("PostId", "TagId"));
+                    entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(j => j.HasKey("PostId", "TagId"));
                 });
             }
         }
