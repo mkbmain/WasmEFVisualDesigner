@@ -35,6 +35,10 @@
             {
                 <span title="Owned type (OwnsMany): this is its own table, but it cannot exist independently of its owner." style="opacity: 0.6; margin-right: 2px;">◆</span>
             }
+            @if (Node.Entity.IsSharedType)
+            {
+                <span title="Shared-type entity: configured via UsingEntity(...) with no backing C# class." style="opacity: 0.6; font-size: 0.8em; margin-right: 2px;">(shared type)</span>
+            }
             @if (_isEditingName)
             {
                 <input value="@_editingName"
