@@ -385,7 +385,8 @@ public static class ModelMerger
                 c.ForeignKeyProperties,
                 c.OnDeleteBehavior,
                 c.JoinEntityName,
-                ConstraintName: c.ConstraintName))
+                ConstraintName: c.ConstraintName,
+                PrincipalKeyProperties: c.PrincipalKeyProperties))
             .ToList();
     }
 

@@ -539,8 +539,9 @@ public class ModelMergerTests
         {
             new("Customer", "Order", RelationshipKind.OneToMany,
                 PrincipalNavigation: "Orders", DependentNavigation: "Customer",
-                ForeignKeyProperties: new List<string> { "CustomerId" },
-                OnDeleteBehavior: "Cascade"),
+                ForeignKeyProperties: new List<string> { "CustomerCode" },
+                OnDeleteBehavior: "Cascade",
+                PrincipalKeyProperties: new List<string> { "Code" }),
         };
 
         var result = ModelMerger.ApplyRelationships(configs);
@@ -551,8 +552,9 @@ public class ModelMergerTests
         Assert.Equal(RelationshipKind.OneToMany, relationship.Kind);
         Assert.Equal("Orders", relationship.PrincipalNavigation);
         Assert.Equal("Customer", relationship.DependentNavigation);
-        Assert.Equal(new[] { "CustomerId" }, relationship.ForeignKeyProperties);
+        Assert.Equal(new[] { "CustomerCode" }, relationship.ForeignKeyProperties);
         Assert.Equal("Cascade", relationship.OnDeleteBehavior);
+        Assert.Equal(new[] { "Code" }, relationship.PrincipalKeyProperties);
     }
 
     [Fact]
