@@ -88,9 +88,6 @@ of the following, that configuration is silently dropped from the diagram —
 eye before trusting a regenerated file:
 
 - `HasDefaultValueSql` (only literal `HasDefaultValue` is read).
-- `UsingEntity`'s nested join-entity configuration (the join entity itself is
-  read/written, but calls chained inside its `UsingEntity(j => ...)` builder
-  are not).
 - Owned types (`OwnsOne`/`OwnsMany`) and complex types (`ComplexProperty`).
 - Inheritance mapping (TPH/TPT/TPC, `HasDiscriminator`).
 - Non-literal argument values in general — e.g. `HasMaxLength(SomeConstant)`,
