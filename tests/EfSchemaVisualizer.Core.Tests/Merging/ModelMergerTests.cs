@@ -1066,4 +1066,74 @@ public class ModelMergerTests
         var shared = entity with { IsSharedType = true };
         Assert.True(shared.IsSharedType);
     }
+
+    [Fact]
+    public void ApplyRelationships_PassesThroughJoinEntityFields()
+    {
+        var config = new RelationshipConfig(
+            "Post", "Tag", RelationshipKind.ManyToMany, "Tags", "Posts",
+            JoinEntityName: "PostTags",
+            JoinEntityIsSharedType: true,
+            JoinEntityRightForeignKey: new List<string> { "TagId" },
+            JoinEntityLeftForeignKey: new List<string> { "PostId" });
+
+        var relationship = Assert.Single(ModelMerger.ApplyRelationships(new List<RelationshipConfig> { config }));
+
+        Assert.True(relationship.JoinEntityIsSharedType);
+        Assert.Equal(new List<string> { "TagId" }, relationship.JoinEntityRightForeignKey);
+        Assert.Equal(new List<string> { "PostId" }, relationship.JoinEntityLeftForeignKey);
+    }
+
+    [Fact]
+    public void ApplyJoinEntityForeignKeyShadowProperties_AddsMissingObjectTypedShadowProperties()
+    {
+        var joinEntity = new EntityModel("PostTags", new List<PropertyModel>(), IsSharedType: true);
+        var relationship = new RelationshipModel(
+            "Post", "Tag", RelationshipKind.ManyToMany, "Tags", "Posts",
+            JoinEntityName: "PostTags",
+            JoinEntityIsSharedType: true,
+            JoinEntityRightForeignKey: new List<string> { "TagId" },
+            JoinEntityLeftForeignKey: new List<string> { "PostId" });
+
+        var result = ModelMerger.ApplyJoinEntityForeignKeyShadowProperties(
+            new List<EntityModel> { joinEntity }, new List<RelationshipModel> { relationship });
+
+        var updated = Assert.Single(result);
+        Assert.Contains(updated.Properties, p => p is { Name: "TagId", ClrType: "object", IsShadow: true });
+        Assert.Contains(updated.Properties, p => p is { Name: "PostId", ClrType: "object", IsShadow: true });
+    }
+
+    [Fact]
+    public void ApplyJoinEntityForeignKeyShadowProperties_DoesNotDuplicateAnAlreadyPresentProperty()
+    {
+        var joinEntity = new EntityModel(
+            "PostTags",
+            new List<PropertyModel> { new("TagId", "int", IsNullable: false, MaxLength: null, IsShadow: true) },
+            IsSharedType: true);
+        var relationship = new RelationshipModel(
+            "Post", "Tag", RelationshipKind.ManyToMany, "Tags", "Posts",
+            JoinEntityName: "PostTags",
+            JoinEntityIsSharedType: true,
+            JoinEntityRightForeignKey: new List<string> { "TagId" },
+            JoinEntityLeftForeignKey: new List<string> { "PostId" });
+
+        var result = ModelMerger.ApplyJoinEntityForeignKeyShadowProperties(
+            new List<EntityModel> { joinEntity }, new List<RelationshipModel> { relationship });
+
+        var updated = Assert.Single(result);
+        Assert.Single(updated.Properties, p => p.Name == "TagId");
+        Assert.Equal("int", updated.Properties.Single(p => p.Name == "TagId").ClrType);
+        Assert.Contains(updated.Properties, p => p is { Name: "PostId", ClrType: "object", IsShadow: true });
+    }
+
+    [Fact]
+    public void ApplyJoinEntityForeignKeyShadowProperties_NonSharedTypeEntity_IsUnaffected()
+    {
+        var entity = new EntityModel("Post", new List<PropertyModel>());
+
+        var result = ModelMerger.ApplyJoinEntityForeignKeyShadowProperties(
+            new List<EntityModel> { entity }, new List<RelationshipModel>());
+
+        Assert.Same(entity, Assert.Single(result));
+    }
 }
