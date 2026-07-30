@@ -1136,4 +1136,30 @@ public class ModelMergerTests
 
         Assert.Same(entity, Assert.Single(result));
     }
+
+    [Fact]
+    public void ApplyJoinEntityForeignKeyShadowProperties_AddsShadowPropertiesForHasKeyOnlyNames()
+    {
+        // Shared-type join entity configured only via `j.HasKey("PostId", "TagId")` - no
+        // Property<T> calls and no per-side FK lambda on the relationship - so the only
+        // source of these names is entity.KeyPropertyNames, not the relationship's FK lists.
+        var joinEntity = new EntityModel(
+            "PostTags",
+            new List<PropertyModel>(),
+            IsSharedType: true,
+            KeyPropertyNames: new List<string> { "PostId", "TagId" });
+        var relationship = new RelationshipModel(
+            "Post", "Tag", RelationshipKind.ManyToMany, "Tags", "Posts",
+            JoinEntityName: "PostTags",
+            JoinEntityIsSharedType: true,
+            JoinEntityRightForeignKey: new List<string>(),
+            JoinEntityLeftForeignKey: new List<string>());
+
+        var result = ModelMerger.ApplyJoinEntityForeignKeyShadowProperties(
+            new List<EntityModel> { joinEntity }, new List<RelationshipModel> { relationship });
+
+        var updated = Assert.Single(result);
+        Assert.Contains(updated.Properties, p => p is { Name: "PostId", ClrType: "object", IsShadow: true });
+        Assert.Contains(updated.Properties, p => p is { Name: "TagId", ClrType: "object", IsShadow: true });
+    }
 }

@@ -373,6 +373,7 @@ public static class ModelMerger
                 var existingNames = entity.Properties.Select(p => p.Name).ToHashSet();
                 var missingNames = relationship.JoinEntityRightForeignKey
                     .Concat(relationship.JoinEntityLeftForeignKey)
+                    .Concat(entity.KeyPropertyNames)
                     .Where(name => !existingNames.Contains(name))
                     .Distinct()
                     .ToList();
