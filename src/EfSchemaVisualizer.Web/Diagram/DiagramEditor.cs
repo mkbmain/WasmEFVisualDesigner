@@ -1417,6 +1417,10 @@ public sealed class DiagramEditor
             PrincipalKeyProperties = principalKeyProperties,
         };
 
+        var preservedUsingEntityArguments = relationship.IsInferred
+            ? null
+            : _configRewriter.TryCaptureUsingEntityArguments(ConfigSource, relationship);
+
         var withoutOld = relationship.IsInferred
             ? ConfigSource
             : _configRewriter.RemoveRelationship(ConfigSource, relationship);
@@ -1426,7 +1430,7 @@ public sealed class DiagramEditor
             return DiagramEditResult.Fail("Could not locate this relationship's existing configuration to update.");
         }
 
-        var withNew = _configRewriter.SetRelationship(withoutOld, updated);
+        var withNew = _configRewriter.SetRelationship(withoutOld, updated, preservedUsingEntityArguments);
         Apply(ClassSource, withNew);
         return DiagramEditResult.Ok();
     }
