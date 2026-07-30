@@ -1034,4 +1034,36 @@ public class ModelMergerTests
         Assert.Equal("\"S\"", ModelMerger.ApplyDiscriminatorValue(student, configs).DiscriminatorValue);
         Assert.Null(ModelMerger.ApplyDiscriminatorValue(teacher, configs).DiscriminatorValue);
     }
+
+    [Fact]
+    public void RelationshipModel_JoinEntityFields_DefaultToFalseAndEmpty()
+    {
+        var relationship = new RelationshipModel("Post", "Tag", RelationshipKind.ManyToMany, null, null);
+
+        Assert.False(relationship.JoinEntityIsSharedType);
+        Assert.Empty(relationship.JoinEntityRightForeignKey);
+        Assert.Empty(relationship.JoinEntityLeftForeignKey);
+
+        var withValues = relationship with
+        {
+            JoinEntityIsSharedType = true,
+            JoinEntityRightForeignKey = new List<string> { "TagId" },
+            JoinEntityLeftForeignKey = new List<string> { "PostId" },
+        };
+
+        Assert.True(withValues.JoinEntityIsSharedType);
+        Assert.Equal(new List<string> { "TagId" }, withValues.JoinEntityRightForeignKey);
+        Assert.Equal(new List<string> { "PostId" }, withValues.JoinEntityLeftForeignKey);
+    }
+
+    [Fact]
+    public void EntityModel_IsSharedType_DefaultsToFalse()
+    {
+        var entity = new EntityModel("PostTag", new List<PropertyModel>());
+
+        Assert.False(entity.IsSharedType);
+
+        var shared = entity with { IsSharedType = true };
+        Assert.True(shared.IsSharedType);
+    }
 }

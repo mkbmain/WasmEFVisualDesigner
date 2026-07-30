@@ -27,7 +27,8 @@ public sealed record EntityModel(
     MappingStrategy MappingStrategy = MappingStrategy.Tph,
     string? DiscriminatorPropertyName = null,
     string? DiscriminatorClrType = null,
-    string? DiscriminatorValue = null)
+    string? DiscriminatorValue = null,
+    bool IsSharedType = false)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();
