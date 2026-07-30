@@ -52,6 +52,19 @@
                         </label>
                     }
                 </div>
+                <div style="display: block;">
+                    Principal key:
+                    @foreach (var property in PrincipalProperties)
+                    {
+                        <label style="display: block;">
+                            <input type="checkbox" checked="@_principalKeyProperties.Contains(property.Name)"
+                                   @onchange="e => TogglePrincipalKeyProperty(property.Name, (bool)(e.Value ?? false))"
+                                   @onpointerdown:stopPropagation="true"
+                                   @onmousedown:stopPropagation="true" />
+                            @property.Name
+                        </label>
+                    }
+                </div>
                 <label style="display: block;">
                     On delete:
                     <select value="@_onDeleteBehavior" @onchange="e => CommitOnDeleteBehavior(e.Value?.ToString())">
@@ -93,12 +106,17 @@
     private bool _expanded;
     private RelationshipKind _kind;
     private List<string> _foreignKeyProperties = new();
+    private List<string> _principalKeyProperties = new();
     private string? _onDeleteBehavior;
     private string? _constraintName;
     private string? _error;
 
     private IEnumerable<PropertyModel> DependentProperties =>
         EditContext.Editor.Current.Entities.FirstOrDefault(e => e.Name == Label.Relationship.DependentEntity)?.Properties
+            ?? Enumerable.Empty<PropertyModel>();
+
+    private IEnumerable<PropertyModel> PrincipalProperties =>
+        EditContext.Editor.Current.Entities.FirstOrDefault(e => e.Name == Label.Relationship.PrincipalEntity)?.Properties
             ?? Enumerable.Empty<PropertyModel>();
 
     /// A rewriter bug can throw instead of returning a failed DiagramEditResult (e.g. F1: a
@@ -123,6 +141,7 @@
         {
             _kind = Label.Relationship.Kind;
             _foreignKeyProperties = Label.Relationship.ForeignKeyProperties.ToList();
+            _principalKeyProperties = Label.Relationship.PrincipalKeyProperties.ToList();
             _onDeleteBehavior = Label.Relationship.OnDeleteBehavior;
             _constraintName = Label.Relationship.ConstraintName;
             _error = null;
@@ -157,6 +176,23 @@
         await Commit();
     }
 
+    private async Task TogglePrincipalKeyProperty(string propertyName, bool include)
+    {
+        if (include)
+        {
+            if (!_principalKeyProperties.Contains(propertyName))
+            {
+                _principalKeyProperties.Add(propertyName);
+            }
+        }
+        else
+        {
+            _principalKeyProperties.Remove(propertyName);
+        }
+
+        await Commit();
+    }
+
     private async Task CommitOnDeleteBehavior(string? behavior)
     {
         _onDeleteBehavior = string.IsNullOrEmpty(behavior) ? null : behavior;
@@ -174,10 +210,14 @@
         var foreignKeyProperties = _kind == RelationshipKind.ManyToMany
             ? Array.Empty<string>()
             : _foreignKeyProperties.ToArray();
+        var principalKeyProperties = _kind == RelationshipKind.ManyToMany
+            ? Array.Empty<string>()
+            : _principalKeyProperties.ToArray();
         var onDeleteBehavior = _kind == RelationshipKind.ManyToMany ? null : _onDeleteBehavior;
         var constraintName = _kind == RelationshipKind.ManyToMany ? null : _constraintName;
 
-        var result = SafeEdit(() => EditContext.Editor.SetRelationshipShape(Label.Relationship, _kind, foreignKeyProperties, onDeleteBehavior, constraintName));
+        var result = SafeEdit(() => EditContext.Editor.SetRelationshipShape(
+            Label.Relationship, _kind, foreignKeyProperties, onDeleteBehavior, constraintName, principalKeyProperties));
         if (result.Success)
         {
             _error = null;
