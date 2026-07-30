@@ -52,6 +52,7 @@ public static class ModelValidityChecker
         foreach (var relationship in relationships)
         {
             CheckForeignKeyTargetsKeylessPrincipal(relationship, entitiesByName, diagnostics);
+            CheckPrincipalKeyReferencesMissingProperty(relationship, entitiesByName, diagnostics);
         }
 
         return diagnostics;
@@ -194,6 +195,45 @@ public static class ModelValidityChecker
         diagnostics.Add(new Diagnostic(
             DiagnosticCodes.ForeignKeyTargetsKeylessPrincipal,
             $"'{relationship.DependentEntity}' has a foreign key to '{relationship.PrincipalEntity}', which is keyless (HasNoKey) and has no key for the foreign key to target.",
+            relationship.DependentEntity,
+            PropertyName: null,
+            TextSpan.FromBounds(0, 0),
+            DiagnosticCategory.ModelValidity));
+    }
+
+    /// `HasPrincipalKey` naming a property that no longer exists on the principal entity —
+    /// typically left behind after the property was renamed or removed. Deliberately does
+    /// NOT check whether the named properties already form a declared key (PK or
+    /// `HasAlternateKey`): calling `HasPrincipalKey` on properties that aren't already a key
+    /// implicitly creates the alternate key for you at EF model-build time, so that shape is
+    /// valid, common usage — only a missing property is a genuine build-time failure.
+    private static void CheckPrincipalKeyReferencesMissingProperty(
+        RelationshipModel relationship,
+        Dictionary<string, EntityModel> entitiesByName,
+        List<Diagnostic> diagnostics)
+    {
+        if (relationship.PrincipalKeyProperties.Count == 0
+            || relationship.Kind is RelationshipKind.Inheritance or RelationshipKind.Owned)
+        {
+            return;
+        }
+
+        if (!entitiesByName.TryGetValue(relationship.PrincipalEntity, out var principal))
+        {
+            return;
+        }
+
+        var propertyNames = principal.Properties.Select(p => p.Name).ToHashSet();
+        var missing = relationship.PrincipalKeyProperties.Where(name => !propertyNames.Contains(name)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        var missingList = string.Join(", ", missing);
+        diagnostics.Add(new Diagnostic(
+            DiagnosticCodes.PrincipalKeyReferencesMissingProperty,
+            $"Relationship from '{relationship.DependentEntity}' references principal key propert{(missing.Count == 1 ? "y" : "ies")} '{missingList}' on '{relationship.PrincipalEntity}', which no longer exist on the entity.",
             relationship.DependentEntity,
             PropertyName: null,
             TextSpan.FromBounds(0, 0),

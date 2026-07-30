@@ -300,6 +300,87 @@ public class DiagramModelBuilderValidityTests
     }
 
     [Fact]
+    public void Build_PrincipalKeyReferencesRemovedProperty_EmitsDiagnostic()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+                public string Email { get; set; }
+                public ICollection<Order> Orders { get; set; }
+            }
+
+            public class Order
+            {
+                public int Id { get; set; }
+                public string CustomerCode { get; set; }
+                public Customer Customer { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(o => o.Customer)
+                            .WithMany(c => c.Orders)
+                            .HasForeignKey(o => o.CustomerCode)
+                            .HasPrincipalKey(c => c.Code);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.PrincipalKeyReferencesMissingProperty, diagnostic.Code);
+    }
+
+    [Fact]
+    public void Build_PrincipalKeyReferencesExistingNonKeyProperty_NoDiagnostic()
+    {
+        const string classSource = """
+            public class Customer
+            {
+                public int Id { get; set; }
+                public string Code { get; set; }
+                public ICollection<Order> Orders { get; set; }
+            }
+
+            public class Order
+            {
+                public int Id { get; set; }
+                public string CustomerCode { get; set; }
+                public Customer Customer { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Order>(entity =>
+                    {
+                        entity.HasOne(o => o.Customer)
+                            .WithMany(c => c.Orders)
+                            .HasForeignKey(o => o.CustomerCode)
+                            .HasPrincipalKey(c => c.Code);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
     public void Build_IndexReferencesRemovedProperty_EmitsDiagnostic()
     {
         const string classSource = """
