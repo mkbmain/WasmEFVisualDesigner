@@ -2011,7 +2011,36 @@ public sealed class FluentConfigParser
             }
         }
 
-        var joinEntityName = kind == RelationshipKind.ManyToMany ? FluentSyntaxHelpers.TryGetGenericTypeArgument(usingEntityCall) : null;
+        string? joinEntityName = null;
+        var joinEntityIsSharedType = false;
+        IReadOnlyList<string> joinEntityRightForeignKey = Array.Empty<string>();
+        IReadOnlyList<string> joinEntityLeftForeignKey = Array.Empty<string>();
+
+        if (kind == RelationshipKind.ManyToMany && usingEntityCall is not null)
+        {
+            var genericName = FluentSyntaxHelpers.TryGetGenericTypeArgument(usingEntityCall);
+            joinEntityName = genericName ?? FluentSyntaxHelpers.TryReadUsingEntityStringName(usingEntityCall);
+            joinEntityIsSharedType = genericName is null && joinEntityName is not null;
+
+            var lambdas = FluentSyntaxHelpers.GetUsingEntityLambdaArguments(usingEntityCall);
+            if (lambdas.Count is 2 or 3)
+            {
+                var (rightForeignKey, rightDiagnostic) = ReadUsingEntitySideForeignKey(lambdas[0], dependentEntity);
+                var (leftForeignKey, leftDiagnostic) = ReadUsingEntitySideForeignKey(lambdas[1], principalEntity);
+                joinEntityRightForeignKey = rightForeignKey;
+                joinEntityLeftForeignKey = leftForeignKey;
+
+                if (rightDiagnostic is not null)
+                {
+                    diagnostics.Add(rightDiagnostic);
+                }
+
+                if (leftDiagnostic is not null)
+                {
+                    diagnostics.Add(leftDiagnostic);
+                }
+            }
+        }
 
         results.Add(new RelationshipConfig(
             principalEntity,
@@ -2023,7 +2052,39 @@ public sealed class FluentConfigParser
             onDeleteBehavior,
             joinEntityName,
             constraintName,
-            principalKeyProperties));
+            principalKeyProperties,
+            joinEntityIsSharedType,
+            joinEntityRightForeignKey,
+            joinEntityLeftForeignKey));
+    }
+
+    /// Reads a `UsingEntity`'s per-side FK lambda (`right => right.HasOne<T>().WithMany().HasForeignKey(...)`)
+    /// for the property name(s) backing that side's foreign key. Returns an empty list (no diagnostic)
+    /// when the lambda has no `HasForeignKey` call at all — EF defaults to a shadow FK named by
+    /// convention in that case, which this tool doesn't need to compute since nothing was explicitly
+    /// configured. Returns an empty list plus a diagnostic when `HasForeignKey` is present but its
+    /// argument(s) can't be read as property names.
+    private static (IReadOnlyList<string> ForeignKey, Diagnostic? Diagnostic) ReadUsingEntitySideForeignKey(
+        AnonymousFunctionExpressionSyntax lambda, string entityName)
+    {
+        var hasForeignKeyCall = FluentSyntaxHelpers.FindCallsNamed(lambda, "HasForeignKey").FirstOrDefault();
+        if (hasForeignKeyCall is null)
+        {
+            return (Array.Empty<string>(), null);
+        }
+
+        var propertyNames = FluentSyntaxHelpers.TryReadPropertyNameList(hasForeignKeyCall);
+        if (propertyNames is not null)
+        {
+            return (propertyNames, null);
+        }
+
+        return (Array.Empty<string>(), new Diagnostic(
+            DiagnosticCodes.UnreadableUsingEntityForeignKeyArgument,
+            "UsingEntity's per-side HasForeignKey argument(s) could not be read as property name(s).",
+            entityName,
+            PropertyName: null,
+            hasForeignKeyCall.Span));
     }
 
     private static (string? EntityName, bool Resolved) ResolveRelatedEntity(
