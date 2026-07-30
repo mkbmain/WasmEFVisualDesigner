@@ -88,7 +88,6 @@ of the following, that configuration is silently dropped from the diagram —
 eye before trusting a regenerated file:
 
 - `HasDefaultValueSql` (only literal `HasDefaultValue` is read).
-- `HasPrincipalKey`.
 - `UsingEntity`'s nested join-entity configuration (the join entity itself is
   read/written, but calls chained inside its `UsingEntity(j => ...)` builder
   are not).

@@ -61,7 +61,7 @@ public class RoundTripFuzzTests
                     entity.HasKey(e => e.PostId);
                     entity.Property(e => e.Title).HasMaxLength(200);
                     entity.Property(e => e.Content).HasDefaultValue("");
-                    entity.HasOne(e => e.Blog).WithMany(b => b.Posts).HasForeignKey(e => e.BlogId);
+                    entity.HasOne(e => e.Blog).WithMany(b => b.Posts).HasForeignKey(e => e.BlogId).HasPrincipalKey(e => e.Url);
                 });
             }
         }
@@ -301,7 +301,7 @@ public class RoundTripFuzzTests
         // ...and Post's other, unrelated config lines are untouched too.
         Assert.Contains("entity.HasKey(e => e.PostId);", renamedConfigSource);
         Assert.Contains("entity.Property(e => e.Content).HasDefaultValue(\"\");", renamedConfigSource);
-        Assert.Contains("entity.HasOne(e => e.Blog).WithMany(b => b.Posts).HasForeignKey(e => e.BlogId);", renamedConfigSource);
+        Assert.Contains("entity.HasOne(e => e.Blog).WithMany(b => b.Posts).HasForeignKey(e => e.BlogId).HasPrincipalKey(e => e.Url);", renamedConfigSource);
 
         // Reparsing the regenerated source still resolves the untouched Blog config correctly.
         var reparsedIndex = new FluentConfigParser().ParseIndexes(renamedConfigSource).Value.Single(c => c.EntityName == "Blog");

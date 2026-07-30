@@ -617,9 +617,23 @@
       **Documented non-goals (out of scope):** `ValueConverter` instance overloads
       (`new SomeValueConverter()`), `ConverterMappingHints`, inferring a lambda
       conversion's provider type, and editing or removing a lambda-form conversion.
-- [ ] **`[found]` `HasPrincipalKey`.** Already noted as unsupported in the README;
+- [x] **`[found]` `HasPrincipalKey`.** Already noted as unsupported in the README;
       relevant now that alternate keys are parsed, since a relationship can
       legitimately target one.
+      — Fixed 2026-07-30. See
+      `docs/superpowers/specs/2026-07-30-has-principal-key-design.md`.
+      `HasPrincipalKey(...)` is now fully parsed (`FluentConfigParser.ParseRelationships`,
+      new `RelationshipConfig`/`RelationshipModel.PrincipalKeyProperties` field),
+      merged (`ModelMerger.ApplyRelationships`), rewritten
+      (`OnModelCreatingRewriter.AppendHasPrincipalKey`), and editable via
+      `DiagramEditor.SetRelationshipShape`'s new `newPrincipalKeyProperties`
+      parameter, with a matching "Principal key" checkbox list in
+      `RelationshipLinkLabel.razor`. New
+      `ModelValidityChecker.CheckPrincipalKeyReferencesMissingProperty` flags a
+      `HasPrincipalKey` property that no longer exists on the principal entity
+      (stale after rename/removal) — deliberately does not require the named
+      properties to already form a declared key, since EF implicitly creates
+      the alternate key itself when they don't.
 - [ ] **`[found]` `UsingEntity`'s nested join-entity configuration.** The join
       entity is read/written; calls chained inside `UsingEntity(j => ...)` are not.
 - [ ] **`[found]` `HasData` seed rows.** Flagged and preserved; entity rename now
