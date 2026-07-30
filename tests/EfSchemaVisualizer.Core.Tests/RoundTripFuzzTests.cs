@@ -459,4 +459,50 @@ public class RoundTripFuzzTests
         Assert.True(end >= 0, $"Could not find end of entity block for {entityName}");
         return source[start..(end + 3)];
     }
+
+    private const string ManyToManyWithUsingEntityClassSource = """
+        public class Post
+        {
+            public int Id { get; set; }
+            public string Title { get; set; }
+            public ICollection<Tag> Tags { get; set; }
+        }
+
+        public class Tag
+        {
+            public int Id { get; set; }
+            public ICollection<Post> Posts { get; set; }
+        }
+        """;
+
+    private const string ManyToManyWithUsingEntityConfigSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.Property(e => e.Title).HasMaxLength(200);
+                    entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                        j => j.HasKey("PostId", "TagId"));
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void EndToEnd_UnrelatedPropertyEdit_PreservesUsingEntityNestedConfig()
+    {
+        var editor = new EfSchemaVisualizer.Web.Diagram.DiagramEditor(
+            ManyToManyWithUsingEntityClassSource, ManyToManyWithUsingEntityConfigSource);
+
+        var titleResult = editor.SetMaxLength("Post", "Title", 250);
+        Assert.True(titleResult.Success);
+
+        Assert.Contains("UsingEntity<PostTag>(j => j.HasKey(\"PostId\", \"TagId\"))", editor.ConfigSource);
+
+        var rebuilt = EfSchemaVisualizer.Web.DiagramModelBuilder.Build(editor.ClassSource, editor.ConfigSource);
+        var joinEntity = Assert.Single(rebuilt.Entities, e => e.Name == "PostTag");
+        Assert.Equal(new List<string> { "PostId", "TagId" }, joinEntity.KeyPropertyNames);
+    }
 }
