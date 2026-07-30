@@ -86,6 +86,18 @@
             else if (Label.Relationship.JoinEntityName is not null)
             {
                 <div style="display: block;">Join entity: @Label.Relationship.JoinEntityName</div>
+                @if (Label.Relationship.JoinEntityRightForeignKey.Any())
+                {
+                    <div style="display: block; color: #888;" title="Read-only: configured via UsingEntity's per-side FK lambda in source.">
+                        Join FK to @Label.Relationship.DependentEntity: @string.Join(", ", Label.Relationship.JoinEntityRightForeignKey)
+                    </div>
+                }
+                @if (Label.Relationship.JoinEntityLeftForeignKey.Any())
+                {
+                    <div style="display: block; color: #888;" title="Read-only: configured via UsingEntity's per-side FK lambda in source.">
+                        Join FK to @Label.Relationship.PrincipalEntity: @string.Join(", ", Label.Relationship.JoinEntityLeftForeignKey)
+                    </div>
+                }
             }
             @if (_error is not null)
             {

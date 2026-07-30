@@ -2817,6 +2817,86 @@ public class OnModelCreatingRewriterTests
         Assert.Contains("entity.HasMany<Post>().WithMany().UsingEntity<BlogPost>()", result);
     }
 
+    private const string SourceWithUsingEntityConfigLambda = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Blog>(entity =>
+                {
+                    entity.HasMany<Post>().WithMany().UsingEntity<BlogPost>(j => j.HasKey("BlogId", "PostId"));
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void TryCaptureUsingEntityArguments_ManyToManyWithConfigLambda_CapturesArgumentListVerbatim()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.ManyToMany, null, null,
+            JoinEntityName: "BlogPost");
+
+        var captured = new OnModelCreatingRewriter()
+            .TryCaptureUsingEntityArguments(SourceWithUsingEntityConfigLambda, relationship);
+
+        Assert.NotNull(captured);
+        Assert.Equal("(j => j.HasKey(\"BlogId\", \"PostId\"))", captured!.ToString());
+    }
+
+    [Fact]
+    public void TryCaptureUsingEntityArguments_BareUsingEntity_ReturnsNull()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.ManyToMany, null, null,
+            JoinEntityName: "BlogPost");
+
+        var captured = new OnModelCreatingRewriter()
+            .TryCaptureUsingEntityArguments(SourceWithManyToManyRelationship, relationship);
+
+        Assert.Null(captured);
+    }
+
+    [Fact]
+    public void TryCaptureUsingEntityArguments_NotManyToMany_ReturnsNull()
+    {
+        var relationship = new RelationshipModel("Blog", "Post", RelationshipKind.OneToMany, null, null);
+
+        var captured = new OnModelCreatingRewriter()
+            .TryCaptureUsingEntityArguments(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Null(captured);
+    }
+
+    [Fact]
+    public void SetRelationship_ManyToMany_WithPreservedUsingEntityArguments_ReattachesThemVerbatim()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.ManyToMany, null, null,
+            JoinEntityName: "BlogPost", OnDeleteBehavior: null);
+
+        var captured = new OnModelCreatingRewriter()
+            .TryCaptureUsingEntityArguments(SourceWithUsingEntityConfigLambda, relationship);
+
+        var withoutOld = new OnModelCreatingRewriter().RemoveRelationship(SourceWithUsingEntityConfigLambda, relationship);
+        var result = new OnModelCreatingRewriter().SetRelationship(withoutOld, relationship, captured);
+
+        Assert.Contains("UsingEntity<BlogPost>(j => j.HasKey(\"BlogId\", \"PostId\"))", result);
+    }
+
+    [Fact]
+    public void SetRelationship_SharedTypeJoinEntity_EmitsStringNamedUsingEntity()
+    {
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.ManyToMany, null, null,
+            JoinEntityName: "BlogPosts", JoinEntityIsSharedType: true);
+
+        var result = new OnModelCreatingRewriter()
+            .SetRelationship(SourceWithNoRelationshipConfig, relationship);
+
+        Assert.Contains("entity.HasMany<Post>().WithMany().UsingEntity(\"BlogPosts\")", result);
+    }
+
     [Fact]
     public void SetRelationship_WithOnDelete_EmitsOnDeleteCall()
     {

@@ -345,6 +345,53 @@ public static class ModelMerger
         return entity with { Properties = entity.Properties.Concat(shadowProperties).ToList() };
     }
 
+    /// A UsingEntity per-side FK lambda (`right => right.HasOne&lt;T&gt;().WithMany().HasForeignKey("Name")`)
+    /// names a property by string, but unlike a `Property&lt;T&gt;("Name")` call (see
+    /// `ApplyShadowProperties`), it never states that property's CLR type — so any name it references
+    /// that isn't already present on the join entity (from an explicit `Property&lt;T&gt;()` call, or
+    /// from being a real class property for a non-shared-type join entity) gets a same-named,
+    /// `object`-typed shadow property synthesized here, purely so it has *something* to render/rename.
+    /// Only applies to shared-type join entities — a class-backed join entity's FK-referenced
+    /// properties are always already present (they're real class properties).
+    public static IReadOnlyList<EntityModel> ApplyJoinEntityForeignKeyShadowProperties(
+        IReadOnlyList<EntityModel> entities, IReadOnlyList<RelationshipModel> relationships)
+    {
+        return entities
+            .Select(entity =>
+            {
+                if (!entity.IsSharedType)
+                {
+                    return entity;
+                }
+
+                var relationship = relationships.FirstOrDefault(r => r.JoinEntityName == entity.Name);
+                if (relationship is null)
+                {
+                    return entity;
+                }
+
+                var existingNames = entity.Properties.Select(p => p.Name).ToHashSet();
+                var missingNames = relationship.JoinEntityRightForeignKey
+                    .Concat(relationship.JoinEntityLeftForeignKey)
+                    .Concat(entity.KeyPropertyNames)
+                    .Where(name => !existingNames.Contains(name))
+                    .Distinct()
+                    .ToList();
+
+                if (missingNames.Count == 0)
+                {
+                    return entity;
+                }
+
+                var newProperties = missingNames
+                    .Select(name => new PropertyModel(name, "object", IsNullable: true, MaxLength: null, IsShadow: true))
+                    .ToList();
+
+                return entity with { Properties = entity.Properties.Concat(newProperties).ToList() };
+            })
+            .ToList();
+    }
+
     /// Builds a property-name-keyed lookup of the configs belonging to `entityName`, in a single
     /// pass over `configs`. Where a property has more than one matching config, the first one
     /// (in list order) wins, matching the `FirstOrDefault` semantics this replaces.
@@ -386,7 +433,10 @@ public static class ModelMerger
                 c.OnDeleteBehavior,
                 c.JoinEntityName,
                 ConstraintName: c.ConstraintName,
-                PrincipalKeyProperties: c.PrincipalKeyProperties))
+                PrincipalKeyProperties: c.PrincipalKeyProperties,
+                JoinEntityIsSharedType: c.JoinEntityIsSharedType,
+                JoinEntityRightForeignKey: c.JoinEntityRightForeignKey,
+                JoinEntityLeftForeignKey: c.JoinEntityLeftForeignKey))
             .ToList();
     }
 

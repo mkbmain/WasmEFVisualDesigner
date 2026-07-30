@@ -155,6 +155,73 @@ public class FluentSyntaxHelpersTests
         Assert.Null(result);
     }
 
+    private static InvocationExpressionSyntax GetUsingEntityCall(string source)
+    {
+        var root = CSharpSyntaxTree.ParseText(source).GetCompilationUnitRoot();
+        return root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Single(i => i.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "UsingEntity" });
+    }
+
+    [Fact]
+    public void TryReadUsingEntityStringName_GenericForm_ReturnsNull()
+    {
+        var call = GetUsingEntityCall("""
+            class C { void M() { x.HasMany(y).WithMany(z).UsingEntity<PostTag>(); } }
+            """);
+
+        Assert.Null(FluentSyntaxHelpers.TryReadUsingEntityStringName(call));
+    }
+
+    [Fact]
+    public void TryReadUsingEntityStringName_StringForm_ReturnsLiteral()
+    {
+        var call = GetUsingEntityCall("""
+            class C { void M() { x.HasMany(y).WithMany(z).UsingEntity("PostTags"); } }
+            """);
+
+        Assert.Equal("PostTags", FluentSyntaxHelpers.TryReadUsingEntityStringName(call));
+    }
+
+    [Fact]
+    public void GetUsingEntityLambdaArguments_ThreeLambdaForm_ReturnsAllThreeInOrder()
+    {
+        var call = GetUsingEntityCall("""
+            class C
+            {
+                void M()
+                {
+                    x.HasMany(y).WithMany(z).UsingEntity<PostTag>(
+                        right => right.HasOne<Tag>(),
+                        left => left.HasOne<Post>(),
+                        j => j.HasKey("A", "B"));
+                }
+            }
+            """);
+
+        var lambdas = FluentSyntaxHelpers.GetUsingEntityLambdaArguments(call);
+
+        Assert.Equal(3, lambdas.Count);
+    }
+
+    [Fact]
+    public void GetUsingEntityLambdaArguments_StringNameAndOneLambda_SkipsTheStringLiteral()
+    {
+        var call = GetUsingEntityCall("""
+            class C
+            {
+                void M()
+                {
+                    x.HasMany(y).WithMany(z).UsingEntity("PostTags", j => j.HasKey("A", "B"));
+                }
+            }
+            """);
+
+        var lambdas = FluentSyntaxHelpers.GetUsingEntityLambdaArguments(call);
+
+        Assert.Single(lambdas);
+    }
+
     private static CompilationUnitSyntax ParseRoot(string source)
     {
         var tree = CSharpSyntaxTree.ParseText(source);

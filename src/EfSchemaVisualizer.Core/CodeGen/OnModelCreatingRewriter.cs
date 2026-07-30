@@ -1858,7 +1858,7 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    public string SetRelationship(string sourceCode, RelationshipModel relationship)
+    public string SetRelationship(string sourceCode, RelationshipModel relationship, ArgumentListSyntax? preservedUsingEntityArguments = null)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
@@ -1872,31 +1872,33 @@ public sealed class OnModelCreatingRewriter
 
         if (existingScope is not null)
         {
-            return InsertRelationshipStatement(root, existingScope, relationship);
+            return InsertRelationshipStatement(root, existingScope, relationship, preservedUsingEntityArguments);
         }
 
-        return InsertRelationshipEntityBlock(root, scopeEntityName, relationship);
+        return InsertRelationshipEntityBlock(root, scopeEntityName, relationship, preservedUsingEntityArguments);
     }
 
-    private static string InsertRelationshipStatement(CompilationUnitSyntax root, SyntaxNode scope, RelationshipModel relationship)
+    private static string InsertRelationshipStatement(
+        CompilationUnitSyntax root, SyntaxNode scope, RelationshipModel relationship, ArgumentListSyntax? preservedUsingEntityArguments)
     {
         var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
 
-        var newStatement = BuildRelationshipStatement(blockReceiverName, relationship);
+        var newStatement = BuildRelationshipStatement(blockReceiverName, relationship, preservedUsingEntityArguments);
         var newBlock = block.AddStatements(newStatement);
 
         var newRoot = root.ReplaceNode(block, newBlock);
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static string InsertRelationshipEntityBlock(CompilationUnitSyntax root, string scopeEntityName, RelationshipModel relationship)
+    private static string InsertRelationshipEntityBlock(
+        CompilationUnitSyntax root, string scopeEntityName, RelationshipModel relationship, ArgumentListSyntax? preservedUsingEntityArguments)
     {
         var method = FindOnModelCreatingMethod(root);
         var methodBody = method.Body
             ?? throw new InvalidOperationException("OnModelCreating has no method body.");
         var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
 
-        var statement = BuildRelationshipStatement("entity", relationship);
+        var statement = BuildRelationshipStatement("entity", relationship, preservedUsingEntityArguments);
         var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, scopeEntityName, SyntaxFactory.Block(statement));
 
         var newMethodBody = methodBody.AddStatements(entityBlockStatement);
@@ -1904,7 +1906,8 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
-    private static ExpressionStatementSyntax BuildRelationshipStatement(string blockReceiverName, RelationshipModel relationship)
+    private static ExpressionStatementSyntax BuildRelationshipStatement(
+        string blockReceiverName, RelationshipModel relationship, ArgumentListSyntax? preservedUsingEntityArguments = null)
     {
         ExpressionSyntax chain = SyntaxFactory.IdentifierName(blockReceiverName);
 
@@ -1915,7 +1918,7 @@ public sealed class OnModelCreatingRewriter
 
             if (relationship.JoinEntityName is not null)
             {
-                chain = BuildUsingEntityCall(chain, relationship.JoinEntityName);
+                chain = BuildUsingEntityCall(chain, relationship, preservedUsingEntityArguments);
             }
 
             return SyntaxFactory.ExpressionStatement(chain);
@@ -2071,15 +2074,26 @@ public sealed class OnModelCreatingRewriter
             SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(argument)));
     }
 
-    private static ExpressionSyntax BuildUsingEntityCall(ExpressionSyntax chain, string joinEntityName)
+    private static ExpressionSyntax BuildUsingEntityCall(
+        ExpressionSyntax chain, RelationshipModel relationship, ArgumentListSyntax? preservedArguments)
     {
-        var methodIdentifier = SyntaxFactory.GenericName(SyntaxFactory.Identifier("UsingEntity"))
-            .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(
-                SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.IdentifierName(joinEntityName))));
+        SimpleNameSyntax methodIdentifier = relationship.JoinEntityIsSharedType
+            ? SyntaxFactory.IdentifierName("UsingEntity")
+            : SyntaxFactory.GenericName(SyntaxFactory.Identifier("UsingEntity"))
+                .WithTypeArgumentList(SyntaxFactory.TypeArgumentList(
+                    SyntaxFactory.SingletonSeparatedList<TypeSyntax>(SyntaxFactory.IdentifierName(relationship.JoinEntityName!))));
+
+        var argumentList = preservedArguments
+            ?? (relationship.JoinEntityIsSharedType
+                ? SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
+                        SyntaxKind.StringLiteralExpression,
+                        SyntaxFactory.Literal(relationship.JoinEntityName!)))))
+                : SyntaxFactory.ArgumentList());
 
         return SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, chain, methodIdentifier),
-            SyntaxFactory.ArgumentList());
+            argumentList);
     }
 
     public string RemoveRelationship(string sourceCode, RelationshipModel relationship)
@@ -2087,6 +2101,54 @@ public sealed class OnModelCreatingRewriter
         var tree = CSharpSyntaxTree.ParseText(sourceCode);
         var root = tree.GetCompilationUnitRoot();
 
+        var matchingCall = FindRelationshipConfiguringCall(root, relationship);
+
+        if (matchingCall is null
+            || matchingCall.Ancestors().OfType<ExpressionStatementSyntax>().FirstOrDefault() is not { } statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    /// Captures a many-to-many relationship's existing `UsingEntity(...)` call arguments (its
+    /// lambdas/string name, verbatim syntax) before an edit removes and rebuilds the whole
+    /// `HasMany().WithMany().UsingEntity(...)` statement, so `SetRelationship` can re-attach them
+    /// unchanged instead of silently discarding hand-written join-entity configuration. Returns null
+    /// when the relationship isn't many-to-many, its statement can't be found, or it has no
+    /// `UsingEntity(...)` call at all (bare `HasMany().WithMany()`, or a brand-new relationship).
+    public ArgumentListSyntax? TryCaptureUsingEntityArguments(string sourceCode, RelationshipModel relationship)
+    {
+        if (relationship.Kind != RelationshipKind.ManyToMany)
+        {
+            return null;
+        }
+
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var matchingCall = FindRelationshipConfiguringCall(root, relationship);
+        if (matchingCall is null)
+        {
+            return null;
+        }
+
+        InvocationExpressionSyntax? usingEntityCall = null;
+        FluentSyntaxHelpers.WalkChainedTail(matchingCall, invocation =>
+        {
+            if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "UsingEntity" })
+            {
+                usingEntityCall = invocation;
+            }
+        });
+
+        return usingEntityCall?.ArgumentList;
+    }
+
+    private static InvocationExpressionSyntax? FindRelationshipConfiguringCall(CompilationUnitSyntax root, RelationshipModel relationship)
+    {
         var scopeEntityName = relationship.Kind == RelationshipKind.ManyToMany
             ? relationship.PrincipalEntity
             : relationship.DependentEntity;
@@ -2100,20 +2162,11 @@ public sealed class OnModelCreatingRewriter
 
         var scopes = FindConfigScopes(root, scopeEntityName);
 
-        var matchingCall = scopes
+        return scopes
             .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, methodName))
             .FirstOrDefault(call =>
                 HasGenericTypeArgument(call, otherEntityName)
                 || (expectedNavigation is not null && TryGetNavigationPropertyName(call) == expectedNavigation));
-
-        if (matchingCall is null
-            || matchingCall.Ancestors().OfType<ExpressionStatementSyntax>().FirstOrDefault() is not { } statement)
-        {
-            return sourceCode;
-        }
-
-        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
-        return newRoot.NormalizeWhitespace().ToFullString();
     }
 
     private static bool HasGenericTypeArgument(InvocationExpressionSyntax call, string typeName)

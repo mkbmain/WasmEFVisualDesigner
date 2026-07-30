@@ -1,3 +1,4 @@
+using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Web.Diagram;
 
 namespace EfSchemaVisualizer.Web.Tests.Diagram;
@@ -285,5 +286,49 @@ public class DiagramEditorTests
 
         Assert.Equal("Models/Blog.cs", editor.EntityFileOrigins["Blog"]);
         Assert.False(editor.EntityFileOrigins.ContainsKey("Post"));
+    }
+
+    [Fact]
+    public void SetRelationshipShape_ManyToManyWithUsingEntityConfig_UnrelatedEditPreservesNestedConfig()
+    {
+        const string classSource = """
+            public class Blog
+            {
+                public int Id { get; set; }
+                public ICollection<Post> Posts { get; set; }
+            }
+
+            public class Post
+            {
+                public int Id { get; set; }
+                public ICollection<Blog> Blogs { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Blog>(entity =>
+                    {
+                        entity.HasMany(b => b.Posts).WithMany(p => p.Blogs).UsingEntity<BlogPost>(j => j.HasKey("BlogId", "PostId"));
+                    });
+                }
+            }
+            """;
+
+        var editor = new DiagramEditor(classSource, configSource);
+        var relationship = editor.Current.Relationships.Single(r => r.Kind == RelationshipKind.ManyToMany);
+
+        var result = editor.SetRelationshipShape(
+            relationship,
+            RelationshipKind.ManyToMany,
+            newForeignKeyProperties: Array.Empty<string>(),
+            newOnDeleteBehavior: null,
+            newConstraintName: "SomeUnrelatedNameChangeThatDoesNothingForManyToMany");
+
+        Assert.True(result.Success);
+        Assert.Contains("UsingEntity<BlogPost>(j => j.HasKey(\"BlogId\", \"PostId\"))", editor.ConfigSource);
     }
 }

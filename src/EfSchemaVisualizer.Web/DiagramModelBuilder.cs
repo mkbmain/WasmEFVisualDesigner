@@ -112,7 +112,18 @@ public static class DiagramModelBuilder
             .Concat(indexes.Value)
             .ToList();
 
-        IReadOnlyList<EntityModel> mergedEntities = entityResult.Value
+        var sharedTypeJoinEntityNames = fluentRelationships.Value
+            .Where(c => c.JoinEntityIsSharedType && c.JoinEntityName is not null)
+            .Select(c => c.JoinEntityName!)
+            .Distinct()
+            .Where(name => entityResult.Value.All(e => e.Name != name))
+            .ToList();
+
+        var baseEntities = entityResult.Value
+            .Concat(sharedTypeJoinEntityNames.Select(name => new EntityModel(name, new List<PropertyModel>(), IsSharedType: true)))
+            .ToList();
+
+        IReadOnlyList<EntityModel> mergedEntities = baseEntities
             .Where(entity => !ignoredEntityNames.Contains(entity.Name))
             .Select(entity => ModelMerger.ApplyMaxLengths(entity, maxLengths.Value))
             .Select(entity => ModelMerger.ApplyPrecisions(entity, precisions.Value))
@@ -175,6 +186,7 @@ public static class DiagramModelBuilder
             .ToList();
 
         var relationshipModels = ModelMerger.ApplyRelationships(mergedRelationshipConfigs);
+        entities = ModelMerger.ApplyJoinEntityForeignKeyShadowProperties(entities, relationshipModels);
 
         var explicitRelationshipKeys = relationshipModels
             .Select(RelationshipModelDedupeKey)

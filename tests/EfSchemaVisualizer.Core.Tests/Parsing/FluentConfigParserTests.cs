@@ -2963,6 +2963,211 @@ public class FluentConfigParserTests
         Assert.Null(relationship.JoinEntityName);
     }
 
+    private const string SourceUsingEntityTwoLambdaForeignKeys = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                        right => right.HasOne<Tag>().WithMany().HasForeignKey("TagId"),
+                        left => left.HasOne<Post>().WithMany().HasForeignKey("PostId"));
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseRelationships_UsingEntityTwoLambdaForeignKeys_DoesNotProduceAPhantomRelationship()
+    {
+        var result = new FluentConfigParser().ParseRelationships(SourceUsingEntityTwoLambdaForeignKeys, PostTagEntities);
+
+        // Exactly one relationship: Post<->Tag many-to-many. The HasOne<Tag>()/HasOne<Post>() calls
+        // nested inside UsingEntity's per-side FK lambdas must NOT be read as separate relationships.
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(RelationshipKind.ManyToMany, relationship.Kind);
+        Assert.Equal("Post", relationship.PrincipalEntity);
+        Assert.Equal("Tag", relationship.DependentEntity);
+    }
+
+    private const string SourceUsingEntitySingleConfigLambda = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Post>(entity =>
+                {
+                    entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                        j => j.HasKey("PostId", "TagId"));
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseKeys_UsingEntitySingleConfigLambda_ReadsJoinEntityHasKey()
+    {
+        var result = new FluentConfigParser().ParseKeys(SourceUsingEntitySingleConfigLambda);
+
+        Assert.Empty(result.Diagnostics);
+        var key = Assert.Single(result.Value, k => k.EntityName == "PostTag");
+        Assert.Equal(new List<string> { "PostId", "TagId" }, key.PropertyNames);
+    }
+
+    [Fact]
+    public void ParseRelationships_UsingEntityStringName_SetsJoinEntityNameAndIsSharedType()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity("PostTags");
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal("PostTags", relationship.JoinEntityName);
+        Assert.True(relationship.JoinEntityIsSharedType);
+    }
+
+    [Fact]
+    public void ParseRelationships_UsingEntityGenericSingleConfigLambda_JoinEntityIsSharedTypeIsFalse()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                            j => j.HasKey("PostId", "TagId"));
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal("PostTag", relationship.JoinEntityName);
+        Assert.False(relationship.JoinEntityIsSharedType);
+    }
+
+    [Fact]
+    public void ParseRelationships_UsingEntityTwoLambdaForeignKeys_ReadsRightAndLeftForeignKeys()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                            right => right.HasOne<Tag>().WithMany().HasForeignKey("TagId"),
+                            left => left.HasOne<Post>().WithMany().HasForeignKey("PostId"));
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        Assert.Empty(result.Diagnostics);
+        var relationship = Assert.Single(result.Value);
+        Assert.Equal(new List<string> { "TagId" }, relationship.JoinEntityRightForeignKey);
+        Assert.Equal(new List<string> { "PostId" }, relationship.JoinEntityLeftForeignKey);
+    }
+
+    [Fact]
+    public void ParseRelationships_UsingEntityThreeLambdaForm_ReadsForeignKeysAndJoinConfig()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                            right => right.HasOne<Tag>().WithMany().HasForeignKey("TagId"),
+                            left => left.HasOne<Post>().WithMany().HasForeignKey("PostId"),
+                            j => j.HasKey("PostId", "TagId"));
+                    });
+                }
+            }
+            """;
+
+        var relationships = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+        var relationship = Assert.Single(relationships.Value);
+        Assert.Equal(new List<string> { "TagId" }, relationship.JoinEntityRightForeignKey);
+        Assert.Equal(new List<string> { "PostId" }, relationship.JoinEntityLeftForeignKey);
+
+        var keys = new FluentConfigParser().ParseKeys(source);
+        var key = Assert.Single(keys.Value, k => k.EntityName == "PostTag");
+        Assert.Equal(new List<string> { "PostId", "TagId" }, key.PropertyNames);
+    }
+
+    [Fact]
+    public void ParseRelationships_UsingEntityStringNameThreeLambdaForm_ReadsEverything()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity(
+                            "PostTags",
+                            right => right.HasOne<Tag>().WithMany().HasForeignKey("TagId"),
+                            left => left.HasOne<Post>().WithMany().HasForeignKey("PostId"),
+                            j => j.HasKey("PostId", "TagId"));
+                    });
+                }
+            }
+            """;
+
+        var relationships = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+        var relationship = Assert.Single(relationships.Value);
+        Assert.Equal("PostTags", relationship.JoinEntityName);
+        Assert.True(relationship.JoinEntityIsSharedType);
+        Assert.Equal(new List<string> { "TagId" }, relationship.JoinEntityRightForeignKey);
+        Assert.Equal(new List<string> { "PostId" }, relationship.JoinEntityLeftForeignKey);
+    }
+
+    [Fact]
+    public void ParseRelationships_UsingEntityUnreadableForeignKeyArgument_EmitsDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Post>(entity =>
+                    {
+                        entity.HasMany(p => p.Tags).WithMany(t => t.Posts).UsingEntity<PostTag>(
+                            right => right.HasOne<Tag>().WithMany().HasForeignKey(SomeHelper()),
+                            left => left.HasOne<Post>().WithMany().HasForeignKey("PostId"));
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParseRelationships(source, PostTagEntities);
+
+        Assert.Contains(result.Diagnostics, d => d.Code == DiagnosticCodes.UnreadableUsingEntityForeignKeyArgument);
+    }
+
     [Fact]
     public void ParseRelationships_EntityTypeConfigurationStyle_ResolvesOneToMany()
     {

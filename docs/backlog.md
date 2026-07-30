@@ -634,8 +634,54 @@
       (stale after rename/removal) — deliberately does not require the named
       properties to already form a declared key, since EF implicitly creates
       the alternate key itself when they don't.
-- [ ] **`[found]` `UsingEntity`'s nested join-entity configuration.** The join
+- [x] **`[found]` `UsingEntity`'s nested join-entity configuration.** The join
       entity is read/written; calls chained inside `UsingEntity(j => ...)` are not.
+      — Fixed 2026-07-30. See
+      `docs/superpowers/specs/2026-07-30-using-entity-design.md`.
+      All eight `UsingEntity` overload shapes are now parsed: generic `<T>` or
+      shared-type string-named join entity identity; bare, single join-entity-
+      config lambda, two per-side FK lambdas, or three-lambda combinations. The
+      join-entity-config lambda is now treated as its own configuration scope
+      (new `FluentSyntaxHelpers.FindUsingEntityNestedScopes`), so every existing
+      per-property parser reads `HasKey`/`HasColumnName`/`Property<T>(...)`/etc.
+      from it with no new extractor code — the same reuse this project already
+      used for `OwnsOne`/`OwnsMany`/`ComplexProperty`. New
+      `RelationshipModel.JoinEntityIsSharedType`/`JoinEntityRightForeignKey`/
+      `JoinEntityLeftForeignKey` model the per-side FK lambdas; new
+      `EntityModel.IsSharedType` marks a synthesized, class-less join entity for
+      the string-named form, populated by the existing merge pipeline plus a new
+      `ModelMerger.ApplyJoinEntityForeignKeyShadowProperties` for FK-referenced
+      property names with no explicit `Property<T>()` declaration. Also fixed a
+      pre-existing latent bug found while building this: `UsingEntity`'s per-side
+      FK lambdas were walked into by the generic relationship scanner with no
+      opaque boundary, so a nested `HasOne(...).WithMany(...)` inside one could
+      be misread as a second, phantom top-level relationship — `FindAllCalls`'s
+      walk now treats every `UsingEntity` lambda argument as an opaque boundary,
+      generalizing the single-lambda exclusion previously used only for
+      `OwnsOne`/`OwnsMany`/`ComplexProperty` builder lambdas.
+
+      Also fixed the write-path data-loss gap this item implied: editing a
+      many-to-many relationship's shape used to delete and fully rebuild the
+      `HasMany().WithMany().UsingEntity(...)` statement from scratch on *any*
+      edit, silently destroying hand-written join-entity config even when the
+      edit had nothing to do with it. New
+      `OnModelCreatingRewriter.TryCaptureUsingEntityArguments` captures the
+      existing `UsingEntity(...)` call's arguments verbatim before the old
+      statement is removed; `SetRelationship`/`DiagramEditor.SetRelationshipShape`
+      now re-attach them unchanged on every edit this pass ships (none of them
+      change FK/key config *inside* the lambdas, so preservation is always
+      exact, not partial regeneration).
+
+      **Documented non-goals (out of scope):** editing the join entity's
+      per-side FK properties or its shared-type-ness via the UI — read, modeled,
+      rendered, and round-trip-preserved, but changing them stays a hand-edit-
+      the-source operation for now; nested config beyond
+      `HasOne/WithMany/HasForeignKey` inside a per-side FK lambda (e.g. a
+      `.HasConstraintName(...)`/`.OnDelete(...)` chained there) isn't parsed
+      into a model field, though genuinely unrecognized calls there still fire
+      the standard diagnostic; a shared-type join entity's `ToTable(...)`
+      mapping works via the existing parser (no new code) but isn't specifically
+      tested by this pass.
 - [x] **`[found]` `HasData` seed rows.** — Fixed 2026-07-30.
       Entity rename already patched seed object-creation expressions
       (`OnModelCreatingRewriter.RenameEntityReferences`); property rename/remove
