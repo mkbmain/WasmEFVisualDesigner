@@ -788,15 +788,25 @@
 > undefined identifier. Someone with no C# experience cannot turn that into a
 > database.
 
-- [ ] **`[found]` Runnable project scaffold on download.** When the session
-      didn't originate from an uploaded zip, emit a complete, runnable folder:
-      `.csproj` referencing `Microsoft.EntityFrameworkCore.<provider>` +
-      `.Design`, a real `AppDbContext : DbContext` with a `DbSet<T>` per entity
-      and proper namespaces/usings, `appsettings.json` with a connection-string
-      placeholder, and a `README.md` with the three commands
-      (`dotnet restore` / `dotnet ef migrations add Init` /
-      `dotnet ef database update`). Provider choice (SQL Server / PostgreSQL /
-      SQLite) as a dropdown.
+- [x] **`[found]` Runnable project scaffold on download.** — Fixed 2026-07-31.
+      See `docs/superpowers/specs/2026-07-31-runnable-project-scaffold-design.md`
+      and `docs/superpowers/plans/2026-07-31-runnable-project-scaffold.md`.
+      New `Core.Archive.ScaffoldPlanner` detects which scaffold pieces a
+      project is missing (`.csproj`, `AppDbContext`, `AppDbContextFactory`,
+      `Program.cs`, `appsettings.json`, `README.md`) so an already-uploaded
+      project with some pieces present isn't clobbered; new
+      `ScaffoldTemplates` holds per-provider (SQL Server / PostgreSQL / SQLite)
+      `.csproj`/`appsettings.json`/`AppDbContextFactory`/`Program.cs`/`README.md`
+      text; new `ScaffoldGenerator.Generate` orchestrates planner + templates,
+      derives `DbSet<T>` names via pluralization, and wraps the model in a
+      real `AppDbContext : DbContext`. Wired into `Home.razor` via a scaffold
+      checkbox and provider dropdown on the download flow. Verified end-to-end
+      with `ScaffoldRoundTripTests` (one round trip per provider) plus unit
+      tests for the planner, templates, and generator. Two follow-up fixes
+      landed same day from final review: prevented the generator from
+      overwriting an existing `AppDbContextFactory.cs` when one was already
+      uploaded, and fixed a scaffold data-loss / non-compiling-output finding.
+      Full suite green (877 Core + 264 Web tests).
 - [ ] **`[found]` SQL DDL export.** A DBA would rather read `CREATE TABLE` than
       C#. Pure string generation over `DiagramModelResult`, the same shape as the
       existing `MermaidExporter` and trivially testable. Also doubles as the
