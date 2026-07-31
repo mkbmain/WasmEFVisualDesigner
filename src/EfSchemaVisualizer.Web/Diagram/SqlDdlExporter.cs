@@ -200,4 +200,18 @@ public static class SqlDdlExporter
             .Select(t => t.entity)
             .ToList();
     }
+
+    internal static string RenderCreateIndex(EntityModel entity, IndexModel index, ScaffoldProvider provider)
+    {
+        var indexName = index.Name ?? $"IX_{PhysicalTableName(entity)}_{string.Join("_", index.PropertyNames)}";
+        var uniqueKeyword = index.IsUnique ? "UNIQUE " : "";
+        var columns = string.Join(", ", index.PropertyNames.Select(c => QuoteIdentifier(c, provider)));
+
+        return $"CREATE {uniqueKeyword}INDEX {QuoteIdentifier(indexName, provider)} ON {QualifiedTableName(entity, provider)} ({columns});\n";
+    }
+
+    internal static bool IsSkippedTphMember(EntityModel entity, IReadOnlyList<EntityModel> allEntities) =>
+        entity.MappingStrategy == MappingStrategy.Tph &&
+        entity.BaseEntityName is not null &&
+        allEntities.Any(e => e.Name == entity.BaseEntityName);
 }

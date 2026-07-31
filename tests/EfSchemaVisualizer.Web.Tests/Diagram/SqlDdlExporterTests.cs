@@ -343,4 +343,74 @@ public class SqlDdlExporterTests
         Assert.Equal("PersonType", discriminator.Name);
         Assert.Equal("int", discriminator.ClrType);
     }
+
+    [Fact]
+    public void RenderCreateIndex_WithExplicitName_UsesIt()
+    {
+        var entity = Entity("Order", Column("Total", "decimal", isNullable: false));
+        var index = new IndexModel(new[] { "Total" }, IsUnique: false, Name: "IX_Order_Total");
+
+        var sql = SqlDdlExporter.RenderCreateIndex(entity, index, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("CREATE INDEX [IX_Order_Total] ON [Order] ([Total]);\n", sql);
+    }
+
+    [Fact]
+    public void RenderCreateIndex_NoExplicitName_SynthesizesConventionalName()
+    {
+        var entity = Entity("Order", Column("Total", "decimal", isNullable: false));
+        var index = new IndexModel(new[] { "Total" }, IsUnique: false);
+
+        var sql = SqlDdlExporter.RenderCreateIndex(entity, index, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("CREATE INDEX [IX_Order_Total] ON [Order] ([Total]);\n", sql);
+    }
+
+    [Fact]
+    public void RenderCreateIndex_Unique_EmitsUniqueKeyword()
+    {
+        var entity = Entity("User", Column("Email", "string", isNullable: false));
+        var index = new IndexModel(new[] { "Email" }, IsUnique: true, Name: "IX_User_Email");
+
+        var sql = SqlDdlExporter.RenderCreateIndex(entity, index, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("CREATE UNIQUE INDEX [IX_User_Email] ON [User] ([Email]);\n", sql);
+    }
+
+    [Fact]
+    public void RenderCreateIndex_MultipleColumns_JoinsWithComma()
+    {
+        var entity = Entity("OrderLine",
+            Column("OrderId", "int", isNullable: false), Column("LineNumber", "int", isNullable: false));
+        var index = new IndexModel(new[] { "OrderId", "LineNumber" }, IsUnique: true, Name: "IX_OrderLine_Composite");
+
+        var sql = SqlDdlExporter.RenderCreateIndex(entity, index, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("CREATE UNIQUE INDEX [IX_OrderLine_Composite] ON [OrderLine] ([OrderId], [LineNumber]);\n", sql);
+    }
+
+    [Fact]
+    public void IsSkippedTphMember_RootEntity_IsFalse()
+    {
+        var person = Entity("Person") with { MappingStrategy = MappingStrategy.Tph };
+        Assert.False(SqlDdlExporter.IsSkippedTphMember(person, new[] { person }));
+    }
+
+    [Fact]
+    public void IsSkippedTphMember_DerivedTphEntity_IsTrue()
+    {
+        var person = Entity("Person") with { MappingStrategy = MappingStrategy.Tph };
+        var student = Entity("Student") with { BaseEntityName = "Person", MappingStrategy = MappingStrategy.Tph };
+
+        Assert.True(SqlDdlExporter.IsSkippedTphMember(student, new[] { person, student }));
+    }
+
+    [Fact]
+    public void IsSkippedTphMember_DerivedTptEntity_IsFalse()
+    {
+        var person = Entity("Person") with { MappingStrategy = MappingStrategy.Tpt };
+        var student = Entity("Student") with { BaseEntityName = "Person", MappingStrategy = MappingStrategy.Tpt };
+
+        Assert.False(SqlDdlExporter.IsSkippedTphMember(student, new[] { person, student }));
+    }
 }
