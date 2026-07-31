@@ -110,6 +110,43 @@ public class HomeMarkupTests
             "The Escape check must appear before the isEditableTarget/ctrl-key check in handleUndoRedoKeydown, so Escape can't fall through into the undo/redo logic.");
     }
 
+    [Fact]
+    public void ScaffoldCheckbox_ExistsOutsideFullscreenToolbarOnly()
+    {
+        var markup = ReadHomeRazorSource();
+
+        Assert.Contains("_generateScaffold", markup);
+
+        var fullscreenBlock = ExtractFullscreenBlock(markup);
+        Assert.DoesNotContain("_generateScaffold", fullscreenBlock);
+
+        var nonFullscreenBlock = ExtractNonFullscreenBlock(markup);
+        Assert.Contains("_generateScaffold", nonFullscreenBlock);
+    }
+
+    [Fact]
+    public void ProviderDropdown_OnlyRendersWhenCsprojIsNeeded()
+    {
+        var markup = ReadHomeRazorSource();
+
+        Assert.Contains("NeedsCsproj", markup);
+        Assert.Contains("_selectedProvider", markup);
+    }
+
+    [Fact]
+    public void DownloadZip_CallsScaffoldGeneratorOnlyWhenCheckboxChecked()
+    {
+        var markup = ReadHomeRazorSource();
+
+        var methodIndex = markup.IndexOf("private async Task DownloadZip()", StringComparison.Ordinal);
+        Assert.True(methodIndex >= 0);
+
+        var methodBody = markup.Substring(methodIndex, 900);
+        Assert.Contains("if (_generateScaffold)", methodBody);
+        Assert.Contains("ScaffoldPlanner.Plan(", methodBody);
+        Assert.Contains("ScaffoldGenerator.Generate(", methodBody);
+    }
+
     private static string ExtractFullscreenBlock(string markup)
     {
         const string start = "@if (_isFullscreen)";
