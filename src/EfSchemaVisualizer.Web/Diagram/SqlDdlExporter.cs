@@ -215,6 +215,31 @@ public static class SqlDdlExporter
         entity.BaseEntityName is not null &&
         allEntities.Any(e => e.Name == entity.BaseEntityName);
 
+    /// <summary>
+    /// Walks from a (possibly TPH-derived) entity up its base-entity chain until it reaches the
+    /// entity whose merged table is actually emitted by <see cref="Export"/> — i.e. the first
+    /// entity that is not itself a skipped TPH member. Guards against cycles the same way
+    /// <see cref="CollectDescendants"/> does.
+    /// </summary>
+    internal static EntityModel ResolveTphTableEntity(EntityModel entity, IReadOnlyList<EntityModel> allEntities)
+    {
+        var current = entity;
+        var visited = new HashSet<string> { current.Name };
+
+        while (IsSkippedTphMember(current, allEntities) && current.BaseEntityName is { } baseName)
+        {
+            var baseEntity = allEntities.FirstOrDefault(e => e.Name == baseName);
+            if (baseEntity is null || !visited.Add(baseEntity.Name))
+            {
+                break;
+            }
+
+            current = baseEntity;
+        }
+
+        return current;
+    }
+
     internal static string RenderSequence(SequenceModel sequence, ScaffoldProvider provider)
     {
         if (provider == ScaffoldProvider.Sqlite)
@@ -294,7 +319,7 @@ public static class SqlDdlExporter
 
         foreach (var relationship in result.Relationships)
         {
-            AppendForeignKey(sb, relationship, byName, provider);
+            AppendForeignKey(sb, relationship, byName, physicalEntities, provider);
         }
 
         return sb.ToString();
@@ -309,17 +334,21 @@ public static class SqlDdlExporter
     }
 
     private static void AppendForeignKey(
-        StringBuilder sb, RelationshipModel relationship, Dictionary<string, EntityModel> byName, ScaffoldProvider provider)
+        StringBuilder sb, RelationshipModel relationship, Dictionary<string, EntityModel> byName,
+        IReadOnlyList<EntityModel> allEntities, ScaffoldProvider provider)
     {
         switch (relationship.Kind)
         {
             case RelationshipKind.OneToOne or RelationshipKind.OneToMany when relationship.ForeignKeyProperties.Count > 0:
             {
-                if (!byName.TryGetValue(relationship.DependentEntity, out var dependent) ||
-                    !byName.TryGetValue(relationship.PrincipalEntity, out var principal))
+                if (!byName.TryGetValue(relationship.DependentEntity, out var dependentRaw) ||
+                    !byName.TryGetValue(relationship.PrincipalEntity, out var principalRaw))
                 {
                     return;
                 }
+
+                var dependent = ResolveTphTableEntity(dependentRaw, allEntities);
+                var principal = ResolveTphTableEntity(principalRaw, allEntities);
 
                 var principalKeyColumns = relationship.PrincipalKeyProperties.Count > 0
                     ? relationship.PrincipalKeyProperties
@@ -350,18 +379,21 @@ public static class SqlDdlExporter
             case RelationshipKind.ManyToMany when relationship.JoinEntityName is not null:
             {
                 if (!byName.TryGetValue(relationship.JoinEntityName, out var join) ||
-                    !byName.TryGetValue(relationship.PrincipalEntity, out var left) ||
-                    !byName.TryGetValue(relationship.DependentEntity, out var right))
+                    !byName.TryGetValue(relationship.PrincipalEntity, out var leftRaw) ||
+                    !byName.TryGetValue(relationship.DependentEntity, out var rightRaw))
                 {
                     return;
                 }
 
+                var left = ResolveTphTableEntity(leftRaw, allEntities);
+                var right = ResolveTphTableEntity(rightRaw, allEntities);
+
                 AppendAlterTableForeignKey(
                     sb, join, left, relationship.JoinEntityLeftForeignKey, left.KeyPropertyNames,
-                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(left)}", provider);
+                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(left)}_{string.Join("_", relationship.JoinEntityLeftForeignKey)}", provider);
                 AppendAlterTableForeignKey(
                     sb, join, right, relationship.JoinEntityRightForeignKey, right.KeyPropertyNames,
-                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(right)}", provider);
+                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(right)}_{string.Join("_", relationship.JoinEntityRightForeignKey)}", provider);
                 return;
             }
         }

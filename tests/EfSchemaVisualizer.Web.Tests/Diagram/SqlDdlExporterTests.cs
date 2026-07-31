@@ -518,7 +518,75 @@ public class SqlDdlExporterTests
         var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
 
         Assert.Contains("CONSTRAINT [PK_PostTag] PRIMARY KEY ([PostsId], [TagsId])", sql);
-        Assert.Contains("ALTER TABLE [PostTag] ADD CONSTRAINT [FK_PostTag_Post] FOREIGN KEY ([PostsId]) REFERENCES [Post] ([Id]);", sql);
-        Assert.Contains("ALTER TABLE [PostTag] ADD CONSTRAINT [FK_PostTag_Tag] FOREIGN KEY ([TagsId]) REFERENCES [Tag] ([Id]);", sql);
+        Assert.Contains("ALTER TABLE [PostTag] ADD CONSTRAINT [FK_PostTag_Post_PostsId] FOREIGN KEY ([PostsId]) REFERENCES [Post] ([Id]);", sql);
+        Assert.Contains("ALTER TABLE [PostTag] ADD CONSTRAINT [FK_PostTag_Tag_TagsId] FOREIGN KEY ([TagsId]) REFERENCES [Tag] ([Id]);", sql);
+    }
+
+    [Fact]
+    public void Export_SelfReferencingManyToMany_ProducesTwoDistinctForeignKeyConstraintNames()
+    {
+        var user = Entity("User", Column("Id", "int", isNullable: false)) with { KeyPropertyNames = new[] { "Id" } };
+        var join = Entity("UserFriend",
+                Column("UserId", "int", isNullable: false),
+                Column("FriendId", "int", isNullable: false))
+            with { IsSharedType = true };
+        var relationship = new RelationshipModel(
+            "User", "User", RelationshipKind.ManyToMany, PrincipalNavigation: "Friends", DependentNavigation: "FriendedBy",
+            JoinEntityName: "UserFriend", JoinEntityIsSharedType: true,
+            JoinEntityLeftForeignKey: new[] { "UserId" }, JoinEntityRightForeignKey: new[] { "FriendId" });
+
+        var result = new DiagramModelResult(new[] { user, join }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        Assert.Contains("ALTER TABLE [UserFriend] ADD CONSTRAINT [FK_UserFriend_User_UserId] FOREIGN KEY ([UserId]) REFERENCES [User] ([Id]);", sql);
+        Assert.Contains("ALTER TABLE [UserFriend] ADD CONSTRAINT [FK_UserFriend_User_FriendId] FOREIGN KEY ([FriendId]) REFERENCES [User] ([Id]);", sql);
+    }
+
+    [Fact]
+    public void ResolveTphTableEntity_RootEntity_ReturnsItself()
+    {
+        var person = Entity("Person") with { MappingStrategy = MappingStrategy.Tph };
+
+        var resolved = SqlDdlExporter.ResolveTphTableEntity(person, new[] { person });
+
+        Assert.Same(person, resolved);
+    }
+
+    [Fact]
+    public void ResolveTphTableEntity_DerivedTphEntity_ResolvesToRoot()
+    {
+        var person = Entity("Person") with { MappingStrategy = MappingStrategy.Tph };
+        var student = Entity("Student") with { BaseEntityName = "Person", MappingStrategy = MappingStrategy.Tph };
+        var all = new[] { person, student };
+
+        var resolved = SqlDdlExporter.ResolveTphTableEntity(student, all);
+
+        Assert.Equal("Person", resolved.Name);
+    }
+
+    [Fact]
+    public void Export_ForeignKeyToTphDerivedType_ReferencesRootTableNotDerivedTable()
+    {
+        var person = Entity("Person", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+        var student = Entity("Student",
+                new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
+                Column("SchoolId", "int", isNullable: false))
+            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+        var school = Entity("School", Column("Id", "int", isNullable: false)) with { KeyPropertyNames = new[] { "Id" } };
+
+        var relationship = new RelationshipModel(
+            "School", "Student", RelationshipKind.OneToMany, PrincipalNavigation: "Students", DependentNavigation: "School",
+            ForeignKeyProperties: new[] { "SchoolId" });
+
+        var result = new DiagramModelResult(
+            new[] { person, student, school }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        Assert.Contains("ALTER TABLE [Person] ADD CONSTRAINT", sql);
+        Assert.DoesNotContain("ALTER TABLE [Student]", sql);
+        Assert.Contains("REFERENCES [School] ([Id]);", sql);
     }
 }
