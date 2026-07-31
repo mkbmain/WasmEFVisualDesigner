@@ -87,6 +87,58 @@ public static class SqlDdlExporter
         return "";
     }
 
+    internal static string RenderCreateTable(EntityModel entity, IReadOnlyList<string> primaryKeyColumnNames, ScaffoldProvider provider)
+    {
+        var sb = new StringBuilder();
+        sb.Append("CREATE TABLE ").Append(QualifiedTableName(entity, provider)).Append(" (\n");
+
+        var sqliteInlineAutoIncrement =
+            provider == ScaffoldProvider.Sqlite &&
+            primaryKeyColumnNames.Count == 1 &&
+            entity.Properties.FirstOrDefault(p => p.Name == primaryKeyColumnNames[0]) is { } solePk &&
+            IsIdentityCandidate(solePk);
+
+        var lines = new List<string>();
+
+        foreach (var property in entity.Properties)
+        {
+            var isSolePk = primaryKeyColumnNames.Count == 1 && property.Name == primaryKeyColumnNames[0];
+
+            if (sqliteInlineAutoIncrement && isSolePk)
+            {
+                var name = QuoteIdentifier(property.ColumnName ?? property.Name, provider);
+                lines.Add($"    {name} INTEGER PRIMARY KEY AUTOINCREMENT");
+                continue;
+            }
+
+            var isIdentityColumn = isSolePk && provider != ScaffoldProvider.Sqlite && IsIdentityCandidate(property);
+            lines.Add("    " + RenderColumnDefinition(property, isIdentityColumn, provider));
+        }
+
+        if (!entity.IsKeyless && primaryKeyColumnNames.Count > 0 && !sqliteInlineAutoIncrement)
+        {
+            var keyName = entity.KeyName ?? $"PK_{PhysicalTableName(entity)}";
+            var columns = string.Join(", ", primaryKeyColumnNames.Select(c => QuoteIdentifier(c, provider)));
+            lines.Add($"    CONSTRAINT {QuoteIdentifier(keyName, provider)} PRIMARY KEY ({columns})");
+        }
+
+        foreach (var check in entity.CheckConstraints)
+        {
+            lines.Add($"    CONSTRAINT {QuoteIdentifier(check.Name, provider)} CHECK ({check.Sql})");
+        }
+
+        foreach (var alternateKey in entity.AlternateKeys)
+        {
+            var akName = $"AK_{PhysicalTableName(entity)}_{string.Join("_", alternateKey)}";
+            var columns = string.Join(", ", alternateKey.Select(c => QuoteIdentifier(c, provider)));
+            lines.Add($"    CONSTRAINT {QuoteIdentifier(akName, provider)} UNIQUE ({columns})");
+        }
+
+        sb.Append(string.Join(",\n", lines));
+        sb.Append("\n);\n");
+        return sb.ToString();
+    }
+
     internal static List<EntityModel> SelectPhysicalEntities(IReadOnlyList<EntityModel> entities) =>
         entities.Where(e => e.ViewName is null && e.FunctionName is null).ToList();
 

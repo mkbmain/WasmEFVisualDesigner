@@ -183,4 +183,108 @@ public class SqlDdlExporterTests
 
         Assert.Equal(new[] { "A", "B" }, ordered.Select(e => e.Name));
     }
+
+    [Fact]
+    public void RenderCreateTable_SimpleEntity_SqlServer_EmitsColumnsAndPrimaryKey()
+    {
+        var entity = Entity("Blog",
+                Column("Id", "int", isNullable: false),
+                Column("Title", "string", isNullable: false, maxLength: 200))
+            with { KeyPropertyNames = new[] { "Id" } };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.SqlServer);
+
+        Assert.Equal(
+            "CREATE TABLE [Blog] (\n" +
+            "    [Id] int IDENTITY(1,1) NOT NULL,\n" +
+            "    [Title] nvarchar(200) NOT NULL,\n" +
+            "    CONSTRAINT [PK_Blog] PRIMARY KEY ([Id])\n" +
+            ");\n",
+            sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_ExplicitKeyName_UsesItForConstraintName()
+    {
+        var entity = Entity("Blog", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" }, KeyName = "PK_MyBlog" };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.SqlServer);
+
+        Assert.Contains("CONSTRAINT [PK_MyBlog] PRIMARY KEY ([Id])", sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_KeylessEntity_EmitsNoPrimaryKeyClause()
+    {
+        var entity = Entity("Report", Column("Value", "int", isNullable: false)) with { IsKeyless = true };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
+
+        Assert.DoesNotContain("PRIMARY KEY", sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_CheckConstraint_IsIncluded()
+    {
+        var entity = Entity("Order", Column("Total", "decimal", isNullable: false))
+            with
+            {
+                KeyPropertyNames = Array.Empty<string>(),
+                IsKeyless = true,
+                CheckConstraints = new[] { new CheckConstraintModel("CK_Order_Total", "[Total] >= 0") },
+            };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
+
+        Assert.Contains("CONSTRAINT [CK_Order_Total] CHECK ([Total] >= 0)", sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_AlternateKey_EmitsUniqueConstraint()
+    {
+        var entity = Entity("User", Column("Email", "string", isNullable: false, maxLength: 200))
+            with
+            {
+                KeyPropertyNames = Array.Empty<string>(),
+                IsKeyless = true,
+                AlternateKeys = new IReadOnlyList<string>[] { new[] { "Email" } },
+            };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
+
+        Assert.Contains("CONSTRAINT [AK_User_Email] UNIQUE ([Email])", sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_Sqlite_SoleIntegerIdentityPrimaryKey_UsesInlineAutoincrement()
+    {
+        var entity = Entity("Blog",
+                Column("Id", "int", isNullable: false),
+                Column("Title", "string", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" } };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.Sqlite);
+
+        Assert.Equal(
+            "CREATE TABLE \"Blog\" (\n" +
+            "    \"Id\" INTEGER PRIMARY KEY AUTOINCREMENT,\n" +
+            "    \"Title\" TEXT NOT NULL\n" +
+            ");\n",
+            sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_Sqlite_CompositePrimaryKey_UsesTrailingConstraintNotInline()
+    {
+        var entity = Entity("OrderLine",
+                Column("OrderId", "int", isNullable: false),
+                Column("LineNumber", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "OrderId", "LineNumber" } };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.Sqlite);
+
+        Assert.Contains("PRIMARY KEY (\"OrderId\", \"LineNumber\")", sql);
+        Assert.DoesNotContain("AUTOINCREMENT", sql);
+    }
 }
