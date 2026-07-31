@@ -122,6 +122,34 @@ public class ScaffoldPlannerTests
         Assert.True(plan.NeedsDbContextWrapper);
     }
 
+    [Fact]
+    public void Plan_ConfigSourceIsEntityTypeConfigurationClass_NeedsDbContextWrapperIsFalse()
+    {
+        // A very common real EF project shape: no fluent config lives inside the DbContext at
+        // all — it's all in IEntityTypeConfiguration<T> classes, and the DbContext itself just
+        // calls ApplyConfigurationsFromAssembly. This is already-structured C# and must not be
+        // indented wholesale into a synthesized OnModelCreating body (that produces non-compiling
+        // garbage — see Finding 1 of the final review).
+        const string configSource = """
+            using Microsoft.EntityFrameworkCore;
+            using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+            namespace MyApp.Configurations;
+
+            public class BlogConfiguration : IEntityTypeConfiguration<Blog>
+            {
+                public void Configure(EntityTypeBuilder<Blog> builder)
+                {
+                    builder.HasKey(b => b.Id);
+                }
+            }
+            """;
+
+        var plan = ScaffoldPlanner.Plan(configSource, passthroughFiles: null);
+
+        Assert.False(plan.NeedsDbContextWrapper);
+    }
+
     [Theory]
     [InlineData("Microsoft.EntityFrameworkCore.SqlServer", ScaffoldProvider.SqlServer)]
     [InlineData("Npgsql.EntityFrameworkCore.PostgreSQL", ScaffoldProvider.PostgreSql)]

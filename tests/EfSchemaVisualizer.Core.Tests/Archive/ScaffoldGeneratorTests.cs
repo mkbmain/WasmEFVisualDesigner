@@ -104,21 +104,24 @@ public class ScaffoldGeneratorTests
     }
 
     [Fact]
-    public void Generate_OnlyCsprojMissing_ProducesOnlyCsprojAndFactory()
+    public void Generate_OnlyCsprojMissingAndRealDbContextAlreadyExists_ProducesOnlyCsproj()
     {
+        // A hand-written DbContext already exists (NeedsDbContextWrapper: false) — we don't know
+        // its type name, so we must NOT emit a factory or Program.cs that assume "AppDbContext".
         var plan = new ScaffoldPlan(
-            NeedsCsproj: true, NeedsProgram: false, NeedsAppSettings: false,
+            NeedsCsproj: true, NeedsProgram: true, NeedsAppSettings: false,
             NeedsReadme: false, NeedsDbContextWrapper: false, DetectedProvider: null,
             NeedsDbContextFactory: true);
         var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
-        const string existingConfigSource = "public class AppDbContext : DbContext { }";
+        const string existingConfigSource = "public class BloggingContext : DbContext { }";
 
         var result = ScaffoldGenerator.Generate(
             plan, existingConfigSource, entities, "MyApp", ScaffoldProvider.Sqlite);
 
         Assert.Equal(existingConfigSource, result.ConfigSource);
-        Assert.Equal(new[] { "MyApp.csproj", "AppDbContextFactory.cs" }.OrderBy(x => x),
-            result.NewPassthroughFiles.Keys.OrderBy(x => x));
+        Assert.Equal(new[] { "MyApp.csproj" }, result.NewPassthroughFiles.Keys.OrderBy(x => x));
+        Assert.DoesNotContain("AppDbContextFactory.cs", result.NewPassthroughFiles.Keys);
+        Assert.DoesNotContain("Program.cs", result.NewPassthroughFiles.Keys);
     }
 
     [Fact]
@@ -135,6 +138,41 @@ public class ScaffoldGeneratorTests
             plan, existingConfigSource, entities, "MyApp", ScaffoldProvider.Sqlite);
 
         Assert.DoesNotContain("AppDbContextFactory.cs", result.NewPassthroughFiles.Keys);
+        Assert.Contains("MyApp.csproj", result.NewPassthroughFiles.Keys);
+    }
+
+    [Fact]
+    public void Generate_ProjectNameHasSpaces_SanitizesToValidIdentifierEverywhere()
+    {
+        var plan = new ScaffoldPlan(
+            NeedsCsproj: true, NeedsProgram: true, NeedsAppSettings: true,
+            NeedsReadme: true, NeedsDbContextWrapper: true, DetectedProvider: null,
+            NeedsDbContextFactory: true);
+        var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
+
+        var result = ScaffoldGenerator.Generate(
+            plan, "modelBuilder.Entity<Blog>(e => e.HasKey(x => x.Id));",
+            entities, "My Blog App", ScaffoldProvider.SqlServer);
+
+        Assert.Contains("namespace MyBlogApp;", result.ConfigSource);
+        Assert.Contains("MyBlogApp.csproj", result.NewPassthroughFiles.Keys);
+        Assert.All(result.NewPassthroughFiles.Keys, key => Assert.DoesNotContain(" ", key));
+    }
+
+    [Fact]
+    public void Generate_ProjectNameEmpty_FallsBackToMyApp()
+    {
+        var plan = new ScaffoldPlan(
+            NeedsCsproj: true, NeedsProgram: true, NeedsAppSettings: true,
+            NeedsReadme: true, NeedsDbContextWrapper: true, DetectedProvider: null,
+            NeedsDbContextFactory: true);
+        var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
+
+        var result = ScaffoldGenerator.Generate(
+            plan, "modelBuilder.Entity<Blog>(e => e.HasKey(x => x.Id));",
+            entities, "", ScaffoldProvider.SqlServer);
+
+        Assert.Contains("namespace MyApp;", result.ConfigSource);
         Assert.Contains("MyApp.csproj", result.NewPassthroughFiles.Keys);
     }
 }

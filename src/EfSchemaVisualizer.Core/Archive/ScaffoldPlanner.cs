@@ -45,7 +45,7 @@ public static class ScaffoldPlanner
         var needsReadme = !files.Keys.Any(path =>
             FileNameOf(path).Equals("README.md", StringComparison.OrdinalIgnoreCase));
 
-        var needsDbContextWrapper = !HasDbContextClass(configSource);
+        var needsDbContextWrapper = !HasAnyTypeDeclaration(configSource);
 
         var needsDbContextFactory = !files.Keys.Any(path =>
             FileNameOf(path).Equals("AppDbContextFactory.cs", StringComparison.OrdinalIgnoreCase));
@@ -68,7 +68,11 @@ public static class ScaffoldPlanner
         return slash >= 0 ? path[(slash + 1)..] : path;
     }
 
-    private static bool HasDbContextClass(string configSource)
+    /// True when configSource already contains ANY type declaration (a real DbContext, an
+    /// IEntityTypeConfiguration class, anything) — meaning it's already structured C# and must
+    /// not be indented into a synthesized OnModelCreating body. Only bare top-level statements
+    /// (the "paste fluent config directly" shape) need wrapping.
+    private static bool HasAnyTypeDeclaration(string configSource)
     {
         if (string.IsNullOrWhiteSpace(configSource))
         {
@@ -77,10 +81,7 @@ public static class ScaffoldPlanner
 
         var root = CSharpSyntaxTree.ParseText(configSource).GetCompilationUnitRoot();
 
-        return root.DescendantNodes()
-            .OfType<ClassDeclarationSyntax>()
-            .Any(classDeclaration => classDeclaration.BaseList?.Types.Any(baseType =>
-                baseType.Type.ToString().Contains("DbContext", StringComparison.Ordinal)) ?? false);
+        return root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any();
     }
 
     private static ScaffoldProvider? DetectProvider(string csprojText)

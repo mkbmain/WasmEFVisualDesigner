@@ -85,6 +85,8 @@ public static class ScaffoldGenerator
         string projectName,
         ScaffoldProvider provider)
     {
+        projectName = SanitizeProjectName(projectName);
+
         var newFiles = new Dictionary<string, byte[]>();
         var resultConfigSource = configSource;
 
@@ -103,21 +105,46 @@ public static class ScaffoldGenerator
             newFiles[$"{projectName}.csproj"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Csproj(projectName, provider));
         }
 
-        if (plan.NeedsProgram)
-        {
-            newFiles["Program.cs"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Program(projectName));
-        }
-
         if (plan.NeedsReadme)
         {
             newFiles["README.md"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Readme(projectName));
         }
 
-        if ((plan.NeedsDbContextWrapper || plan.NeedsCsproj) && plan.NeedsDbContextFactory)
+        // The factory and Program.cs both assume an AppDbContext we generated ourselves — only
+        // safe when NeedsDbContextWrapper is true, since that's the only case where we know the
+        // type actually exists (a hand-written DbContext under some other name may not).
+        if (plan.NeedsDbContextWrapper && plan.NeedsDbContextFactory)
         {
             newFiles["AppDbContextFactory.cs"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.DbContextFactory(projectName, provider));
         }
 
+        if (plan.NeedsProgram && plan.NeedsDbContextWrapper)
+        {
+            newFiles["Program.cs"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Program(projectName));
+        }
+
         return new ScaffoldResult(resultConfigSource, newFiles);
+    }
+
+    /// Makes a free-text project name safe to embed in a C# namespace/using directive and a zip
+    /// entry filename. Strips anything that isn't a letter, digit, or underscore; falls back to
+    /// (or prefixes with) "MyApp" if the result would be empty or start with a digit.
+    private static string SanitizeProjectName(string name)
+    {
+        var sanitized = new string((name ?? string.Empty)
+            .Where(c => char.IsLetterOrDigit(c) || c == '_')
+            .ToArray());
+
+        if (sanitized.Length == 0)
+        {
+            return "MyApp";
+        }
+
+        if (char.IsDigit(sanitized[0]))
+        {
+            return "MyApp" + sanitized;
+        }
+
+        return sanitized;
     }
 }
