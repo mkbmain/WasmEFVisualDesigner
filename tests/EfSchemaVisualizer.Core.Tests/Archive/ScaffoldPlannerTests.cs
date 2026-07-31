@@ -31,6 +31,7 @@ public class ScaffoldPlannerTests
         Assert.True(plan.NeedsReadme);
         Assert.True(plan.NeedsDbContextWrapper);
         Assert.Null(plan.DetectedProvider);
+        Assert.True(plan.NeedsDbContextFactory);
     }
 
     [Fact]
@@ -71,6 +72,26 @@ public class ScaffoldPlannerTests
         var plan = ScaffoldPlanner.Plan("modelBuilder.Entity<Blog>(e => e.HasKey(x => x.Id));", files);
 
         Assert.False(plan.NeedsReadme);
+    }
+
+    [Fact]
+    public void Plan_DbContextFactoryAlreadyPresentAtNestedPath_NeedsDbContextFactoryIsFalse()
+    {
+        var files = Files(("Data/AppDbContextFactory.cs", "// existing"));
+
+        var plan = ScaffoldPlanner.Plan("modelBuilder.Entity<Blog>(e => e.HasKey(x => x.Id));", files);
+
+        Assert.False(plan.NeedsDbContextFactory);
+    }
+
+    [Fact]
+    public void Plan_DbContextFactoryNotPresent_NeedsDbContextFactoryIsTrue()
+    {
+        var files = Files(("MyApp.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"));
+
+        var plan = ScaffoldPlanner.Plan("modelBuilder.Entity<Blog>(e => e.HasKey(x => x.Id));", files);
+
+        Assert.True(plan.NeedsDbContextFactory);
     }
 
     [Fact]

@@ -20,7 +20,8 @@ public sealed record ScaffoldPlan(
     bool NeedsAppSettings,
     bool NeedsReadme,
     bool NeedsDbContextWrapper,
-    ScaffoldProvider? DetectedProvider);
+    ScaffoldProvider? DetectedProvider,
+    bool NeedsDbContextFactory);
 
 /// Determines which scaffold pieces (.csproj, Program.cs, appsettings.json, README.md, a real
 /// DbContext class) are missing from a project about to be downloaded, so ScaffoldGenerator can
@@ -46,6 +47,9 @@ public static class ScaffoldPlanner
 
         var needsDbContextWrapper = !HasDbContextClass(configSource);
 
+        var needsDbContextFactory = !files.Keys.Any(path =>
+            FileNameOf(path).Equals("AppDbContextFactory.cs", StringComparison.OrdinalIgnoreCase));
+
         ScaffoldProvider? detectedProvider = null;
         if (!needsCsproj)
         {
@@ -54,7 +58,8 @@ public static class ScaffoldPlanner
         }
 
         return new ScaffoldPlan(
-            needsCsproj, needsProgram, needsAppSettings, needsReadme, needsDbContextWrapper, detectedProvider);
+            needsCsproj, needsProgram, needsAppSettings, needsReadme, needsDbContextWrapper, detectedProvider,
+            needsDbContextFactory);
     }
 
     private static string FileNameOf(string path)

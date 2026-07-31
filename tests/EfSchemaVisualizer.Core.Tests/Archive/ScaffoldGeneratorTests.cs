@@ -70,7 +70,8 @@ public class ScaffoldGeneratorTests
     {
         var plan = new ScaffoldPlan(
             NeedsCsproj: true, NeedsProgram: true, NeedsAppSettings: true,
-            NeedsReadme: true, NeedsDbContextWrapper: true, DetectedProvider: null);
+            NeedsReadme: true, NeedsDbContextWrapper: true, DetectedProvider: null,
+            NeedsDbContextFactory: true);
         var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
 
         var result = ScaffoldGenerator.Generate(
@@ -90,7 +91,8 @@ public class ScaffoldGeneratorTests
     {
         var plan = new ScaffoldPlan(
             NeedsCsproj: false, NeedsProgram: false, NeedsAppSettings: false,
-            NeedsReadme: false, NeedsDbContextWrapper: false, DetectedProvider: ScaffoldProvider.SqlServer);
+            NeedsReadme: false, NeedsDbContextWrapper: false, DetectedProvider: ScaffoldProvider.SqlServer,
+            NeedsDbContextFactory: false);
         var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
         const string existingConfigSource = "public class AppDbContext : DbContext { }";
 
@@ -106,7 +108,8 @@ public class ScaffoldGeneratorTests
     {
         var plan = new ScaffoldPlan(
             NeedsCsproj: true, NeedsProgram: false, NeedsAppSettings: false,
-            NeedsReadme: false, NeedsDbContextWrapper: false, DetectedProvider: null);
+            NeedsReadme: false, NeedsDbContextWrapper: false, DetectedProvider: null,
+            NeedsDbContextFactory: true);
         var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
         const string existingConfigSource = "public class AppDbContext : DbContext { }";
 
@@ -116,5 +119,22 @@ public class ScaffoldGeneratorTests
         Assert.Equal(existingConfigSource, result.ConfigSource);
         Assert.Equal(new[] { "MyApp.csproj", "AppDbContextFactory.cs" }.OrderBy(x => x),
             result.NewPassthroughFiles.Keys.OrderBy(x => x));
+    }
+
+    [Fact]
+    public void Generate_DbContextFactoryAlreadyPresent_DoesNotOverwriteIt()
+    {
+        var plan = new ScaffoldPlan(
+            NeedsCsproj: true, NeedsProgram: false, NeedsAppSettings: false,
+            NeedsReadme: false, NeedsDbContextWrapper: true, DetectedProvider: null,
+            NeedsDbContextFactory: false);
+        var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
+        const string existingConfigSource = "modelBuilder.Entity<Blog>(e => e.HasKey(x => x.Id));";
+
+        var result = ScaffoldGenerator.Generate(
+            plan, existingConfigSource, entities, "MyApp", ScaffoldProvider.Sqlite);
+
+        Assert.DoesNotContain("AppDbContextFactory.cs", result.NewPassthroughFiles.Keys);
+        Assert.Contains("MyApp.csproj", result.NewPassthroughFiles.Keys);
     }
 }

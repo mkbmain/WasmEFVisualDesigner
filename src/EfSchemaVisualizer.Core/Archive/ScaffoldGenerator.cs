@@ -113,7 +113,7 @@ public static class ScaffoldGenerator
             newFiles["README.md"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Readme(projectName));
         }
 
-        if (plan.NeedsDbContextWrapper || plan.NeedsCsproj)
+        if ((plan.NeedsDbContextWrapper || plan.NeedsCsproj) && plan.NeedsDbContextFactory)
         {
             newFiles["AppDbContextFactory.cs"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.DbContextFactory(projectName, provider));
         }
