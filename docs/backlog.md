@@ -807,11 +807,31 @@
       overwriting an existing `AppDbContextFactory.cs` when one was already
       uploaded, and fixed a scaffold data-loss / non-compiling-output finding.
       Full suite green (877 Core + 264 Web tests).
-- [ ] **`[found]` SQL DDL export.** A DBA would rather read `CREATE TABLE` than
-      C#. Pure string generation over `DiagramModelResult`, the same shape as the
-      existing `MermaidExporter` and trivially testable. Also doubles as the
-      fastest way for a DBA to sanity-check that the diagram matches what they
-      meant. Per-provider dialect can start with one and grow.
+- [x] **`[found]` SQL DDL export.** — Fixed 2026-07-31. A DBA would rather read
+      `CREATE TABLE` than C#. New `Diagram.SqlDdlExporter` (pure string
+      generation over `DiagramModelResult`, the same shape as the existing
+      `MermaidExporter`) renders `CREATE TABLE`/`CREATE INDEX`/`ALTER TABLE ...
+      FOREIGN KEY`/`CREATE SEQUENCE` DDL for SQL Server, PostgreSQL, and SQLite,
+      handling TPH/TPT/TPC inheritance, many-to-many join tables, computed
+      columns, check/alternate-key constraints, and `HasColumnName`/
+      `UseSequence()` configuration; `Diagram.SqlColumnTypeMapper` maps CLR
+      types to per-dialect column types. Wired into `Home.razor` via an
+      "Export SQL" button and dialect picker. A final whole-branch review
+      caught several correctness gaps that were fixed in the same pass:
+      constraint/index/FK clauses now resolve actual column names instead of
+      property names; TPT child tables no longer get an identity/autoincrement
+      on their inherited PK/FK column; TPH merging no longer emits a duplicate
+      discriminator column when it's mapped onto an existing property, and now
+      unions indexes/check constraints/alternate keys from derived entities;
+      `UseSequence()` properties render a dialect-appropriate
+      `DEFAULT NEXT VALUE FOR`/`nextval(...)` default (skipped with a comment
+      on SQLite); TPC hierarchies get a cautionary comment noting identity
+      values aren't unique across the hierarchy; decimal precision-without-
+      scale now defaults scale to 0 consistently between SQL Server and
+      PostgreSQL; an entity with no columns or constraints emits a skip
+      comment instead of syntactically invalid empty parens; and a duplicate,
+      unlabeled provider dropdown that appeared alongside the scaffold picker
+      was removed. Full suite green (877 Core + 391 Web tests).
 - [ ] **`[found]` New entities are unusable as minted.** `AddEntity` produces
       `public class NewEntity { }` — no key, no properties. EF refuses to build a
       model with a keyless entity that isn't `HasNoKey`. Mint an `int Id` primary

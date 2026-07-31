@@ -101,6 +101,59 @@ public class SqlDdlExporterTests
         Assert.Equal("[CreatedAt] datetime2 NOT NULL DEFAULT (GETUTCDATE())", line);
     }
 
+    [Fact]
+    public void RenderColumnDefinition_SequenceName_SqlServer_EmitsNextValueForDefault()
+    {
+        var property = Column("OrderNumber", clrType: "int", isNullable: false) with { SequenceName = "OrderNumbers" };
+
+        var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("[OrderNumber] int NOT NULL DEFAULT NEXT VALUE FOR [OrderNumbers]", line);
+    }
+
+    [Fact]
+    public void RenderColumnDefinition_SequenceNameWithSchema_SqlServer_QualifiesSequenceName()
+    {
+        var property = Column("OrderNumber", clrType: "int", isNullable: false)
+            with { SequenceName = "OrderNumbers", SequenceSchema = "sales" };
+
+        var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("[OrderNumber] int NOT NULL DEFAULT NEXT VALUE FOR [sales].[OrderNumbers]", line);
+    }
+
+    [Fact]
+    public void RenderColumnDefinition_SequenceName_Postgres_EmitsNextvalDefault()
+    {
+        var property = Column("OrderNumber", clrType: "int", isNullable: false)
+            with { SequenceName = "OrderNumbers", SequenceSchema = "sales" };
+
+        var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.PostgreSql);
+
+        Assert.Equal("\"OrderNumber\" integer NOT NULL DEFAULT nextval('sales.OrderNumbers')", line);
+    }
+
+    [Fact]
+    public void RenderColumnDefinition_SequenceName_Sqlite_HasNoDefaultAndNotesSkip()
+    {
+        var property = Column("OrderNumber", clrType: "int", isNullable: false) with { SequenceName = "OrderNumbers" };
+
+        var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.Sqlite);
+
+        Assert.Equal("\"OrderNumber\" INTEGER NOT NULL -- sequence \"OrderNumbers\" skipped: SQLite has no CREATE SEQUENCE equivalent", line);
+    }
+
+    [Fact]
+    public void RenderColumnDefinition_DefaultValueLiteralTakesPrecedenceOverSequenceName()
+    {
+        var property = Column("OrderNumber", clrType: "int", isNullable: false, defaultValueLiteral: "1")
+            with { SequenceName = "OrderNumbers" };
+
+        var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("[OrderNumber] int NOT NULL DEFAULT 1", line);
+    }
+
     [Theory]
     [InlineData(ScaffoldProvider.SqlServer, "[Total] int NOT NULL AS ([Price] * [Qty]) PERSISTED")]
     [InlineData(ScaffoldProvider.PostgreSql, "\"Total\" integer GENERATED ALWAYS AS ([Price] * [Qty]) STORED")]
@@ -345,6 +398,58 @@ public class SqlDdlExporterTests
     }
 
     [Fact]
+    public void BuildTphMergedEntity_DiscriminatorNameMatchesExistingProperty_DoesNotDuplicateColumn()
+    {
+        var person = Entity("Person", Column("Id", "int", isNullable: false), Column("Type", "string", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" }, DiscriminatorPropertyName = "Type" };
+        var student = Entity("Student", new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"))
+            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+
+        var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
+
+        Assert.Equal(1, merged.Properties.Count(p => p.Name == "Type"));
+    }
+
+    [Fact]
+    public void BuildTphMergedEntity_DescendantCheckConstraint_IsUnionedIntoMerged()
+    {
+        var person = Entity("Person", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" } };
+        var studentCheck = new CheckConstraintModel("CK_Student_Course", "[Course] IS NOT NULL");
+        var student = Entity("Student",
+                new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
+                Column("Course", "string", isNullable: false))
+            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, CheckConstraints = new[] { studentCheck } };
+
+        var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
+
+        Assert.Contains(merged.CheckConstraints, c => c.Name == "CK_Student_Course");
+    }
+
+    [Fact]
+    public void BuildTphMergedEntity_DescendantIndexAndAlternateKey_AreUnionedIntoMerged()
+    {
+        var person = Entity("Person", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" } };
+        var studentIndex = new IndexModel(new[] { "Course" }, IsUnique: false, Name: "IX_Student_Course");
+        var student = Entity("Student",
+                new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
+                Column("Course", "string", isNullable: false))
+            with
+            {
+                BaseEntityName = "Person",
+                KeyPropertyNames = new[] { "Id" },
+                Indexes = new[] { studentIndex },
+                AlternateKeys = new IReadOnlyList<string>[] { new[] { "Course" } },
+            };
+
+        var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
+
+        Assert.Contains(merged.Indexes, i => i.Name == "IX_Student_Course");
+        Assert.Contains(merged.AlternateKeys, ak => ak.SequenceEqual(new[] { "Course" }));
+    }
+
+    [Fact]
     public void RenderCreateIndex_WithExplicitName_UsesIt()
     {
         var entity = Entity("Order", Column("Total", "decimal", isNullable: false));
@@ -497,6 +602,101 @@ public class SqlDdlExporterTests
         Assert.Contains("CREATE TABLE [Person]", sql);
         Assert.Contains("CREATE TABLE [Student]", sql);
         Assert.Contains("ALTER TABLE [Student] ADD CONSTRAINT [FK_Student_Person] FOREIGN KEY ([Id]) REFERENCES [Person] ([Id]);", sql);
+
+        var studentTableStart = sql.IndexOf("CREATE TABLE [Student]", StringComparison.Ordinal);
+        var studentTableEnd = sql.IndexOf(");\n", studentTableStart, StringComparison.Ordinal);
+        var studentTableSql = sql[studentTableStart..studentTableEnd];
+        Assert.DoesNotContain("IDENTITY", studentTableSql);
+        Assert.DoesNotContain("GENERATED ALWAYS AS IDENTITY", studentTableSql);
+        Assert.DoesNotContain("AUTOINCREMENT", studentTableSql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_TptChildEntity_SuppressesIdentityOnSharedPk()
+    {
+        var student = Entity("Student", Column("Id", "int", isNullable: false), Column("Course", "string", isNullable: false))
+            with { BaseEntityName = "Person", MappingStrategy = MappingStrategy.Tpt, KeyPropertyNames = new[] { "Id" } };
+
+        var sqlServerSql = SqlDdlExporter.RenderCreateTable(student, student.KeyPropertyNames, ScaffoldProvider.SqlServer);
+        var postgresSql = SqlDdlExporter.RenderCreateTable(student, student.KeyPropertyNames, ScaffoldProvider.PostgreSql);
+        var sqliteSql = SqlDdlExporter.RenderCreateTable(student, student.KeyPropertyNames, ScaffoldProvider.Sqlite);
+
+        Assert.DoesNotContain("IDENTITY", sqlServerSql);
+        Assert.DoesNotContain("GENERATED ALWAYS AS IDENTITY", postgresSql);
+        Assert.DoesNotContain("AUTOINCREMENT", sqliteSql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_TpcEntity_EmitsCautionaryCommentAboveCreateTable()
+    {
+        var entity = Entity("Car", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpc };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.SqlServer);
+
+        Assert.Contains(
+            "-- NOTE: TPC identity columns are independent per table; primary keys are not guaranteed unique across the whole hierarchy without a shared sequence.",
+            sql);
+        Assert.True(sql.IndexOf("-- NOTE", StringComparison.Ordinal) < sql.IndexOf("CREATE TABLE", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RenderCreateTable_EmptyEntityWithNoConstraints_EmitsCommentInsteadOfInvalidSql()
+    {
+        var entity = Entity("Empty") with { IsKeyless = true };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
+
+        Assert.StartsWith("--", sql);
+        Assert.DoesNotContain("(\n\n)", sql);
+        Assert.Contains("Skipped", sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_HasColumnName_UsesColumnNameForPkConstraintIndexAndForeignKey()
+    {
+        var blog = Entity("Blog", Column("Id", "int", isNullable: false) with { ColumnName = "BlogKey" })
+            with
+            {
+                KeyPropertyNames = new[] { "Id" },
+                Indexes = new[] { new IndexModel(new[] { "Id" }, IsUnique: false) },
+            };
+        var post = Entity("Post",
+                Column("Id", "int", isNullable: false),
+                Column("BlogId", "int", isNullable: false) with { ColumnName = "BlogFk" })
+            with { KeyPropertyNames = new[] { "Id" } };
+
+        var createSql = SqlDdlExporter.RenderCreateTable(blog, blog.KeyPropertyNames, ScaffoldProvider.SqlServer);
+        Assert.Contains("[BlogKey] int IDENTITY(1,1) NOT NULL", createSql);
+        Assert.Contains("CONSTRAINT [PK_Blog] PRIMARY KEY ([BlogKey])", createSql);
+        Assert.DoesNotContain("[Id]", createSql);
+
+        var indexSql = SqlDdlExporter.RenderCreateIndex(blog, blog.Indexes[0], ScaffoldProvider.SqlServer);
+        Assert.Contains("([BlogKey])", indexSql);
+
+        var relationship = new RelationshipModel(
+            "Blog", "Post", OneToMany, PrincipalNavigation: null, DependentNavigation: null,
+            ForeignKeyProperties: new[] { "BlogId" }, ConstraintName: "FK_Post_Blog_BlogId");
+        var result = new DiagramModelResult(new[] { blog, post }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        Assert.Contains("ALTER TABLE [Post] ADD CONSTRAINT [FK_Post_Blog_BlogId] FOREIGN KEY ([BlogFk]) REFERENCES [Blog] ([BlogKey]);", sql);
+    }
+
+    [Fact]
+    public void RenderCreateTable_AlternateKey_WithColumnName_UsesColumnNameInUniqueConstraint()
+    {
+        var entity = Entity("User", Column("Email", "string", isNullable: false, maxLength: 200) with { ColumnName = "EmailAddress" })
+            with
+            {
+                KeyPropertyNames = Array.Empty<string>(),
+                IsKeyless = true,
+                AlternateKeys = new IReadOnlyList<string>[] { new[] { "Email" } },
+            };
+
+        var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
+
+        Assert.Contains("CONSTRAINT [AK_User_Email] UNIQUE ([EmailAddress])", sql);
     }
 
     [Fact]

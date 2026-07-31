@@ -38,7 +38,9 @@ internal static class SqlColumnTypeMapper
         "short" => "smallint",
         "byte" => "tinyint",
         "bool" => "bit",
-        "decimal" => $"decimal({property.Precision ?? 18},{property.Scale ?? 2})",
+        "decimal" => property.Precision is int precision
+            ? $"decimal({precision},{property.Scale ?? 0})"
+            : $"decimal(18,{property.Scale ?? 2})",
         "double" => "float",
         "float" => "real",
         "string" => SqlServerStringType(property),

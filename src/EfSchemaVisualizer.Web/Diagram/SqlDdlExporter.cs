@@ -20,6 +20,19 @@ public static class SqlDdlExporter
 
     internal static string PhysicalTableName(EntityModel entity) => entity.TableName ?? entity.Name;
 
+    /// <summary>
+    /// Resolves the physical column name for a property on <paramref name="entity"/> by name,
+    /// falling back to the property name itself when the property isn't found or has no explicit
+    /// <see cref="PropertyModel.ColumnName"/> — the same <c>ColumnName ?? Name</c> resolution rule
+    /// used elsewhere in the codebase (e.g. <c>ModelValidityChecker</c>). Every identifier-emitting
+    /// site that receives a raw property name (PK/AK constraints, indexes, foreign keys) must route
+    /// through this before quoting, since <c>KeyPropertyNames</c>/<c>AlternateKeys</c>/
+    /// <c>IndexModel.PropertyNames</c>/<c>ForeignKeyProperties</c>/<c>PrincipalKeyProperties</c> are
+    /// all property names, not column names.
+    /// </summary>
+    internal static string ColumnNameOf(EntityModel entity, string propertyName) =>
+        entity.Properties.FirstOrDefault(p => p.Name == propertyName)?.ColumnName ?? propertyName;
+
     internal static string QualifiedTableName(EntityModel entity, ScaffoldProvider provider)
     {
         var table = QuoteIdentifier(PhysicalTableName(entity), provider);
@@ -49,7 +62,7 @@ public static class SqlDdlExporter
         }
 
         var identity = isSoleIntegerIdentityPrimaryKey ? IdentityClause(provider) : "";
-        var defaultClause = RenderDefaultClause(property);
+        var defaultClause = RenderDefaultClause(property, provider);
 
         return $"{name} {sqlType}{identity} {nullability}{defaultClause}";
     }
@@ -72,7 +85,7 @@ public static class SqlDdlExporter
         _ => "",
     };
 
-    private static string RenderDefaultClause(PropertyModel property)
+    private static string RenderDefaultClause(PropertyModel property, ScaffoldProvider provider)
     {
         if (property.DefaultValueLiteral is not null)
         {
@@ -84,16 +97,52 @@ public static class SqlDdlExporter
             return $" DEFAULT ({property.DefaultValueSql})";
         }
 
+        if (property.SequenceName is not null)
+        {
+            return RenderSequenceDefaultClause(property, provider);
+        }
+
         return "";
+    }
+
+    /// <summary>
+    /// Renders the column default for a property configured via <c>UseSequence()</c>. SQLite has
+    /// no sequence concept, so it gets a plain column with no default and an inline comment noting
+    /// the sequence was skipped (consistent with <see cref="RenderSequence"/>'s SQLite handling).
+    /// </summary>
+    private static string RenderSequenceDefaultClause(PropertyModel property, ScaffoldProvider provider)
+    {
+        if (provider == ScaffoldProvider.Sqlite)
+        {
+            return $" -- sequence \"{property.SequenceName}\" skipped: SQLite has no CREATE SEQUENCE equivalent";
+        }
+
+        var plainQualifiedName = property.SequenceSchema is not null
+            ? $"{property.SequenceSchema}.{property.SequenceName}"
+            : property.SequenceName;
+
+        var quotedQualifiedName = property.SequenceSchema is not null
+            ? $"{QuoteIdentifier(property.SequenceSchema, provider)}.{QuoteIdentifier(property.SequenceName!, provider)}"
+            : QuoteIdentifier(property.SequenceName!, provider);
+
+        return provider switch
+        {
+            ScaffoldProvider.SqlServer => $" DEFAULT NEXT VALUE FOR {quotedQualifiedName}",
+            ScaffoldProvider.PostgreSql => $" DEFAULT nextval('{plainQualifiedName}')",
+            _ => "",
+        };
     }
 
     internal static string RenderCreateTable(EntityModel entity, IReadOnlyList<string> primaryKeyColumnNames, ScaffoldProvider provider)
     {
-        var sb = new StringBuilder();
-        sb.Append("CREATE TABLE ").Append(QualifiedTableName(entity, provider)).Append(" (\n");
+        // A TPT child's PK column is inherited from the root AND is a foreign key back to the
+        // parent table — it must never generate its own value, so identity/autoincrement is
+        // suppressed for any non-root TPT member.
+        var isTptChild = entity.BaseEntityName is not null && entity.MappingStrategy == MappingStrategy.Tpt;
 
         var sqliteInlineAutoIncrement =
             provider == ScaffoldProvider.Sqlite &&
+            !isTptChild &&
             primaryKeyColumnNames.Count == 1 &&
             entity.Properties.FirstOrDefault(p => p.Name == primaryKeyColumnNames[0]) is { } solePk &&
             IsIdentityCandidate(solePk);
@@ -111,14 +160,14 @@ public static class SqlDdlExporter
                 continue;
             }
 
-            var isIdentityColumn = isSolePk && provider != ScaffoldProvider.Sqlite && IsIdentityCandidate(property);
+            var isIdentityColumn = !isTptChild && isSolePk && provider != ScaffoldProvider.Sqlite && IsIdentityCandidate(property);
             lines.Add("    " + RenderColumnDefinition(property, isIdentityColumn, provider));
         }
 
         if (!entity.IsKeyless && primaryKeyColumnNames.Count > 0 && !sqliteInlineAutoIncrement)
         {
             var keyName = entity.KeyName ?? $"PK_{PhysicalTableName(entity)}";
-            var columns = string.Join(", ", primaryKeyColumnNames.Select(c => QuoteIdentifier(c, provider)));
+            var columns = string.Join(", ", primaryKeyColumnNames.Select(c => QuoteIdentifier(ColumnNameOf(entity, c), provider)));
             lines.Add($"    CONSTRAINT {QuoteIdentifier(keyName, provider)} PRIMARY KEY ({columns})");
         }
 
@@ -130,10 +179,25 @@ public static class SqlDdlExporter
         foreach (var alternateKey in entity.AlternateKeys)
         {
             var akName = $"AK_{PhysicalTableName(entity)}_{string.Join("_", alternateKey)}";
-            var columns = string.Join(", ", alternateKey.Select(c => QuoteIdentifier(c, provider)));
+            var columns = string.Join(", ", alternateKey.Select(c => QuoteIdentifier(ColumnNameOf(entity, c), provider)));
             lines.Add($"    CONSTRAINT {QuoteIdentifier(akName, provider)} UNIQUE ({columns})");
         }
 
+        if (lines.Count == 0)
+        {
+            // Degenerate case: no columns and no constraints would otherwise produce
+            // "CREATE TABLE [X] (\n\n);\n", which is invalid SQL in every dialect.
+            return $"-- Skipped CREATE TABLE {QualifiedTableName(entity, provider)}: entity has no columns or constraints to emit.\n";
+        }
+
+        var sb = new StringBuilder();
+
+        if (entity.MappingStrategy == MappingStrategy.Tpc)
+        {
+            sb.Append("-- NOTE: TPC identity columns are independent per table; primary keys are not guaranteed unique across the whole hierarchy without a shared sequence.\n");
+        }
+
+        sb.Append("CREATE TABLE ").Append(QualifiedTableName(entity, provider)).Append(" (\n");
         sb.Append(string.Join(",\n", lines));
         sb.Append("\n);\n");
         return sb.ToString();
@@ -170,6 +234,18 @@ public static class SqlDdlExporter
         var columns = new List<PropertyModel>(root.Properties);
         var seenNames = new HashSet<string>(columns.Select(c => c.Name));
 
+        // Constraints declared on a derived entity (HasIndex/HasCheckConstraint/HasAlternateKey)
+        // must also be carried into the merged table, not just the root's own. Dedup named
+        // constraints by name (re-declaring the same named constraint twice is invalid SQL);
+        // alternate keys have no name field, so dedup by comparing property-name lists.
+        var indexes = new List<IndexModel>(root.Indexes);
+        var seenIndexNames = new HashSet<string>(root.Indexes.Where(i => i.Name is not null).Select(i => i.Name!));
+
+        var checkConstraints = new List<CheckConstraintModel>(root.CheckConstraints);
+        var seenCheckNames = new HashSet<string>(root.CheckConstraints.Select(c => c.Name));
+
+        var alternateKeys = new List<IReadOnlyList<string>>(root.AlternateKeys);
+
         foreach (var descendant in CollectDescendants(root, allEntities))
         {
             foreach (var property in descendant.Properties.Where(p => p.DeclaringEntityName is null))
@@ -179,13 +255,49 @@ public static class SqlDdlExporter
                     columns.Add(property with { IsNullable = true });
                 }
             }
+
+            foreach (var index in descendant.Indexes)
+            {
+                if (index.Name is null || seenIndexNames.Add(index.Name))
+                {
+                    indexes.Add(index);
+                }
+            }
+
+            foreach (var check in descendant.CheckConstraints)
+            {
+                if (seenCheckNames.Add(check.Name))
+                {
+                    checkConstraints.Add(check);
+                }
+            }
+
+            foreach (var alternateKey in descendant.AlternateKeys)
+            {
+                if (!alternateKeys.Any(existing => existing.SequenceEqual(alternateKey)))
+                {
+                    alternateKeys.Add(alternateKey);
+                }
+            }
         }
 
+        // EF supports mapping the discriminator onto an existing CLR property
+        // (HasDiscriminator(e => e.Type)), so only append it if that name isn't already present —
+        // otherwise two columns with the same name would be emitted.
         var discriminatorName = root.DiscriminatorPropertyName ?? "Discriminator";
         var discriminatorClrType = root.DiscriminatorClrType ?? "string";
-        columns.Add(new PropertyModel(discriminatorName, discriminatorClrType, IsNullable: false, MaxLength: null));
+        if (seenNames.Add(discriminatorName))
+        {
+            columns.Add(new PropertyModel(discriminatorName, discriminatorClrType, IsNullable: false, MaxLength: null));
+        }
 
-        return root with { Properties = columns };
+        return root with
+        {
+            Properties = columns,
+            Indexes = indexes,
+            CheckConstraints = checkConstraints,
+            AlternateKeys = alternateKeys,
+        };
     }
 
     internal static List<EntityModel> OrderTablesByDependency(
@@ -205,7 +317,7 @@ public static class SqlDdlExporter
     {
         var indexName = index.Name ?? $"IX_{PhysicalTableName(entity)}_{string.Join("_", index.PropertyNames)}";
         var uniqueKeyword = index.IsUnique ? "UNIQUE " : "";
-        var columns = string.Join(", ", index.PropertyNames.Select(c => QuoteIdentifier(c, provider)));
+        var columns = string.Join(", ", index.PropertyNames.Select(c => QuoteIdentifier(ColumnNameOf(entity, c), provider)));
 
         return $"CREATE {uniqueKeyword}INDEX {QuoteIdentifier(indexName, provider)} ON {QualifiedTableName(entity, provider)} ({columns});\n";
     }
@@ -404,8 +516,8 @@ public static class SqlDdlExporter
         IReadOnlyList<string> foreignKeyColumns, IReadOnlyList<string> principalKeyColumns,
         string constraintName, ScaffoldProvider provider)
     {
-        var fkColumns = string.Join(", ", foreignKeyColumns.Select(c => QuoteIdentifier(c, provider)));
-        var pkColumns = string.Join(", ", principalKeyColumns.Select(c => QuoteIdentifier(c, provider)));
+        var fkColumns = string.Join(", ", foreignKeyColumns.Select(c => QuoteIdentifier(ColumnNameOf(dependent, c), provider)));
+        var pkColumns = string.Join(", ", principalKeyColumns.Select(c => QuoteIdentifier(ColumnNameOf(principal, c), provider)));
 
         sb.Append("ALTER TABLE ").Append(QualifiedTableName(dependent, provider))
           .Append(" ADD CONSTRAINT ").Append(QuoteIdentifier(constraintName, provider))

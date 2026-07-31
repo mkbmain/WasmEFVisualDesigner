@@ -80,6 +80,14 @@ public class SqlColumnTypeMapperTests
         Assert.Equal(expected, SqlColumnTypeMapper.MapType(Prop("decimal", precision: 10, scale: 3), provider));
     }
 
+    [Theory]
+    [InlineData(ScaffoldProvider.SqlServer, "decimal(10,0)")]
+    [InlineData(ScaffoldProvider.PostgreSql, "numeric(10,0)")]
+    public void MapType_DecimalWithPrecisionButNoScale_DefaultsScaleToZeroConsistentlyAcrossDialects(ScaffoldProvider provider, string expected)
+    {
+        Assert.Equal(expected, SqlColumnTypeMapper.MapType(Prop("decimal", precision: 10), provider));
+    }
+
     [Fact]
     public void MapType_StringWithNoMaxLength_SqlServer_UsesNvarcharMax()
     {
