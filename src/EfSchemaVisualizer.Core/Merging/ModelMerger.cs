@@ -201,6 +201,46 @@ public static class ModelMerger
         return config is null ? entity : entity with { SqlQuery = config.Sql };
     }
 
+    public static EntityModel ApplyFunctionMapping(EntityModel entity, IReadOnlyList<FunctionConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { FunctionName = config.FunctionName };
+    }
+
+    public static EntityModel ApplyPartitionKey(EntityModel entity, IReadOnlyList<PartitionKeyConfig> configs)
+    {
+        var config = configs.FirstOrDefault(c => c.EntityName == entity.Name);
+
+        return config is null ? entity : entity with { PartitionKeyPropertyNames = config.PropertyNames };
+    }
+
+    public static EntityModel ApplyEntityAnnotations(EntityModel entity, IReadOnlyList<EntityAnnotationConfig> configs)
+    {
+        var annotations = configs
+            .Where(c => c.EntityName == entity.Name)
+            .Select(c => new AnnotationModel(c.Name, c.ValueText))
+            .ToList();
+
+        return annotations.Count == 0 ? entity : entity with { Annotations = annotations };
+    }
+
+    public static EntityModel ApplyPropertyAnnotations(EntityModel entity, IReadOnlyList<PropertyAnnotationConfig> configs)
+    {
+        var byProperty = configs
+            .Where(c => c.EntityName == entity.Name)
+            .GroupBy(c => c.PropertyName)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<AnnotationModel>)g.Select(c => new AnnotationModel(c.Name, c.ValueText)).ToList());
+
+        var updatedProperties = entity.Properties
+            .Select(property => byProperty.TryGetValue(property.Name, out var annotations)
+                ? property with { Annotations = annotations }
+                : property)
+            .ToList();
+
+        return entity with { Properties = updatedProperties };
+    }
+
     public static EntityModel ApplyColumnNames(EntityModel entity, IReadOnlyList<ColumnNameConfig> configs)
     {
         var byProperty = IndexByProperty(entity.Name, configs, c => c.EntityName, c => c.PropertyName);

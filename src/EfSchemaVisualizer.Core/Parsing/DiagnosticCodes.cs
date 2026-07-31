@@ -52,6 +52,9 @@ public static class DiagnosticCodes
     public const string UnreadableHasDefaultSchemaArgument = nameof(UnreadableHasDefaultSchemaArgument);
     public const string UnreadableHasSequenceArgument = nameof(UnreadableHasSequenceArgument);
     public const string UnreadableUseSequenceArgument = nameof(UnreadableUseSequenceArgument);
+    public const string UnreadableToFunctionArgument = nameof(UnreadableToFunctionArgument);
+    public const string UnreadableHasPartitionKeyArgument = nameof(UnreadableHasPartitionKeyArgument);
+    public const string UnreadableHasAnnotationArgument = nameof(UnreadableHasAnnotationArgument);
 
     // Model-validity diagnostics: unlike the codes above (all "I couldn't read this syntax"),
     // these mean "this parsed fine, but the resulting model would fail at EF's model-build time".

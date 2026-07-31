@@ -694,9 +694,51 @@
       Verified with new rewriter-level tests plus `DiagramEditor`-level tests
       exercising the same `ConfigSourceWithHasDataSeed` fixture the existing
       entity-rename `HasData` test uses.
-- [ ] **`[found]` `ToFunction`, `HasAnnotation`, `HasPartitionKey`,
-      provider-specific extensions.** Long tail; the generic diagnostic covers
-      them until any earns a parser.
+- [x] **`[found]` `ToFunction`, `HasAnnotation`, `HasPartitionKey`,
+      provider-specific extensions.** — Fixed 2026-07-31 for the three named
+      calls; the remaining long tail (`HasTrigger`, other provider-specific
+      extensions) still falls back to the generic `UnrecognizedConfigCall`
+      diagnostic, which is now genuinely the only thing left uncovered.
+
+      `ToFunction("Name")` maps an entity to a table-valued function — same
+      shape as `ToTable`/`ToView` (new `EntityModel.FunctionName`,
+      `FunctionConfig`, `FluentConfigParser.ParseFunctionMappings`,
+      `ModelMerger.ApplyFunctionMapping`, `OnModelCreatingRewriter.SetFunction`/
+      `RemoveFunction`, `DiagramEditor.SetFunctionMapping`, a "Function:" field
+      in `EntityNode.razor` alongside Table/View/SQL query).
+
+      `HasPartitionKey(x => x.Prop)` (Cosmos partition key) is parsed via the
+      same `TryReadPropertyNameList` helper `HasKey`/`HasAlternateKey` already
+      use, so both the single-property and EF8+ composite/hierarchical
+      (`x => new { x.A, x.B }`) shapes are modeled on the new
+      `EntityModel.PartitionKeyPropertyNames`. The UI only edits the
+      single-property case (a `<select>` of the entity's properties); a
+      composite key is rendered read-only with the same disabled-select +
+      inline list pattern used elsewhere for read-only state.
+
+      `HasAnnotation("Name", value)` is EF's generic escape hatch, legal at
+      both entity scope (`entity.HasAnnotation(...)`) and property scope
+      (`entity.Property(...).HasAnnotation(...)`) — parsed with the same
+      dual-scope routing `HasComment` already uses
+      (`FluentSyntaxHelpers.GetPropertyNameFor` as the "is this property-
+      scoped" signal). Since the value argument can be any expression shape
+      (string/int/enum/`ValueConverter` instance/etc.), it's captured as raw
+      source text (`Expression.ToString()`) on new `AnnotationModel` (name +
+      value text), attached via new `EntityModel.Annotations` /
+      `PropertyModel.Annotations`, and rendered read-only in `EntityNode.razor`
+      — there is no rewriter support for editing an annotation back into
+      source, so unlike `ToFunction`/`HasPartitionKey` this one is display-only,
+      the same scope cut as the existing read-only lambda-pair
+      `HasConversion` rendering.
+
+      **Documented non-goals (out of scope):** `modelBuilder.HasAnnotation(...)`
+      at the model level (as opposed to entity/property scope) is still
+      unrecognized and still fires `UnrecognizedConfigCall` — there's nowhere
+      on the current model to attach a model-wide annotation. Five existing
+      `FluentConfigParserTests` cases that used `HasAnnotation` as their "some
+      call genuinely unread by any parser" fixture were retargeted to
+      `HasTrigger` (still unrecognized) since the call they exercised is now
+      recognized.
 - [x] **`[found]` String-overload `Entity("Namespace.Type", b => ...)`.** — Fixed
       2026-07-31.
       `FluentSyntaxHelpers.GetConfiguredEntityName` only recognized the generic

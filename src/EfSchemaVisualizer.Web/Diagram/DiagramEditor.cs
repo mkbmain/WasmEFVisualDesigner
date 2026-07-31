@@ -741,6 +741,67 @@ public sealed class DiagramEditor
         return DiagramEditResult.Ok();
     }
 
+    public DiagramEditResult SetFunctionMapping(string entityName, string? functionName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var normalizedFunctionName = string.IsNullOrWhiteSpace(functionName) ? null : functionName.Trim();
+
+        if (normalizedFunctionName == entity.FunctionName)
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (normalizedFunctionName is null)
+        {
+            var clearedConfigSource = _configRewriter.RemoveFunction(ConfigSource, entityName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        var newConfigSource = _configRewriter.SetFunction(ConfigSource, entityName, normalizedFunctionName);
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
+    public DiagramEditResult SetPartitionKey(string entityName, string? propertyName)
+    {
+        var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);
+        if (entity is null)
+        {
+            return DiagramEditResult.Fail($"Entity '{entityName}' not found.");
+        }
+
+        var normalizedPropertyName = string.IsNullOrWhiteSpace(propertyName) ? null : propertyName.Trim();
+
+        var currentPropertyName = entity.PartitionKeyPropertyNames.Count == 1 ? entity.PartitionKeyPropertyNames[0] : null;
+        if (normalizedPropertyName == currentPropertyName
+            && (normalizedPropertyName is not null || entity.PartitionKeyPropertyNames.Count == 0))
+        {
+            return DiagramEditResult.Ok();
+        }
+
+        if (normalizedPropertyName is null)
+        {
+            var clearedConfigSource = _configRewriter.RemovePartitionKey(ConfigSource, entityName);
+            Apply(ClassSource, clearedConfigSource);
+            return DiagramEditResult.Ok();
+        }
+
+        if (entity.Properties.All(p => p.Name != normalizedPropertyName))
+        {
+            return DiagramEditResult.Fail($"'{entityName}' has no property named '{normalizedPropertyName}'.");
+        }
+
+        var newConfigSource = _configRewriter.SetPartitionKey(ConfigSource, entityName, new[] { normalizedPropertyName });
+        Apply(ClassSource, newConfigSource);
+        return DiagramEditResult.Ok();
+    }
+
     public DiagramEditResult SetSqlQuery(string entityName, string? sql)
     {
         var entity = Current.Entities.FirstOrDefault(e => e.Name == entityName);

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace EfSchemaVisualizer.Core.Model;
 
 public enum FoldKind
@@ -38,4 +40,8 @@ public sealed record PropertyModel(
     string? ConversionProviderClrType = null,
     bool? ConversionIsCustomLambda = null,
     bool IsEnumType = false,
-    string? EnumUnderlyingClrType = null);
+    string? EnumUnderlyingClrType = null,
+    IReadOnlyList<AnnotationModel>? Annotations = null)
+{
+    public IReadOnlyList<AnnotationModel> Annotations { get; init; } = Annotations ?? new List<AnnotationModel>();
+}

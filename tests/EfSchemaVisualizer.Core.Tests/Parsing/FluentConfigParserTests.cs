@@ -1,3 +1,4 @@
+using System.Linq;
 using EfSchemaVisualizer.Core.Merging;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Core.Parsing;
@@ -1736,6 +1737,172 @@ public class FluentConfigParserTests
         Assert.Equal("Person", diagnostic.EntityName);
     }
 
+    private const string FunctionMappingSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToFunction("GetPeople");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseFunctionMappings_ReadsStringLiteralArgument()
+    {
+        var result = new FluentConfigParser().ParseFunctionMappings(FunctionMappingSource);
+
+        Assert.Empty(result.Diagnostics);
+        var config = Assert.Single(result.Value);
+        Assert.Equal("Person", config.EntityName);
+        Assert.Equal("GetPeople", config.FunctionName);
+    }
+
+    private const string FunctionMappingSourceWithNonLiteralArg = """
+        public class AppDbContext : DbContext
+        {
+            private const string FunctionName = "GetPeople";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.ToFunction(FunctionName);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseFunctionMappings_NonLiteralArgument_EmitsUnreadableToFunctionArgumentDiagnostic()
+    {
+        var result = new FluentConfigParser().ParseFunctionMappings(FunctionMappingSourceWithNonLiteralArg);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableToFunctionArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+    }
+
+    private const string PartitionKeySource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasPartitionKey(e => e.TenantId);
+                });
+
+                modelBuilder.Entity<Address>(entity =>
+                {
+                    entity.HasPartitionKey(e => new { e.TenantId, e.Region });
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParsePartitionKeys_ReadsSinglePropertyAndComposite()
+    {
+        var result = new FluentConfigParser().ParsePartitionKeys(PartitionKeySource);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(2, result.Value.Count);
+        Assert.Contains(result.Value, c => c.EntityName == "Person" && c.PropertyNames.SequenceEqual(new[] { "TenantId" }));
+        Assert.Contains(result.Value, c => c.EntityName == "Address" && c.PropertyNames.SequenceEqual(new[] { "TenantId", "Region" }));
+    }
+
+    [Fact]
+    public void ParsePartitionKeys_UnreadableArgument_EmitsUnreadableHasPartitionKeyArgumentDiagnostic()
+    {
+        const string source = """
+            public class AppDbContext : DbContext
+            {
+                private static readonly string TenantIdName = "TenantId";
+
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.HasPartitionKey(TenantIdName);
+                    });
+                }
+            }
+            """;
+
+        var result = new FluentConfigParser().ParsePartitionKeys(source);
+
+        Assert.Empty(result.Value);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasPartitionKeyArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+    }
+
+    private const string AnnotationSource = """
+        public class AppDbContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasAnnotation("Some:EntityAnnotation", "EntityValue");
+                    entity.Property(e => e.Name).HasAnnotation("Some:PropertyAnnotation", 42);
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseAnnotations_ReadsEntityAndPropertyScopedAnnotations()
+    {
+        var (entities, properties) = new FluentConfigParser().ParseAnnotations(AnnotationSource);
+
+        Assert.Empty(entities.Diagnostics);
+        Assert.Empty(properties.Diagnostics);
+
+        var entityAnnotation = Assert.Single(entities.Value);
+        Assert.Equal("Person", entityAnnotation.EntityName);
+        Assert.Equal("Some:EntityAnnotation", entityAnnotation.Name);
+        Assert.Equal("\"EntityValue\"", entityAnnotation.ValueText); // raw source text, quotes included
+
+        var propertyAnnotation = Assert.Single(properties.Value);
+        Assert.Equal("Person", propertyAnnotation.EntityName);
+        Assert.Equal("Name", propertyAnnotation.PropertyName);
+        Assert.Equal("Some:PropertyAnnotation", propertyAnnotation.Name);
+        Assert.Equal("42", propertyAnnotation.ValueText);
+    }
+
+    private const string AnnotationSourceWithNonLiteralName = """
+        public class AppDbContext : DbContext
+        {
+            private const string AnnotationName = "Some:Annotation";
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Person>(entity =>
+                {
+                    entity.HasAnnotation(AnnotationName, "Value");
+                });
+            }
+        }
+        """;
+
+    [Fact]
+    public void ParseAnnotations_NonLiteralNameArgument_EmitsUnreadableHasAnnotationArgumentDiagnostic()
+    {
+        var (entities, properties) = new FluentConfigParser().ParseAnnotations(AnnotationSourceWithNonLiteralName);
+
+        Assert.Empty(entities.Value);
+        Assert.Empty(properties.Value);
+        var diagnostic = Assert.Single(entities.Diagnostics);
+        Assert.Equal(DiagnosticCodes.UnreadableHasAnnotationArgument, diagnostic.Code);
+        Assert.Equal("Person", diagnostic.EntityName);
+    }
+
     private const string KeylessSource = """
         public class AppDbContext : DbContext
         {
@@ -3410,7 +3577,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.HasAnnotation("Foo", "Bar");
+                        entity.HasTrigger("Foo");
                     });
                 }
             }
@@ -3421,11 +3588,11 @@ public class FluentConfigParserTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticCodes.UnrecognizedConfigCall, diagnostic.Code);
         Assert.Equal("Person", diagnostic.EntityName);
-        Assert.Contains("HasAnnotation", diagnostic.Message);
+        Assert.Contains("HasTrigger", diagnostic.Message);
     }
 
     // HasConversion is now a recognized call name, so it's no longer usable as the "still unrecognized"
-    // example here; retargeted to HasAnnotation (a call chained after a recognized call, IsUnique(),
+    // example here; retargeted to HasTrigger (a call chained after a recognized call, IsUnique(),
     // that's still genuinely unread by any parser) to keep testing the same "chained after recognized
     // call" scenario.
     [Fact]
@@ -3438,7 +3605,7 @@ public class FluentConfigParserTests
                 {
                     modelBuilder.Entity<Person>(entity =>
                     {
-                        entity.HasIndex(e => e.Email).IsUnique().HasAnnotation("Foo", "Bar");
+                        entity.HasIndex(e => e.Email).IsUnique().HasTrigger("Foo");
                     });
                 }
             }
@@ -3447,7 +3614,7 @@ public class FluentConfigParserTests
         var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
 
         var diagnostic = Assert.Single(diagnostics);
-        Assert.Contains("HasAnnotation", diagnostic.Message);
+        Assert.Contains("HasTrigger", diagnostic.Message);
     }
 
     [Fact]
@@ -3537,7 +3704,7 @@ public class FluentConfigParserTests
 
                         modelBuilder.Entity<Address>(nested =>
                         {
-                            nested.HasAnnotation("Foo", "Bar");
+                            nested.HasTrigger("Foo");
                         });
                     });
                 }
@@ -3558,7 +3725,7 @@ public class FluentConfigParserTests
             {
                 protected override void OnModelCreating(ModelBuilder modelBuilder)
                 {
-                    modelBuilder.Entity<Person>().HasAnnotation("Foo", "Bar");
+                    modelBuilder.Entity<Person>().HasTrigger("Foo");
                 }
             }
             """;
@@ -3566,7 +3733,7 @@ public class FluentConfigParserTests
         var diagnostics = new FluentConfigParser().ParseUnrecognizedCalls(source);
 
         var diagnostic = Assert.Single(diagnostics);
-        Assert.Contains("HasAnnotation", diagnostic.Message);
+        Assert.Contains("HasTrigger", diagnostic.Message);
     }
 
     [Fact]
@@ -3595,7 +3762,7 @@ public class FluentConfigParserTests
             {
                 public void Configure(EntityTypeBuilder<Person> builder)
                 {
-                    builder.HasAnnotation("Foo", "Bar");
+                    builder.HasTrigger("Foo");
                 }
             }
             """;
@@ -3604,7 +3771,7 @@ public class FluentConfigParserTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal("Person", diagnostic.EntityName);
-        Assert.Contains("HasAnnotation", diagnostic.Message);
+        Assert.Contains("HasTrigger", diagnostic.Message);
     }
 
     // ─── ParseIgnoredProperties ────────────────────────────────────────────────────

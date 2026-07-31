@@ -140,6 +140,49 @@ public class DiagramModelBuilderTests
     }
 
     [Fact]
+    public void Build_ToFunctionHasPartitionKeyAndHasAnnotation_AllApplyToModel()
+    {
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string TenantId { get; set; }
+                public string Name { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity<Person>(entity =>
+                    {
+                        entity.ToFunction("GetPeople");
+                        entity.HasPartitionKey(e => e.TenantId);
+                        entity.HasAnnotation("Some:EntityAnnotation", "EntityValue");
+                        entity.Property(e => e.Name).HasAnnotation("Some:PropertyAnnotation", 42);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var entity = result.Entities.Single();
+        Assert.Equal("GetPeople", entity.FunctionName);
+        Assert.Equal(new[] { "TenantId" }, entity.PartitionKeyPropertyNames);
+        var entityAnnotation = Assert.Single(entity.Annotations);
+        Assert.Equal("Some:EntityAnnotation", entityAnnotation.Name);
+
+        var nameProperty = entity.Properties.Single(p => p.Name == "Name");
+        var propertyAnnotation = Assert.Single(nameProperty.Annotations);
+        Assert.Equal("Some:PropertyAnnotation", propertyAnnotation.Name);
+
+        Assert.DoesNotContain(result.Diagnostics, d => d.Code == DiagnosticCodes.UnrecognizedConfigCall);
+    }
+
+    [Fact]
     public void Build_AnnotationOnlyForeignKey_NoFluentConfig_RelationshipStillProduced()
     {
         const string classSource = """

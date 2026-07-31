@@ -35,6 +35,7 @@ public sealed class FluentConfigParser
         "IsRowVersion", "IsConcurrencyToken", "HasQueryFilter", "HasComment", "UseCollation", "ToJson",
         "SplitToTable", "OwnsOne", "OwnsMany", "ComplexProperty", "HasConstraintName", "HasDatabaseName", "HasCheckConstraint", "UseSequence",
         "UseTptMappingStrategy", "UseTpcMappingStrategy", "HasDiscriminator", "HasConversion",
+        "ToFunction", "HasPartitionKey", "HasAnnotation",
     };
 
     /// Method names whose recognition depends on what they're chained onto — unlike every
@@ -730,6 +731,145 @@ public sealed class FluentConfigParser
         }
 
         return new ParseResult<IReadOnlyList<SqlQueryConfig>>(results, diagnostics);
+    }
+
+    /// `ToFunction("Name")` maps an entity to a table-valued function instead of a table — the shape
+    /// EF's own `ModelSnapshot` generator emits for a TVF-backed entity. Single required string
+    /// argument, no schema (unlike `ToTable`/`ToView`).
+    public ParseResult<IReadOnlyList<FunctionConfig>> ParseFunctionMappings(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<FunctionConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
+        {
+            foreach (var toFunctionCall in FluentSyntaxHelpers.FindCallsNamed(scope, "ToFunction"))
+            {
+                var arg = toFunctionCall.ArgumentList.Arguments.FirstOrDefault();
+
+                if (arg?.Expression is LiteralExpressionSyntax literal && literal.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    results.Add(new FunctionConfig(entityName, literal.Token.ValueText));
+                }
+                else
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableToFunctionArgument,
+                        "ToFunction argument is not a string literal and could not be read.",
+                        entityName,
+                        PropertyName: null,
+                        (arg ?? (SyntaxNode)toFunctionCall).Span));
+                }
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<FunctionConfig>>(results, diagnostics);
+    }
+
+    /// `HasPartitionKey(x => x.Prop)` (single property) or `HasPartitionKey(x => new { x.A, x.B })`
+    /// (EF 8+ hierarchical partition keys) — Cosmos-provider only, but the syntax shape is generic
+    /// enough that `TryReadPropertyNameList` (already used by `HasKey`/`HasAlternateKey`) reads it
+    /// with no new argument-shape handling.
+    public ParseResult<IReadOnlyList<PartitionKeyConfig>> ParsePartitionKeys(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var results = new List<PartitionKeyConfig>();
+        var diagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasPartitionKey"))
+            {
+                var propertyNames = FluentSyntaxHelpers.TryReadPropertyNameList(call);
+
+                if (propertyNames is null)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticCodes.UnreadableHasPartitionKeyArgument,
+                        "HasPartitionKey argument(s) could not be read as property name(s).",
+                        entityName,
+                        PropertyName: null,
+                        call.Span));
+                    continue;
+                }
+
+                results.Add(new PartitionKeyConfig(entityName, propertyNames));
+            }
+        }
+
+        return new ParseResult<IReadOnlyList<PartitionKeyConfig>>(results, diagnostics);
+    }
+
+    /// `HasAnnotation("Name", value)` is EF's generic escape hatch and legal both at entity scope
+    /// (`entity.HasAnnotation(...)`) and property scope (`entity.Property(...).HasAnnotation(...)`) —
+    /// same dual-scope shape as `HasComment` (see `ParseComments`), reusing `GetPropertyNameFor` as
+    /// the same "is this call property-scoped" signal. The value argument can be any expression shape
+    /// (string/int/enum/etc.), so unlike every other `Parse*` method here it is captured as raw source
+    /// text (`ToString()`) for read-only display rather than decoded to a literal — there is no
+    /// rewriter support for editing an annotation back into source (see `EntityModel.Annotations`).
+    public (ParseResult<IReadOnlyList<EntityAnnotationConfig>> Entities, ParseResult<IReadOnlyList<PropertyAnnotationConfig>> Properties)
+        ParseAnnotations(string sourceCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var entityResults = new List<EntityAnnotationConfig>();
+        var entityDiagnostics = new List<Diagnostic>();
+        var propertyResults = new List<PropertyAnnotationConfig>();
+        var propertyDiagnostics = new List<Diagnostic>();
+
+        foreach (var (entityName, scope) in FluentSyntaxHelpers.FindConfigurationScopes(root, _entities))
+        {
+            foreach (var call in FluentSyntaxHelpers.FindCallsNamed(scope, "HasAnnotation"))
+            {
+                var propertyName = FluentSyntaxHelpers.GetPropertyNameFor(call);
+                var arguments = call.ArgumentList.Arguments;
+
+                if (arguments.Count < 2
+                    || arguments[0].Expression is not LiteralExpressionSyntax nameLiteral
+                    || !nameLiteral.IsKind(SyntaxKind.StringLiteralExpression))
+                {
+                    var diagnostic = new Diagnostic(
+                        DiagnosticCodes.UnreadableHasAnnotationArgument,
+                        "HasAnnotation's name argument is not a string literal and could not be read.",
+                        entityName,
+                        propertyName,
+                        call.Span);
+
+                    if (propertyName is null)
+                    {
+                        entityDiagnostics.Add(diagnostic);
+                    }
+                    else
+                    {
+                        propertyDiagnostics.Add(diagnostic);
+                    }
+
+                    continue;
+                }
+
+                var name = nameLiteral.Token.ValueText;
+                var valueText = arguments[1].Expression.ToString();
+
+                if (propertyName is null)
+                {
+                    entityResults.Add(new EntityAnnotationConfig(entityName, name, valueText));
+                }
+                else
+                {
+                    propertyResults.Add(new PropertyAnnotationConfig(entityName, propertyName, name, valueText));
+                }
+            }
+        }
+
+        return (
+            new ParseResult<IReadOnlyList<EntityAnnotationConfig>>(entityResults, entityDiagnostics),
+            new ParseResult<IReadOnlyList<PropertyAnnotationConfig>>(propertyResults, propertyDiagnostics));
     }
 
     /// Reads bare `entity.HasNoKey()` calls (no arguments to misparse), so unlike every other

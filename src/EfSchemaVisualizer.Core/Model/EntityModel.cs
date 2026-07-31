@@ -28,11 +28,16 @@ public sealed record EntityModel(
     string? DiscriminatorPropertyName = null,
     string? DiscriminatorClrType = null,
     string? DiscriminatorValue = null,
-    bool IsSharedType = false)
+    bool IsSharedType = false,
+    string? FunctionName = null,
+    IReadOnlyList<string>? PartitionKeyPropertyNames = null,
+    IReadOnlyList<AnnotationModel>? Annotations = null)
 {
     public IReadOnlyList<string> KeyPropertyNames { get; init; } = KeyPropertyNames ?? new List<string>();
     public IReadOnlyList<IndexModel> Indexes { get; init; } = Indexes ?? new List<IndexModel>();
     public IReadOnlyList<IReadOnlyList<string>> AlternateKeys { get; init; } = AlternateKeys ?? new List<IReadOnlyList<string>>();
     public IReadOnlyList<string> SplitTables { get; init; } = SplitTables ?? new List<string>();
     public IReadOnlyList<CheckConstraintModel> CheckConstraints { get; init; } = CheckConstraints ?? new List<CheckConstraintModel>();
+    public IReadOnlyList<string> PartitionKeyPropertyNames { get; init; } = PartitionKeyPropertyNames ?? new List<string>();
+    public IReadOnlyList<AnnotationModel> Annotations { get; init; } = Annotations ?? new List<AnnotationModel>();
 }

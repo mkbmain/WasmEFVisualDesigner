@@ -1818,6 +1818,204 @@ public sealed class OnModelCreatingRewriter
         return newRoot.NormalizeWhitespace().ToFullString();
     }
 
+    public string SetFunction(string sourceCode, string entityName, string functionName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToFunction"))
+            .FirstOrDefault();
+
+        if (existingCall is not null)
+        {
+            return MutateExistingFunction(root, existingCall, functionName);
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertFunctionStatement(root, existingScope, functionName);
+        }
+
+        return InsertFunctionEntityBlock(root, entityName, functionName);
+    }
+
+    private static string MutateExistingFunction(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, string functionName)
+    {
+        var newArgument = SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(functionName)));
+
+        var newCall = targetCall.WithArgumentList(
+            targetCall.ArgumentList.WithArguments(
+                SyntaxFactory.SingletonSeparatedList(newArgument)));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.ToFullString();
+    }
+
+    private static string InsertFunctionStatement(CompilationUnitSyntax root, SyntaxNode scope, string functionName)
+    {
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+
+        var newStatement = BuildToFunctionStatement(blockReceiverName, functionName);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertFunctionEntityBlock(CompilationUnitSyntax root, string entityName, string functionName)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var functionStatement = BuildToFunctionStatement("entity", functionName);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(functionStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildToFunctionStatement(string blockReceiverName, string functionName)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("ToFunction")),
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.LiteralExpression(
+                                SyntaxKind.StringLiteralExpression,
+                                SyntaxFactory.Literal(functionName)))))));
+    }
+
+    public string RemoveFunction(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "ToFunction"))
+            .FirstOrDefault();
+
+        if (existingCall is null || existingCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    public string SetPartitionKey(string sourceCode, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasPartitionKey"))
+            .FirstOrDefault();
+
+        if (existingCall is not null)
+        {
+            return MutateExistingPartitionKey(root, existingCall, propertyNames);
+        }
+
+        var existingScope = scopes.FirstOrDefault();
+
+        if (existingScope is not null)
+        {
+            return InsertPartitionKeyStatement(root, existingScope, propertyNames);
+        }
+
+        return InsertPartitionKeyEntityBlock(root, entityName, propertyNames);
+    }
+
+    private static string MutateExistingPartitionKey(CompilationUnitSyntax root, InvocationExpressionSyntax targetCall, IReadOnlyList<string> propertyNames)
+    {
+        var newCall = targetCall.WithArgumentList(BuildHasKeyArgumentList(propertyNames));
+
+        var newRoot = root.ReplaceNode(targetCall, newCall);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertPartitionKeyStatement(CompilationUnitSyntax root, SyntaxNode scope, IReadOnlyList<string> propertyNames)
+    {
+        var (block, blockReceiverName) = GetScopeBlockAndReceiver(scope);
+
+        var newStatement = BuildToPartitionKeyStatement(blockReceiverName, propertyNames);
+        var newBlock = block.AddStatements(newStatement);
+
+        var newRoot = root.ReplaceNode(block, newBlock);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static string InsertPartitionKeyEntityBlock(CompilationUnitSyntax root, string entityName, IReadOnlyList<string> propertyNames)
+    {
+        var method = FindOnModelCreatingMethod(root);
+
+        var methodBody = method.Body
+            ?? throw new InvalidOperationException("OnModelCreating has no method body.");
+
+        var modelBuilderParamName = method.ParameterList.Parameters.Single().Identifier.Text;
+
+        var partitionKeyStatement = BuildToPartitionKeyStatement("entity", propertyNames);
+        var entityBlockStatement = BuildEntityInvocationStatement(modelBuilderParamName, entityName, SyntaxFactory.Block(partitionKeyStatement));
+
+        var newMethodBody = methodBody.AddStatements(entityBlockStatement);
+        var newRoot = root.ReplaceNode(methodBody, newMethodBody);
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
+    private static ExpressionStatementSyntax BuildToPartitionKeyStatement(string blockReceiverName, IReadOnlyList<string> propertyNames)
+    {
+        return SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.IdentifierName(blockReceiverName),
+                    SyntaxFactory.IdentifierName("HasPartitionKey")),
+                BuildHasKeyArgumentList(propertyNames)));
+    }
+
+    public string RemovePartitionKey(string sourceCode, string entityName)
+    {
+        var tree = CSharpSyntaxTree.ParseText(sourceCode);
+        var root = tree.GetCompilationUnitRoot();
+
+        var scopes = FindConfigScopes(root, entityName);
+
+        var existingCall = scopes
+            .SelectMany(scope => FluentSyntaxHelpers.FindCallsNamed(scope, "HasPartitionKey"))
+            .FirstOrDefault();
+
+        if (existingCall is null || existingCall.Parent is not ExpressionStatementSyntax statement)
+        {
+            return sourceCode;
+        }
+
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!;
+        return newRoot.NormalizeWhitespace().ToFullString();
+    }
+
     public string AddEntity(string sourceCode, string entityName, string dbSetPropertyName)
     {
         var tree = CSharpSyntaxTree.ParseText(sourceCode);

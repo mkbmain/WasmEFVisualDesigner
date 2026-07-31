@@ -81,6 +81,86 @@ public class DiagramEditorEntityMappingTests
     }
 
     [Fact]
+    public void SetFunctionMapping_NoExistingConfig_InsertsToFunction()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetFunctionMapping("Person", "GetPeople");
+
+        Assert.True(result.Success);
+        Assert.Equal("GetPeople", editor.Current.Entities.Single().FunctionName);
+        Assert.Contains("ToFunction(\"GetPeople\")", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetFunctionMapping_ClearingExistingConfig_RemovesToFunction()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetFunctionMapping("Person", "GetPeople");
+
+        var result = editor.SetFunctionMapping("Person", null);
+
+        Assert.True(result.Success);
+        Assert.Null(editor.Current.Entities.Single().FunctionName);
+        Assert.DoesNotContain("ToFunction", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetFunctionMapping_UnknownEntity_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetFunctionMapping("DoesNotExist", "GetX");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void SetPartitionKey_NoExistingConfig_InsertsHasPartitionKey()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetPartitionKey("Person", "Name");
+
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "Name" }, editor.Current.Entities.Single().PartitionKeyPropertyNames);
+        Assert.Contains("HasPartitionKey(e => e.Name)", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetPartitionKey_ClearingExistingConfig_RemovesHasPartitionKey()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+        editor.SetPartitionKey("Person", "Name");
+
+        var result = editor.SetPartitionKey("Person", null);
+
+        Assert.True(result.Success);
+        Assert.Empty(editor.Current.Entities.Single().PartitionKeyPropertyNames);
+        Assert.DoesNotContain("HasPartitionKey", editor.ConfigSource);
+    }
+
+    [Fact]
+    public void SetPartitionKey_UnknownProperty_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetPartitionKey("Person", "DoesNotExist");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
+    public void SetPartitionKey_UnknownEntity_Fails()
+    {
+        var editor = new DiagramEditor(ClassSource, ConfigSource);
+
+        var result = editor.SetPartitionKey("DoesNotExist", "Name");
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
     public void SetKeyless_SetToTrue_InsertsHasNoKeyAndRemovesHasKey()
     {
         var editor = new DiagramEditor(ClassSource, ConfigSource);

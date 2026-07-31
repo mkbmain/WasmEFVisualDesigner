@@ -39,6 +39,9 @@ public static class DiagramModelBuilder
         var tables = configParser.ParseTableMappings(configSource);
         var views = configParser.ParseViewMappings(configSource);
         var sqlQueries = configParser.ParseSqlQueries(configSource);
+        var functions = configParser.ParseFunctionMappings(configSource);
+        var partitionKeys = configParser.ParsePartitionKeys(configSource);
+        var annotations = configParser.ParseAnnotations(configSource);
         var fluentKeylessNames = configParser.ParseKeylessEntities(configSource).ToHashSet();
         var columnNames = configParser.ParseColumnNames(configSource);
         var columnTypes = configParser.ParseColumnTypes(configSource);
@@ -82,6 +85,10 @@ public static class DiagramModelBuilder
         diagnostics.AddRange(tables.Diagnostics);
         diagnostics.AddRange(views.Diagnostics);
         diagnostics.AddRange(sqlQueries.Diagnostics);
+        diagnostics.AddRange(functions.Diagnostics);
+        diagnostics.AddRange(partitionKeys.Diagnostics);
+        diagnostics.AddRange(annotations.Entities.Diagnostics);
+        diagnostics.AddRange(annotations.Properties.Diagnostics);
         diagnostics.AddRange(columnNames.Diagnostics);
         diagnostics.AddRange(columnTypes.Diagnostics);
         diagnostics.AddRange(defaultValues.Diagnostics);
@@ -143,6 +150,10 @@ public static class DiagramModelBuilder
             .Select(entity => ModelMerger.ApplyViewMapping(entity, views.Value))
             .Select(entity => ModelMerger.ApplyDefaultSchema(entity, defaultSchema.Value))
             .Select(entity => ModelMerger.ApplySqlQuery(entity, sqlQueries.Value))
+            .Select(entity => ModelMerger.ApplyFunctionMapping(entity, functions.Value))
+            .Select(entity => ModelMerger.ApplyPartitionKey(entity, partitionKeys.Value))
+            .Select(entity => ModelMerger.ApplyEntityAnnotations(entity, annotations.Entities.Value))
+            .Select(entity => ModelMerger.ApplyPropertyAnnotations(entity, annotations.Properties.Value))
             .Select(entity => entity.IsKeyless || fluentKeylessNames.Contains(entity.Name)
                 ? entity with { IsKeyless = true }
                 : entity)
