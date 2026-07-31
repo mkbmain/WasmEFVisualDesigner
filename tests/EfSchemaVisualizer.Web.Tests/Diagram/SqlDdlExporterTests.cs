@@ -287,4 +287,60 @@ public class SqlDdlExporterTests
         Assert.Contains("PRIMARY KEY (\"OrderId\", \"LineNumber\")", sql);
         Assert.DoesNotContain("AUTOINCREMENT", sql);
     }
+
+    [Fact]
+    public void CollectDescendants_MultiLevelHierarchy_ReturnsAllTransitiveDescendants()
+    {
+        var person = Entity("Person");
+        var student = Entity("Student") with { BaseEntityName = "Person" };
+        var gradStudent = Entity("GradStudent") with { BaseEntityName = "Student" };
+        var all = new[] { person, student, gradStudent };
+
+        var descendants = SqlDdlExporter.CollectDescendants(person, all);
+
+        Assert.Equal(new[] { "Student", "GradStudent" }, descendants.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void BuildTphMergedEntity_UnionsOwnPropertiesFromEveryDescendant()
+    {
+        var person = Entity("Person",
+                Column("Id", "int", isNullable: false),
+                Column("Name", "string", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" } };
+
+        var studentOwn = Column("Course", "string", isNullable: false);
+        var student = Entity("Student",
+            new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
+            new PropertyModel("Name", "string", false, null, DeclaringEntityName: "Person"),
+            studentOwn) with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+
+        var teacherOwn = Column("Salary", "decimal", isNullable: false);
+        var teacher = Entity("Teacher",
+            new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
+            new PropertyModel("Name", "string", false, null, DeclaringEntityName: "Person"),
+            teacherOwn) with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+
+        var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student, teacher });
+
+        Assert.Equal(new[] { "Id", "Name", "Course", "Salary", "Discriminator" }, merged.Properties.Select(p => p.Name));
+        Assert.True(merged.Properties.First(p => p.Name == "Course").IsNullable);
+        Assert.True(merged.Properties.First(p => p.Name == "Salary").IsNullable);
+        Assert.False(merged.Properties.First(p => p.Name == "Discriminator").IsNullable);
+    }
+
+    [Fact]
+    public void BuildTphMergedEntity_UsesConfiguredDiscriminatorNameAndType()
+    {
+        var person = Entity("Person", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" }, DiscriminatorPropertyName = "PersonType", DiscriminatorClrType = "int" };
+        var student = Entity("Student", new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"))
+            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+
+        var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
+
+        var discriminator = merged.Properties.Last();
+        Assert.Equal("PersonType", discriminator.Name);
+        Assert.Equal("int", discriminator.ClrType);
+    }
 }

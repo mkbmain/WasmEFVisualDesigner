@@ -142,6 +142,52 @@ public static class SqlDdlExporter
     internal static List<EntityModel> SelectPhysicalEntities(IReadOnlyList<EntityModel> entities) =>
         entities.Where(e => e.ViewName is null && e.FunctionName is null).ToList();
 
+    internal static List<EntityModel> CollectDescendants(EntityModel root, IReadOnlyList<EntityModel> allEntities)
+    {
+        var result = new List<EntityModel>();
+        var visited = new HashSet<string> { root.Name };
+        var frontier = new Queue<string>();
+        frontier.Enqueue(root.Name);
+
+        while (frontier.Count > 0)
+        {
+            var current = frontier.Dequeue();
+            foreach (var child in allEntities.Where(e => e.BaseEntityName == current))
+            {
+                if (visited.Add(child.Name))
+                {
+                    result.Add(child);
+                    frontier.Enqueue(child.Name);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    internal static EntityModel BuildTphMergedEntity(EntityModel root, IReadOnlyList<EntityModel> allEntities)
+    {
+        var columns = new List<PropertyModel>(root.Properties);
+        var seenNames = new HashSet<string>(columns.Select(c => c.Name));
+
+        foreach (var descendant in CollectDescendants(root, allEntities))
+        {
+            foreach (var property in descendant.Properties.Where(p => p.DeclaringEntityName is null))
+            {
+                if (seenNames.Add(property.Name))
+                {
+                    columns.Add(property with { IsNullable = true });
+                }
+            }
+        }
+
+        var discriminatorName = root.DiscriminatorPropertyName ?? "Discriminator";
+        var discriminatorClrType = root.DiscriminatorClrType ?? "string";
+        columns.Add(new PropertyModel(discriminatorName, discriminatorClrType, IsNullable: false, MaxLength: null));
+
+        return root with { Properties = columns };
+    }
+
     internal static List<EntityModel> OrderTablesByDependency(
         IReadOnlyList<EntityModel> physicalEntities, IReadOnlyList<RelationshipModel> relationships)
     {
