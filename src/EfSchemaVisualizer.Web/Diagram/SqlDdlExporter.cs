@@ -214,4 +214,170 @@ public static class SqlDdlExporter
         entity.MappingStrategy == MappingStrategy.Tph &&
         entity.BaseEntityName is not null &&
         allEntities.Any(e => e.Name == entity.BaseEntityName);
+
+    internal static string RenderSequence(SequenceModel sequence, ScaffoldProvider provider)
+    {
+        if (provider == ScaffoldProvider.Sqlite)
+        {
+            return $"-- SQLite has no CREATE SEQUENCE equivalent; skipped sequence \"{sequence.Name}\".\n";
+        }
+
+        var name = sequence.Schema is not null
+            ? $"{QuoteIdentifier(sequence.Schema, provider)}.{QuoteIdentifier(sequence.Name, provider)}"
+            : QuoteIdentifier(sequence.Name, provider);
+
+        var clauses = new List<string>();
+        if (sequence.StartsAt is long start)
+        {
+            clauses.Add($"START WITH {start}");
+        }
+
+        if (sequence.IncrementsBy is int increment)
+        {
+            clauses.Add($"INCREMENT BY {increment}");
+        }
+
+        var suffix = clauses.Count > 0 ? " " + string.Join(" ", clauses) : "";
+        return $"CREATE SEQUENCE {name}{suffix};\n";
+    }
+
+    public static string Export(DiagramModelResult result, ScaffoldProvider provider)
+    {
+        var sb = new StringBuilder();
+
+        foreach (var sequence in result.Sequences)
+        {
+            sb.Append(RenderSequence(sequence, provider));
+        }
+
+        var physicalEntities = SelectPhysicalEntities(result.Entities);
+        var orderedEntities = OrderTablesByDependency(physicalEntities, result.Relationships);
+        var byName = physicalEntities.ToDictionary(e => e.Name);
+
+        foreach (var entity in orderedEntities)
+        {
+            if (IsSkippedTphMember(entity, physicalEntities))
+            {
+                continue;
+            }
+
+            var isTphRootWithDescendants =
+                entity.MappingStrategy == MappingStrategy.Tph &&
+                CollectDescendants(entity, physicalEntities).Count > 0;
+
+            if (isTphRootWithDescendants)
+            {
+                var merged = BuildTphMergedEntity(entity, physicalEntities);
+                sb.Append(RenderCreateTable(merged, merged.KeyPropertyNames, provider));
+                continue;
+            }
+
+            var primaryKeyColumns = entity.IsSharedType && entity.KeyPropertyNames.Count == 0
+                ? ResolveJoinEntityKeyColumns(entity, result.Relationships)
+                : entity.KeyPropertyNames;
+
+            sb.Append(RenderCreateTable(entity, primaryKeyColumns, provider));
+        }
+
+        foreach (var entity in orderedEntities)
+        {
+            if (IsSkippedTphMember(entity, physicalEntities))
+            {
+                continue;
+            }
+
+            foreach (var index in entity.Indexes)
+            {
+                sb.Append(RenderCreateIndex(entity, index, provider));
+            }
+        }
+
+        foreach (var relationship in result.Relationships)
+        {
+            AppendForeignKey(sb, relationship, byName, provider);
+        }
+
+        return sb.ToString();
+    }
+
+    private static IReadOnlyList<string> ResolveJoinEntityKeyColumns(EntityModel joinEntity, IReadOnlyList<RelationshipModel> relationships)
+    {
+        var owning = relationships.FirstOrDefault(r => r.JoinEntityName == joinEntity.Name);
+        return owning is null
+            ? Array.Empty<string>()
+            : owning.JoinEntityLeftForeignKey.Concat(owning.JoinEntityRightForeignKey).ToList();
+    }
+
+    private static void AppendForeignKey(
+        StringBuilder sb, RelationshipModel relationship, Dictionary<string, EntityModel> byName, ScaffoldProvider provider)
+    {
+        switch (relationship.Kind)
+        {
+            case RelationshipKind.OneToOne or RelationshipKind.OneToMany when relationship.ForeignKeyProperties.Count > 0:
+            {
+                if (!byName.TryGetValue(relationship.DependentEntity, out var dependent) ||
+                    !byName.TryGetValue(relationship.PrincipalEntity, out var principal))
+                {
+                    return;
+                }
+
+                var principalKeyColumns = relationship.PrincipalKeyProperties.Count > 0
+                    ? relationship.PrincipalKeyProperties
+                    : principal.KeyPropertyNames;
+
+                var constraintName = relationship.ConstraintName
+                    ?? $"FK_{PhysicalTableName(dependent)}_{PhysicalTableName(principal)}_{string.Join("_", relationship.ForeignKeyProperties)}";
+
+                AppendAlterTableForeignKey(sb, dependent, principal, relationship.ForeignKeyProperties, principalKeyColumns, constraintName, provider);
+                return;
+            }
+
+            case RelationshipKind.Inheritance:
+            {
+                if (!byName.TryGetValue(relationship.DependentEntity, out var child) ||
+                    !byName.TryGetValue(relationship.PrincipalEntity, out var parent) ||
+                    child.MappingStrategy != MappingStrategy.Tpt)
+                {
+                    return;
+                }
+
+                var keyColumns = child.KeyPropertyNames;
+                var constraintName = $"FK_{PhysicalTableName(child)}_{PhysicalTableName(parent)}";
+                AppendAlterTableForeignKey(sb, child, parent, keyColumns, keyColumns, constraintName, provider);
+                return;
+            }
+
+            case RelationshipKind.ManyToMany when relationship.JoinEntityName is not null:
+            {
+                if (!byName.TryGetValue(relationship.JoinEntityName, out var join) ||
+                    !byName.TryGetValue(relationship.PrincipalEntity, out var left) ||
+                    !byName.TryGetValue(relationship.DependentEntity, out var right))
+                {
+                    return;
+                }
+
+                AppendAlterTableForeignKey(
+                    sb, join, left, relationship.JoinEntityLeftForeignKey, left.KeyPropertyNames,
+                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(left)}", provider);
+                AppendAlterTableForeignKey(
+                    sb, join, right, relationship.JoinEntityRightForeignKey, right.KeyPropertyNames,
+                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(right)}", provider);
+                return;
+            }
+        }
+    }
+
+    private static void AppendAlterTableForeignKey(
+        StringBuilder sb, EntityModel dependent, EntityModel principal,
+        IReadOnlyList<string> foreignKeyColumns, IReadOnlyList<string> principalKeyColumns,
+        string constraintName, ScaffoldProvider provider)
+    {
+        var fkColumns = string.Join(", ", foreignKeyColumns.Select(c => QuoteIdentifier(c, provider)));
+        var pkColumns = string.Join(", ", principalKeyColumns.Select(c => QuoteIdentifier(c, provider)));
+
+        sb.Append("ALTER TABLE ").Append(QualifiedTableName(dependent, provider))
+          .Append(" ADD CONSTRAINT ").Append(QuoteIdentifier(constraintName, provider))
+          .Append(" FOREIGN KEY (").Append(fkColumns).Append(") REFERENCES ")
+          .Append(QualifiedTableName(principal, provider)).Append(" (").Append(pkColumns).Append(");\n");
+    }
 }

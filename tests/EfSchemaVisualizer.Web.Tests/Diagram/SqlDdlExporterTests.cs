@@ -413,4 +413,112 @@ public class SqlDdlExporterTests
 
         Assert.False(SqlDdlExporter.IsSkippedTphMember(student, new[] { person, student }));
     }
+
+    [Fact]
+    public void RenderSequence_EmitsCreateSequence()
+    {
+        var sequence = new SequenceModel("OrderNumbers", Schema: null, ClrType: "int", StartsAt: 1000, IncrementsBy: 1, MinValue: null, MaxValue: null, IsCyclic: null);
+
+        var sql = SqlDdlExporter.RenderSequence(sequence, ScaffoldProvider.SqlServer);
+
+        Assert.Equal("CREATE SEQUENCE [OrderNumbers] START WITH 1000 INCREMENT BY 1;\n", sql);
+    }
+
+    [Fact]
+    public void Export_SimpleOneToMany_EmitsTablesThenForeignKey()
+    {
+        var blog = Entity("Blog", Column("Id", "int", isNullable: false)) with { KeyPropertyNames = new[] { "Id" } };
+        var post = Entity("Post",
+                Column("Id", "int", isNullable: false),
+                Column("BlogId", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" } };
+        var relationship = new RelationshipModel(
+            "Blog", "Post", RelationshipKind.OneToMany, PrincipalNavigation: "Posts", DependentNavigation: "Blog",
+            ForeignKeyProperties: new[] { "BlogId" }, ConstraintName: "FK_Post_Blog_BlogId");
+
+        var result = new DiagramModelResult(new[] { blog, post }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        var blogIndex = sql.IndexOf("CREATE TABLE [Blog]", StringComparison.Ordinal);
+        var postIndex = sql.IndexOf("CREATE TABLE [Post]", StringComparison.Ordinal);
+        var fkIndex = sql.IndexOf("ALTER TABLE [Post] ADD CONSTRAINT [FK_Post_Blog_BlogId] FOREIGN KEY ([BlogId]) REFERENCES [Blog] ([Id]);", StringComparison.Ordinal);
+
+        Assert.True(blogIndex >= 0 && postIndex > blogIndex, "Blog table must be created before Post table");
+        Assert.True(fkIndex > postIndex, "Foreign key must be added after both tables exist");
+    }
+
+    [Fact]
+    public void Export_ViewMappedEntity_ProducesNoCreateTable()
+    {
+        var view = Entity("OrderSummary", Column("Total", "decimal")) with { ViewName = "vw_OrderSummary" };
+        var result = new DiagramModelResult(new[] { view }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        Assert.DoesNotContain("CREATE TABLE", sql);
+    }
+
+    [Fact]
+    public void Export_TphHierarchy_EmitsOneTableForRootOnly()
+    {
+        var person = Entity("Person", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+        var student = Entity("Student",
+                new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
+                Column("Course", "string", isNullable: false))
+            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+
+        var result = new DiagramModelResult(new[] { person, student }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        Assert.Contains("CREATE TABLE [Person]", sql);
+        Assert.DoesNotContain("CREATE TABLE [Student]", sql);
+        Assert.Contains("[Course]", sql);
+        Assert.Contains("[Discriminator]", sql);
+    }
+
+    [Fact]
+    public void Export_TptHierarchy_EmitsOneTablePerEntityAndPkAsFk()
+    {
+        var person = Entity("Person", Column("Id", "int", isNullable: false))
+            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpt };
+        var student = Entity("Student",
+                new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
+                Column("Course", "string", isNullable: false))
+            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpt };
+        var inheritance = new RelationshipModel("Person", "Student", RelationshipKind.Inheritance, null, null);
+
+        var result = new DiagramModelResult(new[] { person, student }, new[] { inheritance }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        Assert.Contains("CREATE TABLE [Person]", sql);
+        Assert.Contains("CREATE TABLE [Student]", sql);
+        Assert.Contains("ALTER TABLE [Student] ADD CONSTRAINT [FK_Student_Person] FOREIGN KEY ([Id]) REFERENCES [Person] ([Id]);", sql);
+    }
+
+    [Fact]
+    public void Export_ManyToMany_EmitsJoinTableWithCompositeKeyAndTwoForeignKeys()
+    {
+        var post = Entity("Post", Column("Id", "int", isNullable: false)) with { KeyPropertyNames = new[] { "Id" } };
+        var tag = Entity("Tag", Column("Id", "int", isNullable: false)) with { KeyPropertyNames = new[] { "Id" } };
+        var join = Entity("PostTag",
+                Column("PostsId", "int", isNullable: false),
+                Column("TagsId", "int", isNullable: false))
+            with { IsSharedType = true };
+        var relationship = new RelationshipModel(
+            "Post", "Tag", RelationshipKind.ManyToMany, PrincipalNavigation: "Tags", DependentNavigation: "Posts",
+            JoinEntityName: "PostTag", JoinEntityIsSharedType: true,
+            JoinEntityLeftForeignKey: new[] { "PostsId" }, JoinEntityRightForeignKey: new[] { "TagsId" });
+
+        var result = new DiagramModelResult(new[] { post, tag, join }, new[] { relationship }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
+
+        var sql = SqlDdlExporter.Export(result, ScaffoldProvider.SqlServer);
+
+        Assert.Contains("CONSTRAINT [PK_PostTag] PRIMARY KEY ([PostsId], [TagsId])", sql);
+        Assert.Contains("ALTER TABLE [PostTag] ADD CONSTRAINT [FK_PostTag_Post] FOREIGN KEY ([PostsId]) REFERENCES [Post] ([Id]);", sql);
+        Assert.Contains("ALTER TABLE [PostTag] ADD CONSTRAINT [FK_PostTag_Tag] FOREIGN KEY ([TagsId]) REFERENCES [Tag] ([Id]);", sql);
+    }
 }
