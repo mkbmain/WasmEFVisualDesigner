@@ -57,6 +57,48 @@ public class FluentSyntaxHelpersTests
     }
 
     [Fact]
+    public void GetConfiguredEntityName_GenericOverload_ReturnsTypeArgument()
+    {
+        var invocation = ParseSingleInvocation("modelBuilder.Entity<Person>(entity => { })");
+
+        Assert.Equal("Person", FluentSyntaxHelpers.GetConfiguredEntityName(invocation));
+    }
+
+    [Fact]
+    public void GetConfiguredEntityName_StringOverloadWithNamespace_ReturnsSimpleTypeName()
+    {
+        var invocation = ParseSingleInvocation("""modelBuilder.Entity("MyApp.Models.Person", entity => { })""");
+
+        Assert.Equal("Person", FluentSyntaxHelpers.GetConfiguredEntityName(invocation));
+    }
+
+    [Fact]
+    public void GetConfiguredEntityName_StringOverloadWithoutNamespace_ReturnsNameUnchanged()
+    {
+        var invocation = ParseSingleInvocation("""modelBuilder.Entity("Person", entity => { })""");
+
+        Assert.Equal("Person", FluentSyntaxHelpers.GetConfiguredEntityName(invocation));
+    }
+
+    [Fact]
+    public void GetConfiguredEntityName_StringOverloadBareNoLambda_ReturnsSimpleTypeName()
+    {
+        var invocation = ParseSingleInvocation("""modelBuilder.Entity("MyApp.Models.Person")""");
+
+        Assert.Equal("Person", FluentSyntaxHelpers.GetConfiguredEntityName(invocation));
+    }
+
+    [Fact]
+    public void GetConfiguredEntityName_TypeOverload_ReturnsNull()
+    {
+        // The separate `Entity(Type clrType, ...)` overload passes a `typeof(...)` expression, not a
+        // string literal — out of scope, must not be misread as the string overload.
+        var invocation = ParseSingleInvocation("modelBuilder.Entity(typeof(Person), entity => { })");
+
+        Assert.Null(FluentSyntaxHelpers.GetConfiguredEntityName(invocation));
+    }
+
+    [Fact]
     public void TryReadPropertyNameList_ExplicitNameAnonymousMember_ReturnsNull()
     {
         var invocation = ParseSingleInvocation("entity.HasKey(e => new { K = e.A })");

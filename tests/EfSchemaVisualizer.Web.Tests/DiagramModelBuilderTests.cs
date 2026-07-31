@@ -108,6 +108,38 @@ public class DiagramModelBuilderTests
     }
 
     [Fact]
+    public void Build_StringOverloadEntityCall_ConfigStillParsedAndAppliedToMatchingClass()
+    {
+        // The shape EF's own ModelSnapshot generator emits: `Entity("Namespace.Type", b => ...)`
+        // instead of the generic `Entity<T>(...)`.
+        const string classSource = """
+            public class Person
+            {
+                public int Id { get; set; }
+                public string Name { get; set; }
+            }
+            """;
+
+        const string configSource = """
+            public class AppDbContext : DbContext
+            {
+                protected override void OnModelCreating(ModelBuilder modelBuilder)
+                {
+                    modelBuilder.Entity("MyApp.Models.Person", entity =>
+                    {
+                        entity.Property(e => e.Name).HasMaxLength(100);
+                    });
+                }
+            }
+            """;
+
+        var result = DiagramModelBuilder.Build(classSource, configSource);
+
+        var name = result.Entities.Single().Properties.Single(p => p.Name == "Name");
+        Assert.Equal(100, name.MaxLength);
+    }
+
+    [Fact]
     public void Build_AnnotationOnlyForeignKey_NoFluentConfig_RelationshipStillProduced()
     {
         const string classSource = """

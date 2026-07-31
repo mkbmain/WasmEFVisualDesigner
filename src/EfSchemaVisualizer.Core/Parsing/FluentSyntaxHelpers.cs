@@ -529,13 +529,44 @@ internal static class FluentSyntaxHelpers
 
     internal static string? GetConfiguredEntityName(InvocationExpressionSyntax invocation)
     {
-        return invocation.Expression is MemberAccessExpressionSyntax
+        if (invocation.Expression is MemberAccessExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax,
+                Name: GenericNameSyntax { Identifier.Text: "Entity" } generic
+            })
         {
-            Expression: IdentifierNameSyntax,
-            Name: GenericNameSyntax { Identifier.Text: "Entity" } generic
+            return generic.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
         }
-            ? generic.TypeArgumentList.Arguments.FirstOrDefault()?.ToString()
-            : null;
+
+        if (invocation.Expression is MemberAccessExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax,
+                Name: IdentifierNameSyntax { Identifier.Text: "Entity" }
+            })
+        {
+            return TryReadEntityStringOverloadTypeName(invocation);
+        }
+
+        return null;
+    }
+
+    /// Reads the entity's simple type name from the string-overload `Entity("Namespace.Type", ...)`
+    /// call shape EF's own `ModelSnapshot` generator emits — the argument is the CLR type's full name,
+    /// but every entity elsewhere in this codebase is keyed by its simple class name (as parsed from
+    /// the class declaration), so only the segment after the last '.' is kept. Returns null when the
+    /// first argument isn't a string literal at all (e.g. the separate `Entity(Type clrType, ...)`
+    /// overload, which passes a `typeof(...)` expression — out of scope).
+    private static string? TryReadEntityStringOverloadTypeName(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression is not LiteralExpressionSyntax
+            { RawKind: (int)SyntaxKind.StringLiteralExpression } literal)
+        {
+            return null;
+        }
+
+        var fullName = literal.Token.ValueText;
+        var lastDot = fullName.LastIndexOf('.');
+        return lastDot >= 0 ? fullName[(lastDot + 1)..] : fullName;
     }
 
     /// Finds every entity-name+scope pair configured in the source, from either the

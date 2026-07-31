@@ -697,10 +697,43 @@
 - [ ] **`[found]` `ToFunction`, `HasAnnotation`, `HasPartitionKey`,
       provider-specific extensions.** Long tail; the generic diagnostic covers
       them until any earns a parser.
-- [ ] **`[found]` String-overload `Entity("Namespace.Type", b => ...)`.** The
-      shape EF's own `ModelSnapshot` uses. Verified to parse to nothing today
-      (no entities, no diagnostic). Low value on its own, but relevant once F4
-      decides what to do with snapshot files.
+- [x] **`[found]` String-overload `Entity("Namespace.Type", b => ...)`.** — Fixed
+      2026-07-31.
+      `FluentSyntaxHelpers.GetConfiguredEntityName` only recognized the generic
+      `Entity<T>(...)` shape (`Name: GenericNameSyntax`), so the string-overload
+      form emitted by EF's own `ModelSnapshot` generator matched nothing: not
+      recognized as a configuration scope, its config lambda never walked, and
+      — since `GetConfiguredEntityName is not null` is also the opaque-boundary
+      test `FindAllCalls` uses to avoid misattributing a nested entity's calls
+      to an outer scope — an `Entity("...")` call sitting inside another
+      entity's block could have had its calls misattributed instead of just
+      ignored.
+
+      Fix: `GetConfiguredEntityName` now also matches `receiver.Entity("Name")`
+      / `receiver.Entity("Name", entity => {...})` (plain `IdentifierNameSyntax`
+      method name, not generic) via new `TryReadEntityStringOverloadTypeName`,
+      which reads the first argument as a string literal and keeps only the
+      segment after the last `.` — since every entity elsewhere in this
+      codebase is keyed by its simple class name, not a namespace-qualified
+      one. Matching by simple name means a real class in the parsed source
+      (e.g. `Person`) picks up the string-overload's config exactly as if it
+      had been written as `Entity<Person>(...)`, with zero changes needed to
+      any downstream parser/merger — `FindConfigurationScopesCore` already
+      treats any invocation `GetConfiguredEntityName` resolves as a scope.
+      Verified end-to-end: `modelBuilder.Entity("MyApp.Models.Person", entity
+      => entity.Property(e => e.Name).HasMaxLength(100))` now applies
+      `MaxLength(100)` to `Person.Name` exactly like the generic form.
+
+      **Documented non-goals (out of scope):** the separate `Entity(Type
+      clrType, ...)` overload (a `typeof(...)` expression, not a string
+      literal) is deliberately not matched — falls through to null, same as
+      before. `RenameEntityReferences` still only rewrites the generic form's
+      type-argument identifier (`Name: GenericNameSyntax` check), so renaming
+      an entity configured via the string overload does not rewrite that
+      string literal to the new name — the config is still found and applied,
+      it just isn't a rename target; low value to fix given F4 already
+      excludes `ModelSnapshot` files from parsing entirely, so this overload
+      is now mainly reachable from hand-written source, not snapshot files.
 
 ## Priority 3 — Making "create a database from scratch" actually possible
 
