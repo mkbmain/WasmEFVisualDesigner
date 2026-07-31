@@ -64,4 +64,57 @@ public class ScaffoldGeneratorTests
         Assert.Contains("public DbSet<Order> Orders => Set<Order>();", wrapper);
         Assert.DoesNotContain("DbSet<Address>", wrapper);
     }
+
+    [Fact]
+    public void Generate_AllPiecesMissing_ProducesAllFilesAndWrapsConfigSource()
+    {
+        var plan = new ScaffoldPlan(
+            NeedsCsproj: true, NeedsProgram: true, NeedsAppSettings: true,
+            NeedsReadme: true, NeedsDbContextWrapper: true, DetectedProvider: null);
+        var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
+
+        var result = ScaffoldGenerator.Generate(
+            plan, "modelBuilder.Entity<Blog>(e => e.HasKey(x => x.Id));",
+            entities, "MyApp", ScaffoldProvider.SqlServer);
+
+        Assert.Contains("public class AppDbContext : DbContext", result.ConfigSource);
+        Assert.Contains("MyApp.csproj", result.NewPassthroughFiles.Keys);
+        Assert.Contains("appsettings.json", result.NewPassthroughFiles.Keys);
+        Assert.Contains("Program.cs", result.NewPassthroughFiles.Keys);
+        Assert.Contains("README.md", result.NewPassthroughFiles.Keys);
+        Assert.Contains("AppDbContextFactory.cs", result.NewPassthroughFiles.Keys);
+    }
+
+    [Fact]
+    public void Generate_NothingMissingAndRealDbContextAlreadyExists_ProducesNoNewFiles()
+    {
+        var plan = new ScaffoldPlan(
+            NeedsCsproj: false, NeedsProgram: false, NeedsAppSettings: false,
+            NeedsReadme: false, NeedsDbContextWrapper: false, DetectedProvider: ScaffoldProvider.SqlServer);
+        var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
+        const string existingConfigSource = "public class AppDbContext : DbContext { }";
+
+        var result = ScaffoldGenerator.Generate(
+            plan, existingConfigSource, entities, "MyApp", ScaffoldProvider.SqlServer);
+
+        Assert.Equal(existingConfigSource, result.ConfigSource);
+        Assert.Empty(result.NewPassthroughFiles);
+    }
+
+    [Fact]
+    public void Generate_OnlyCsprojMissing_ProducesOnlyCsprojAndFactory()
+    {
+        var plan = new ScaffoldPlan(
+            NeedsCsproj: true, NeedsProgram: false, NeedsAppSettings: false,
+            NeedsReadme: false, NeedsDbContextWrapper: false, DetectedProvider: null);
+        var entities = new List<EntityModel> { new("Blog", new List<PropertyModel>()) };
+        const string existingConfigSource = "public class AppDbContext : DbContext { }";
+
+        var result = ScaffoldGenerator.Generate(
+            plan, existingConfigSource, entities, "MyApp", ScaffoldProvider.Sqlite);
+
+        Assert.Equal(existingConfigSource, result.ConfigSource);
+        Assert.Equal(new[] { "MyApp.csproj", "AppDbContextFactory.cs" }.OrderBy(x => x),
+            result.NewPassthroughFiles.Keys.OrderBy(x => x));
+    }
 }

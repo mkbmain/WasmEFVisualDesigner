@@ -5,6 +5,10 @@ using EfSchemaVisualizer.Core.Model;
 
 namespace EfSchemaVisualizer.Core.Archive;
 
+public sealed record ScaffoldResult(
+    string ConfigSource,
+    IReadOnlyDictionary<string, byte[]> NewPassthroughFiles);
+
 /// Fills in whatever scaffold pieces a ScaffoldPlan marked missing. Never regenerates or modifies
 /// a file that already exists — see ScaffoldPlanner for what "missing" means.
 public static class ScaffoldGenerator
@@ -72,5 +76,48 @@ public static class ScaffoldGenerator
     {
         var lines = source.Replace("\r\n", "\n").Split('\n');
         return string.Join("\n", lines.Select(line => line.Length == 0 ? line : indent + line));
+    }
+
+    public static ScaffoldResult Generate(
+        ScaffoldPlan plan,
+        string configSource,
+        IReadOnlyList<EntityModel> entities,
+        string projectName,
+        ScaffoldProvider provider)
+    {
+        var newFiles = new Dictionary<string, byte[]>();
+        var resultConfigSource = configSource;
+
+        if (plan.NeedsDbContextWrapper)
+        {
+            resultConfigSource = BuildDbContextWrapper(configSource, entities, projectName);
+        }
+
+        if (plan.NeedsAppSettings)
+        {
+            newFiles["appsettings.json"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.AppSettings(projectName, provider));
+        }
+
+        if (plan.NeedsCsproj)
+        {
+            newFiles[$"{projectName}.csproj"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Csproj(projectName, provider));
+        }
+
+        if (plan.NeedsProgram)
+        {
+            newFiles["Program.cs"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Program(projectName));
+        }
+
+        if (plan.NeedsReadme)
+        {
+            newFiles["README.md"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.Readme(projectName));
+        }
+
+        if (plan.NeedsDbContextWrapper || plan.NeedsCsproj)
+        {
+            newFiles["AppDbContextFactory.cs"] = Encoding.UTF8.GetBytes(ScaffoldTemplates.DbContextFactory(projectName, provider));
+        }
+
+        return new ScaffoldResult(resultConfigSource, newFiles);
     }
 }
