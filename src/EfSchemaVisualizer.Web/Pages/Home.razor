@@ -51,6 +51,23 @@
         }
         <InputFile OnChange="OnZipSelected" accept=".zip" />
         <button class="btn btn-secondary" disabled="@(_editor is null)" @onclick="DownloadZip">Download .zip</button>
+        <label title="Fill in any of AppDbContext, .csproj, appsettings.json, Program.cs, and README.md that are missing, without overwriting anything already present">
+            <input type="checkbox" @bind="_generateScaffold" disabled="@(_editor is null)" />
+            Generate runnable project scaffold
+        </label>
+        @if (_generateScaffold)
+        {
+            <input style="width: 120px;" value="@_projectName" placeholder="Project name"
+                   @onchange="e => _projectName = e.Value?.ToString() ?? _projectName" />
+            @if (CurrentScaffoldPlan is null || CurrentScaffoldPlan.NeedsCsproj)
+            {
+                <select @bind="_selectedProvider">
+                    <option value="@ScaffoldProvider.SqlServer">SQL Server</option>
+                    <option value="@ScaffoldProvider.PostgreSql">PostgreSQL</option>
+                    <option value="@ScaffoldProvider.Sqlite">SQLite</option>
+                </select>
+            }
+        }
         <button class="btn btn-secondary" title="Export the diagram as a standalone SVG image" disabled="@(_editor is null || _diagram is null)" @onclick="ExportSvgAsync">Export SVG</button>
         <button class="btn btn-secondary" title="Export the diagram as Mermaid erDiagram text" disabled="@(_editor is null)" @onclick="ExportMermaidAsync">Export Mermaid</button>
     </p>
@@ -202,6 +219,13 @@
     // longer tied to any uploaded file's structure. Entity/config origins themselves live on
     // `_editor` from construction onward (see F3), which keeps them correct across renames.
     private IReadOnlyDictionary<string, byte[]>? _passthroughFiles;
+
+    private bool _generateScaffold;
+    private string _projectName = "MyApp";
+    private ScaffoldProvider _selectedProvider = ScaffoldProvider.SqlServer;
+
+    private ScaffoldPlan? CurrentScaffoldPlan =>
+        _editor is null ? null : ScaffoldPlanner.Plan(_editor.ConfigSource, _passthroughFiles);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -395,12 +419,37 @@
         }
 
         var layout = _diagram is not null ? DiagramLayout.Capture(_diagram) : null;
+        var configSource = _editor.ConfigSource;
+        var passthrough = _passthroughFiles;
+
+        if (_generateScaffold)
+        {
+            var plan = ScaffoldPlanner.Plan(configSource, passthrough);
+            var result = ScaffoldGenerator.Generate(
+                plan, configSource, _editor.Current.Entities, _projectName, _selectedProvider);
+            configSource = result.ConfigSource;
+            passthrough = MergePassthroughFiles(passthrough, result.NewPassthroughFiles);
+        }
+
         var bytes = ProjectArchiveWriter.Write(
-            _editor.ClassSource, _editor.ConfigSource, layout,
-            _editor.EntityFileOrigins, _editor.ConfigFileOrigins, _passthroughFiles);
+            _editor.ClassSource, configSource, layout,
+            _editor.EntityFileOrigins, _editor.ConfigFileOrigins, passthrough);
         using var stream = new MemoryStream(bytes);
         using var streamRef = new DotNetStreamReference(stream);
         await JS.InvokeVoidAsync("downloadFileFromStream", "ef-schema-visualizer-export.zip", streamRef);
+    }
+
+    private static IReadOnlyDictionary<string, byte[]> MergePassthroughFiles(
+        IReadOnlyDictionary<string, byte[]>? existing,
+        IReadOnlyDictionary<string, byte[]> generated)
+    {
+        var merged = new Dictionary<string, byte[]>(existing ?? new Dictionary<string, byte[]>());
+        foreach (var (path, bytes) in generated)
+        {
+            merged[path] = bytes;
+        }
+
+        return merged;
     }
 
     private async Task ExportSvgAsync()
