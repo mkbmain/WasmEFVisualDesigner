@@ -86,4 +86,20 @@ public static class SqlDdlExporter
 
         return "";
     }
+
+    internal static List<EntityModel> SelectPhysicalEntities(IReadOnlyList<EntityModel> entities) =>
+        entities.Where(e => e.ViewName is null && e.FunctionName is null).ToList();
+
+    internal static List<EntityModel> OrderTablesByDependency(
+        IReadOnlyList<EntityModel> physicalEntities, IReadOnlyList<RelationshipModel> relationships)
+    {
+        var layers = DiagramAutoLayout.ComputeLayers(physicalEntities, relationships);
+
+        return physicalEntities
+            .Select((entity, index) => (entity, index))
+            .OrderBy(t => layers.GetValueOrDefault(t.entity.Name, 0))
+            .ThenBy(t => t.index)
+            .Select(t => t.entity)
+            .ToList();
+    }
 }

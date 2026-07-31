@@ -1,6 +1,7 @@
 using EfSchemaVisualizer.Core.Archive;
 using EfSchemaVisualizer.Core.Model;
 using EfSchemaVisualizer.Web.Diagram;
+using static EfSchemaVisualizer.Core.Model.RelationshipKind;
 
 namespace EfSchemaVisualizer.Web.Tests.Diagram;
 
@@ -144,5 +145,42 @@ public class SqlDdlExporterTests
     public void IsIdentityCandidate_NonIntegerType_IsFalse()
     {
         Assert.False(SqlDdlExporter.IsIdentityCandidate(Column("Id", clrType: "Guid")));
+    }
+
+    [Fact]
+    public void SelectPhysicalEntities_ExcludesViewMappedAndFunctionMappedEntities()
+    {
+        var table = Entity("Order");
+        var view = Entity("OrderSummary") with { ViewName = "vw_OrderSummary" };
+        var function = Entity("ActiveOrders") with { FunctionName = "fn_ActiveOrders" };
+
+        var result = SqlDdlExporter.SelectPhysicalEntities(new[] { table, view, function });
+
+        Assert.Equal(new[] { "Order" }, result.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void OrderTablesByDependency_PrincipalBeforeDependent()
+    {
+        var blog = Entity("Blog", Column("Id", "int", isNullable: false));
+        var post = Entity("Post", Column("Id", "int", isNullable: false), Column("BlogId", "int", isNullable: false));
+        var relationship = new RelationshipModel(
+            "Blog", "Post", OneToMany, PrincipalNavigation: null, DependentNavigation: null,
+            ForeignKeyProperties: new[] { "BlogId" });
+
+        var ordered = SqlDdlExporter.OrderTablesByDependency(new[] { post, blog }, new[] { relationship });
+
+        Assert.Equal(new[] { "Blog", "Post" }, ordered.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void OrderTablesByDependency_NoRelationships_PreservesOriginalOrder()
+    {
+        var a = Entity("A");
+        var b = Entity("B");
+
+        var ordered = SqlDdlExporter.OrderTablesByDependency(new[] { a, b }, Array.Empty<RelationshipModel>());
+
+        Assert.Equal(new[] { "A", "B" }, ordered.Select(e => e.Name));
     }
 }
