@@ -15,6 +15,7 @@ public static class ScaffoldTemplates
                 <OutputType>Exe</OutputType>
                 <TargetFramework>net10.0</TargetFramework>
                 <Nullable>enable</Nullable>
+                <ImplicitUsings>enable</ImplicitUsings>
                 <RootNamespace>{{projectName}}</RootNamespace>
               </PropertyGroup>
 

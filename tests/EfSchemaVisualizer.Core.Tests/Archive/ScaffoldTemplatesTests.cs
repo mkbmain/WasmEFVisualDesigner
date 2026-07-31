@@ -18,6 +18,7 @@ public class ScaffoldTemplatesTests
         Assert.Contains("Microsoft.EntityFrameworkCore.Design", csproj);
         Assert.Contains("<TargetFramework>net10.0</TargetFramework>", csproj);
         Assert.Contains("<RootNamespace>MyApp</RootNamespace>", csproj);
+        Assert.Contains("<ImplicitUsings>enable</ImplicitUsings>", csproj);
         Assert.Contains("appsettings.json", csproj);
     }
 
