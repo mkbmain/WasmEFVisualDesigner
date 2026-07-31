@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using EfSchemaVisualizer.Core.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -402,9 +399,9 @@ internal static class FluentSyntaxHelpers
     }
 
     private static readonly string[] CollectionWrapperNames =
-    {
-        "ICollection", "IList", "List", "IEnumerable", "HashSet", "ISet",
-    };
+    [
+        "ICollection", "IList", "List", "IEnumerable", "HashSet", "ISet"
+    ];
 
     /// Given a property's ClrType text (e.g. "ICollection<Order>", "Order[]", or bare "Order"),
     /// returns the element type name for recognized collection wrapper shapes, or the type text
@@ -449,7 +446,7 @@ internal static class FluentSyntaxHelpers
     internal static string? TryReadUsingEntityStringName(InvocationExpressionSyntax? usingEntityCall)
     {
         return usingEntityCall?.ArgumentList.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax
-            { RawKind: (int)SyntaxKind.StringLiteralExpression } literal
+        { RawKind: (int)SyntaxKind.StringLiteralExpression } literal
             ? literal.Token.ValueText
             : null;
     }
@@ -553,8 +550,9 @@ internal static class FluentSyntaxHelpers
     /// Reads the entity's simple type name from the string-overload `Entity("Namespace.Type", ...)`
     /// call shape EF's own `ModelSnapshot` generator emits — the argument is the CLR type's full name,
     /// but every entity elsewhere in this codebase is keyed by its simple class name (as parsed from
-    /// the class declaration), so only the segment after the last '.' is kept. Returns null when the
-    /// first argument isn't a string literal at all (e.g. the separate `Entity(Type clrType, ...)`
+    /// the class declaration), so only the segment after the last '.' or '+' is kept (nested types use
+    /// '+' before the simple name in `Type.FullName`, e.g. "Outer+Inner"). Returns null when the first
+    /// argument isn't a non-empty string literal at all (e.g. the separate `Entity(Type clrType, ...)`
     /// overload, which passes a `typeof(...)` expression — out of scope).
     private static string? TryReadEntityStringOverloadTypeName(InvocationExpressionSyntax invocation)
     {
@@ -565,8 +563,13 @@ internal static class FluentSyntaxHelpers
         }
 
         var fullName = literal.Token.ValueText;
-        var lastDot = fullName.LastIndexOf('.');
-        return lastDot >= 0 ? fullName[(lastDot + 1)..] : fullName;
+        if (fullName.Length == 0)
+        {
+            return null;
+        }
+
+        var lastSeparator = fullName.LastIndexOfAny(['.', '+']);
+        return lastSeparator >= 0 ? fullName[(lastSeparator + 1)..] : fullName;
     }
 
     /// Finds every entity-name+scope pair configured in the source, from either the

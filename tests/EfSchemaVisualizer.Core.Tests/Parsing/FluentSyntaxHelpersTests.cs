@@ -89,6 +89,24 @@ public class FluentSyntaxHelpersTests
     }
 
     [Fact]
+    public void GetConfiguredEntityName_StringOverloadNestedType_ReturnsInnerSimpleTypeName()
+    {
+        // Nested CLR types use '+' between outer and inner in Type.FullName, e.g.
+        // "MyApp.Models.Outer+Inner" — the simple name is "Inner", not "Outer+Inner".
+        var invocation = ParseSingleInvocation("""modelBuilder.Entity("MyApp.Models.Outer+Inner", entity => { })""");
+
+        Assert.Equal("Inner", FluentSyntaxHelpers.GetConfiguredEntityName(invocation));
+    }
+
+    [Fact]
+    public void GetConfiguredEntityName_StringOverloadEmptyLiteral_ReturnsNull()
+    {
+        var invocation = ParseSingleInvocation("""modelBuilder.Entity("", entity => { })""");
+
+        Assert.Null(FluentSyntaxHelpers.GetConfiguredEntityName(invocation));
+    }
+
+    [Fact]
     public void GetConfiguredEntityName_TypeOverload_ReturnsNull()
     {
         // The separate `Entity(Type clrType, ...)` overload passes a `typeof(...)` expression, not a
