@@ -70,6 +70,12 @@
         }
         <button class="btn btn-secondary" title="Export the diagram as a standalone SVG image" disabled="@(_editor is null || _diagram is null)" @onclick="ExportSvgAsync">Export SVG</button>
         <button class="btn btn-secondary" title="Export the diagram as Mermaid erDiagram text" disabled="@(_editor is null)" @onclick="ExportMermaidAsync">Export Mermaid</button>
+        <select title="SQL dialect for Export SQL" @bind="_selectedProvider">
+            <option value="@ScaffoldProvider.SqlServer">SQL Server</option>
+            <option value="@ScaffoldProvider.PostgreSql">PostgreSQL</option>
+            <option value="@ScaffoldProvider.Sqlite">SQLite</option>
+        </select>
+        <button class="btn btn-secondary" title="Export the diagram as CREATE TABLE / ALTER TABLE SQL DDL" disabled="@(_editor is null)" @onclick="ExportSqlAsync">Export SQL</button>
     </p>
 
     @if (_error is not null)
@@ -472,6 +478,17 @@
 
         var mermaid = MermaidExporter.Export(_editor.Current);
         await DownloadTextAsync("diagram.mmd", mermaid, "text/plain");
+    }
+
+    private async Task ExportSqlAsync()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        var sql = SqlDdlExporter.Export(_editor.Current, _selectedProvider);
+        await DownloadTextAsync("schema.sql", sql, "text/plain");
     }
 
     private async Task DownloadTextAsync(string fileName, string content, string mimeType)
