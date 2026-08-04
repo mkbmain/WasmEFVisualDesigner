@@ -115,7 +115,8 @@ public class SqlDdlExporterTests
     public void RenderColumnDefinition_SequenceNameWithSchema_SqlServer_QualifiesSequenceName()
     {
         var property = Column("OrderNumber", clrType: "int", isNullable: false)
-            with { SequenceName = "OrderNumbers", SequenceSchema = "sales" };
+            with
+        { SequenceName = "OrderNumbers", SequenceSchema = "sales" };
 
         var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.SqlServer);
 
@@ -126,7 +127,8 @@ public class SqlDdlExporterTests
     public void RenderColumnDefinition_SequenceName_Postgres_EmitsNextvalDefault()
     {
         var property = Column("OrderNumber", clrType: "int", isNullable: false)
-            with { SequenceName = "OrderNumbers", SequenceSchema = "sales" };
+            with
+        { SequenceName = "OrderNumbers", SequenceSchema = "sales" };
 
         var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.PostgreSql);
 
@@ -147,7 +149,8 @@ public class SqlDdlExporterTests
     public void RenderColumnDefinition_DefaultValueLiteralTakesPrecedenceOverSequenceName()
     {
         var property = Column("OrderNumber", clrType: "int", isNullable: false, defaultValueLiteral: "1")
-            with { SequenceName = "OrderNumbers" };
+            with
+        { SequenceName = "OrderNumbers" };
 
         var line = SqlDdlExporter.RenderColumnDefinition(property, false, ScaffoldProvider.SqlServer);
 
@@ -243,7 +246,8 @@ public class SqlDdlExporterTests
         var entity = Entity("Blog",
                 Column("Id", "int", isNullable: false),
                 Column("Title", "string", isNullable: false, maxLength: 200))
-            with { KeyPropertyNames = new[] { "Id" } };
+            with
+        { KeyPropertyNames = new[] { "Id" } };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.SqlServer);
 
@@ -260,7 +264,8 @@ public class SqlDdlExporterTests
     public void RenderCreateTable_ExplicitKeyName_UsesItForConstraintName()
     {
         var entity = Entity("Blog", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" }, KeyName = "PK_MyBlog" };
+            with
+        { KeyPropertyNames = new[] { "Id" }, KeyName = "PK_MyBlog" };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.SqlServer);
 
@@ -282,11 +287,11 @@ public class SqlDdlExporterTests
     {
         var entity = Entity("Order", Column("Total", "decimal", isNullable: false))
             with
-            {
-                KeyPropertyNames = Array.Empty<string>(),
-                IsKeyless = true,
-                CheckConstraints = new[] { new CheckConstraintModel("CK_Order_Total", "[Total] >= 0") },
-            };
+        {
+            KeyPropertyNames = Array.Empty<string>(),
+            IsKeyless = true,
+            CheckConstraints = new[] { new CheckConstraintModel("CK_Order_Total", "[Total] >= 0") },
+        };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
 
@@ -298,11 +303,11 @@ public class SqlDdlExporterTests
     {
         var entity = Entity("User", Column("Email", "string", isNullable: false, maxLength: 200))
             with
-            {
-                KeyPropertyNames = Array.Empty<string>(),
-                IsKeyless = true,
-                AlternateKeys = new IReadOnlyList<string>[] { new[] { "Email" } },
-            };
+        {
+            KeyPropertyNames = Array.Empty<string>(),
+            IsKeyless = true,
+            AlternateKeys = new IReadOnlyList<string>[] { new[] { "Email" } },
+        };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
 
@@ -315,7 +320,8 @@ public class SqlDdlExporterTests
         var entity = Entity("Blog",
                 Column("Id", "int", isNullable: false),
                 Column("Title", "string", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" } };
+            with
+        { KeyPropertyNames = new[] { "Id" } };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.Sqlite);
 
@@ -333,7 +339,8 @@ public class SqlDdlExporterTests
         var entity = Entity("OrderLine",
                 Column("OrderId", "int", isNullable: false),
                 Column("LineNumber", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "OrderId", "LineNumber" } };
+            with
+        { KeyPropertyNames = new[] { "OrderId", "LineNumber" } };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.Sqlite);
 
@@ -360,19 +367,22 @@ public class SqlDdlExporterTests
         var person = Entity("Person",
                 Column("Id", "int", isNullable: false),
                 Column("Name", "string", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" } };
+            with
+        { KeyPropertyNames = new[] { "Id" } };
 
         var studentOwn = Column("Course", "string", isNullable: false);
         var student = Entity("Student",
             new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
             new PropertyModel("Name", "string", false, null, DeclaringEntityName: "Person"),
-            studentOwn) with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+            studentOwn) with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
 
         var teacherOwn = Column("Salary", "decimal", isNullable: false);
         var teacher = Entity("Teacher",
             new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
             new PropertyModel("Name", "string", false, null, DeclaringEntityName: "Person"),
-            teacherOwn) with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+            teacherOwn) with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
 
         var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student, teacher });
 
@@ -386,9 +396,11 @@ public class SqlDdlExporterTests
     public void BuildTphMergedEntity_UsesConfiguredDiscriminatorNameAndType()
     {
         var person = Entity("Person", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" }, DiscriminatorPropertyName = "PersonType", DiscriminatorClrType = "int" };
+            with
+        { KeyPropertyNames = new[] { "Id" }, DiscriminatorPropertyName = "PersonType", DiscriminatorClrType = "int" };
         var student = Entity("Student", new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"))
-            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+            with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
 
         var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
 
@@ -401,9 +413,11 @@ public class SqlDdlExporterTests
     public void BuildTphMergedEntity_DiscriminatorNameMatchesExistingProperty_DoesNotDuplicateColumn()
     {
         var person = Entity("Person", Column("Id", "int", isNullable: false), Column("Type", "string", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" }, DiscriminatorPropertyName = "Type" };
+            with
+        { KeyPropertyNames = new[] { "Id" }, DiscriminatorPropertyName = "Type" };
         var student = Entity("Student", new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"))
-            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
+            with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" } };
 
         var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
 
@@ -414,12 +428,14 @@ public class SqlDdlExporterTests
     public void BuildTphMergedEntity_DescendantCheckConstraint_IsUnionedIntoMerged()
     {
         var person = Entity("Person", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" } };
+            with
+        { KeyPropertyNames = new[] { "Id" } };
         var studentCheck = new CheckConstraintModel("CK_Student_Course", "[Course] IS NOT NULL");
         var student = Entity("Student",
                 new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
                 Column("Course", "string", isNullable: false))
-            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, CheckConstraints = new[] { studentCheck } };
+            with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, CheckConstraints = new[] { studentCheck } };
 
         var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
 
@@ -430,18 +446,19 @@ public class SqlDdlExporterTests
     public void BuildTphMergedEntity_DescendantIndexAndAlternateKey_AreUnionedIntoMerged()
     {
         var person = Entity("Person", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" } };
+            with
+        { KeyPropertyNames = new[] { "Id" } };
         var studentIndex = new IndexModel(new[] { "Course" }, IsUnique: false, Name: "IX_Student_Course");
         var student = Entity("Student",
                 new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
                 Column("Course", "string", isNullable: false))
             with
-            {
-                BaseEntityName = "Person",
-                KeyPropertyNames = new[] { "Id" },
-                Indexes = new[] { studentIndex },
-                AlternateKeys = new IReadOnlyList<string>[] { new[] { "Course" } },
-            };
+        {
+            BaseEntityName = "Person",
+            KeyPropertyNames = new[] { "Id" },
+            Indexes = new[] { studentIndex },
+            AlternateKeys = new IReadOnlyList<string>[] { new[] { "Course" } },
+        };
 
         var merged = SqlDdlExporter.BuildTphMergedEntity(person, new[] { person, student });
 
@@ -536,7 +553,8 @@ public class SqlDdlExporterTests
         var post = Entity("Post",
                 Column("Id", "int", isNullable: false),
                 Column("BlogId", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" } };
+            with
+        { KeyPropertyNames = new[] { "Id" } };
         var relationship = new RelationshipModel(
             "Blog", "Post", RelationshipKind.OneToMany, PrincipalNavigation: "Posts", DependentNavigation: "Blog",
             ForeignKeyProperties: new[] { "BlogId" }, ConstraintName: "FK_Post_Blog_BlogId");
@@ -568,11 +586,13 @@ public class SqlDdlExporterTests
     public void Export_TphHierarchy_EmitsOneTableForRootOnly()
     {
         var person = Entity("Person", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+            with
+        { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
         var student = Entity("Student",
                 new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
                 Column("Course", "string", isNullable: false))
-            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+            with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
 
         var result = new DiagramModelResult(new[] { person, student }, Array.Empty<RelationshipModel>(), Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
 
@@ -588,11 +608,13 @@ public class SqlDdlExporterTests
     public void Export_TptHierarchy_EmitsOneTablePerEntityAndPkAsFk()
     {
         var person = Entity("Person", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpt };
+            with
+        { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpt };
         var student = Entity("Student",
                 new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
                 Column("Course", "string", isNullable: false))
-            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpt };
+            with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpt };
         var inheritance = new RelationshipModel("Person", "Student", RelationshipKind.Inheritance, null, null);
 
         var result = new DiagramModelResult(new[] { person, student }, new[] { inheritance }, Array.Empty<Core.Parsing.Diagnostic>(), Array.Empty<SequenceModel>());
@@ -615,7 +637,8 @@ public class SqlDdlExporterTests
     public void RenderCreateTable_TptChildEntity_SuppressesIdentityOnSharedPk()
     {
         var student = Entity("Student", Column("Id", "int", isNullable: false), Column("Course", "string", isNullable: false))
-            with { BaseEntityName = "Person", MappingStrategy = MappingStrategy.Tpt, KeyPropertyNames = new[] { "Id" } };
+            with
+        { BaseEntityName = "Person", MappingStrategy = MappingStrategy.Tpt, KeyPropertyNames = new[] { "Id" } };
 
         var sqlServerSql = SqlDdlExporter.RenderCreateTable(student, student.KeyPropertyNames, ScaffoldProvider.SqlServer);
         var postgresSql = SqlDdlExporter.RenderCreateTable(student, student.KeyPropertyNames, ScaffoldProvider.PostgreSql);
@@ -630,7 +653,8 @@ public class SqlDdlExporterTests
     public void RenderCreateTable_TpcEntity_EmitsCautionaryCommentAboveCreateTable()
     {
         var entity = Entity("Car", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpc };
+            with
+        { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tpc };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, entity.KeyPropertyNames, ScaffoldProvider.SqlServer);
 
@@ -657,14 +681,15 @@ public class SqlDdlExporterTests
     {
         var blog = Entity("Blog", Column("Id", "int", isNullable: false) with { ColumnName = "BlogKey" })
             with
-            {
-                KeyPropertyNames = new[] { "Id" },
-                Indexes = new[] { new IndexModel(new[] { "Id" }, IsUnique: false) },
-            };
+        {
+            KeyPropertyNames = new[] { "Id" },
+            Indexes = new[] { new IndexModel(new[] { "Id" }, IsUnique: false) },
+        };
         var post = Entity("Post",
                 Column("Id", "int", isNullable: false),
                 Column("BlogId", "int", isNullable: false) with { ColumnName = "BlogFk" })
-            with { KeyPropertyNames = new[] { "Id" } };
+            with
+        { KeyPropertyNames = new[] { "Id" } };
 
         var createSql = SqlDdlExporter.RenderCreateTable(blog, blog.KeyPropertyNames, ScaffoldProvider.SqlServer);
         Assert.Contains("[BlogKey] int IDENTITY(1,1) NOT NULL", createSql);
@@ -688,11 +713,11 @@ public class SqlDdlExporterTests
     {
         var entity = Entity("User", Column("Email", "string", isNullable: false, maxLength: 200) with { ColumnName = "EmailAddress" })
             with
-            {
-                KeyPropertyNames = Array.Empty<string>(),
-                IsKeyless = true,
-                AlternateKeys = new IReadOnlyList<string>[] { new[] { "Email" } },
-            };
+        {
+            KeyPropertyNames = Array.Empty<string>(),
+            IsKeyless = true,
+            AlternateKeys = new IReadOnlyList<string>[] { new[] { "Email" } },
+        };
 
         var sql = SqlDdlExporter.RenderCreateTable(entity, Array.Empty<string>(), ScaffoldProvider.SqlServer);
 
@@ -707,7 +732,8 @@ public class SqlDdlExporterTests
         var join = Entity("PostTag",
                 Column("PostsId", "int", isNullable: false),
                 Column("TagsId", "int", isNullable: false))
-            with { IsSharedType = true };
+            with
+        { IsSharedType = true };
         var relationship = new RelationshipModel(
             "Post", "Tag", RelationshipKind.ManyToMany, PrincipalNavigation: "Tags", DependentNavigation: "Posts",
             JoinEntityName: "PostTag", JoinEntityIsSharedType: true,
@@ -729,7 +755,8 @@ public class SqlDdlExporterTests
         var join = Entity("UserFriend",
                 Column("UserId", "int", isNullable: false),
                 Column("FriendId", "int", isNullable: false))
-            with { IsSharedType = true };
+            with
+        { IsSharedType = true };
         var relationship = new RelationshipModel(
             "User", "User", RelationshipKind.ManyToMany, PrincipalNavigation: "Friends", DependentNavigation: "FriendedBy",
             JoinEntityName: "UserFriend", JoinEntityIsSharedType: true,
@@ -769,11 +796,13 @@ public class SqlDdlExporterTests
     public void Export_ForeignKeyToTphDerivedType_ReferencesRootTableNotDerivedTable()
     {
         var person = Entity("Person", Column("Id", "int", isNullable: false))
-            with { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+            with
+        { KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
         var student = Entity("Student",
                 new PropertyModel("Id", "int", false, null, DeclaringEntityName: "Person"),
                 Column("SchoolId", "int", isNullable: false))
-            with { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
+            with
+        { BaseEntityName = "Person", KeyPropertyNames = new[] { "Id" }, MappingStrategy = MappingStrategy.Tph };
         var school = Entity("School", Column("Id", "int", isNullable: false)) with { KeyPropertyNames = new[] { "Id" } };
 
         var relationship = new RelationshipModel(

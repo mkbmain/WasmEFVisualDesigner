@@ -452,62 +452,62 @@ public static class SqlDdlExporter
         switch (relationship.Kind)
         {
             case RelationshipKind.OneToOne or RelationshipKind.OneToMany when relationship.ForeignKeyProperties.Count > 0:
-            {
-                if (!byName.TryGetValue(relationship.DependentEntity, out var dependentRaw) ||
-                    !byName.TryGetValue(relationship.PrincipalEntity, out var principalRaw))
                 {
+                    if (!byName.TryGetValue(relationship.DependentEntity, out var dependentRaw) ||
+                        !byName.TryGetValue(relationship.PrincipalEntity, out var principalRaw))
+                    {
+                        return;
+                    }
+
+                    var dependent = ResolveTphTableEntity(dependentRaw, allEntities);
+                    var principal = ResolveTphTableEntity(principalRaw, allEntities);
+
+                    var principalKeyColumns = relationship.PrincipalKeyProperties.Count > 0
+                        ? relationship.PrincipalKeyProperties
+                        : principal.KeyPropertyNames;
+
+                    var constraintName = relationship.ConstraintName
+                        ?? $"FK_{PhysicalTableName(dependent)}_{PhysicalTableName(principal)}_{string.Join("_", relationship.ForeignKeyProperties)}";
+
+                    AppendAlterTableForeignKey(sb, dependent, principal, relationship.ForeignKeyProperties, principalKeyColumns, constraintName, provider);
                     return;
                 }
-
-                var dependent = ResolveTphTableEntity(dependentRaw, allEntities);
-                var principal = ResolveTphTableEntity(principalRaw, allEntities);
-
-                var principalKeyColumns = relationship.PrincipalKeyProperties.Count > 0
-                    ? relationship.PrincipalKeyProperties
-                    : principal.KeyPropertyNames;
-
-                var constraintName = relationship.ConstraintName
-                    ?? $"FK_{PhysicalTableName(dependent)}_{PhysicalTableName(principal)}_{string.Join("_", relationship.ForeignKeyProperties)}";
-
-                AppendAlterTableForeignKey(sb, dependent, principal, relationship.ForeignKeyProperties, principalKeyColumns, constraintName, provider);
-                return;
-            }
 
             case RelationshipKind.Inheritance:
-            {
-                if (!byName.TryGetValue(relationship.DependentEntity, out var child) ||
-                    !byName.TryGetValue(relationship.PrincipalEntity, out var parent) ||
-                    child.MappingStrategy != MappingStrategy.Tpt)
                 {
+                    if (!byName.TryGetValue(relationship.DependentEntity, out var child) ||
+                        !byName.TryGetValue(relationship.PrincipalEntity, out var parent) ||
+                        child.MappingStrategy != MappingStrategy.Tpt)
+                    {
+                        return;
+                    }
+
+                    var keyColumns = child.KeyPropertyNames;
+                    var constraintName = $"FK_{PhysicalTableName(child)}_{PhysicalTableName(parent)}";
+                    AppendAlterTableForeignKey(sb, child, parent, keyColumns, keyColumns, constraintName, provider);
                     return;
                 }
-
-                var keyColumns = child.KeyPropertyNames;
-                var constraintName = $"FK_{PhysicalTableName(child)}_{PhysicalTableName(parent)}";
-                AppendAlterTableForeignKey(sb, child, parent, keyColumns, keyColumns, constraintName, provider);
-                return;
-            }
 
             case RelationshipKind.ManyToMany when relationship.JoinEntityName is not null:
-            {
-                if (!byName.TryGetValue(relationship.JoinEntityName, out var join) ||
-                    !byName.TryGetValue(relationship.PrincipalEntity, out var leftRaw) ||
-                    !byName.TryGetValue(relationship.DependentEntity, out var rightRaw))
                 {
+                    if (!byName.TryGetValue(relationship.JoinEntityName, out var join) ||
+                        !byName.TryGetValue(relationship.PrincipalEntity, out var leftRaw) ||
+                        !byName.TryGetValue(relationship.DependentEntity, out var rightRaw))
+                    {
+                        return;
+                    }
+
+                    var left = ResolveTphTableEntity(leftRaw, allEntities);
+                    var right = ResolveTphTableEntity(rightRaw, allEntities);
+
+                    AppendAlterTableForeignKey(
+                        sb, join, left, relationship.JoinEntityLeftForeignKey, left.KeyPropertyNames,
+                        $"FK_{PhysicalTableName(join)}_{PhysicalTableName(left)}_{string.Join("_", relationship.JoinEntityLeftForeignKey)}", provider);
+                    AppendAlterTableForeignKey(
+                        sb, join, right, relationship.JoinEntityRightForeignKey, right.KeyPropertyNames,
+                        $"FK_{PhysicalTableName(join)}_{PhysicalTableName(right)}_{string.Join("_", relationship.JoinEntityRightForeignKey)}", provider);
                     return;
                 }
-
-                var left = ResolveTphTableEntity(leftRaw, allEntities);
-                var right = ResolveTphTableEntity(rightRaw, allEntities);
-
-                AppendAlterTableForeignKey(
-                    sb, join, left, relationship.JoinEntityLeftForeignKey, left.KeyPropertyNames,
-                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(left)}_{string.Join("_", relationship.JoinEntityLeftForeignKey)}", provider);
-                AppendAlterTableForeignKey(
-                    sb, join, right, relationship.JoinEntityRightForeignKey, right.KeyPropertyNames,
-                    $"FK_{PhysicalTableName(join)}_{PhysicalTableName(right)}_{string.Join("_", relationship.JoinEntityRightForeignKey)}", provider);
-                return;
-            }
         }
     }
 
